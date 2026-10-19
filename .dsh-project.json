@@ -1,18 +1,13 @@
 {
-    "name":  "aegisbank智能体",
-    "kind":  "python",
-    "runner":  "wsl",
-    "workflow":  "dsh-v1",
-    "createdAt":  "2026-10-19T23:47:57",
-    "stages":  {
-                   "lint":  null,
-                   "build":  null,
-                   "test":  "python3 -m pytest -q"
-               },
-    "skipTestFor":  [
-                        "docs",
-                        "text"
-                    ],
-    "linuxFirst":  false,
-    "notes":  "测试命令留空则自动探测；runner=wsl 时经 engine.ps1 在 Ubuntu 里执行"
+  "name": "aegisbank",
+  "kind": "fullstack",
+  "runner": "wsl",
+  "workflow": "dsh-v1",
+  "stages": {
+    "lint": "bash scripts/lint.sh",
+    "build": "bash scripts/build.sh",
+    "test": "bash scripts/test.sh"
+  },
+  "skipTestFor": ["docs", "text"],
+  "notes": "FastAPI + React monorepo. Tests, lint and build run through the WSL DSH engine."
 }

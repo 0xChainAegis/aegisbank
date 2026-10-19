@@ -1,23 +1,30 @@
-# 本仓库专属忽略（顶部规则来自工作流默认约定）
+# dependencies / environments
 node_modules/
-dist/
-build/
-out/
-__pycache__/
-*.pyc
 .venv/
 venv/
+__pycache__/
+*.py[cod]
 .pytest_cache/
 .ruff_cache/
 coverage/
-*.log
-*.tmp
+dist/
+build/
+out/
+
+# local data and secrets
 .env
 .env.*
-*.pem
-*.key
-*.p12
-*.pfx
+!.env.example
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.tmp
+
+# OS / editor
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
 .dsh-local/
