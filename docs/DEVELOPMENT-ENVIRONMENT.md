@@ -44,7 +44,7 @@ pnpm lock: frontend/pnpm-lock.yaml
 
 | 命令 | 结果 |
 |---|---|
-| `bash scripts/bootstrap.sh` 等价步骤 | `uv sync` 成功；`pnpm install` + esbuild 构建批准成功 |
+| `bash scripts/bootstrap.sh` | `uv sync --frozen` 成功；`pnpm install --frozen-lockfile` 与 esbuild 构建批准成功 |
 | `bash scripts/lint.sh` | ruff 通过；TypeScript `tsc --noEmit` 通过 |
 | `bash scripts/build.sh` | 后端 compileall 通过；Vite 生产包构建成功 |
 | `bash scripts/test.sh` | 后端 6 项测试通过；前端 3 项测试通过 |
