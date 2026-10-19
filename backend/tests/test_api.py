@@ -137,3 +137,33 @@ def test_prompt_injection_is_blocked(tmp_path):
         assert response.status_code == 200
         assert response.json()["status"] == "blocked"
         assert "注入" in response.json()["reason"]
+
+
+def test_permission_revoked_while_pending_blocks_execution(tmp_path):
+    with make_client(tmp_path) as client:
+        response = client.post(
+            "/api/agent/run",
+            json={
+                "instruction": "向 ACC-2002 转账 880 元",
+                "tool_name": "transfer",
+                "arguments": {
+                    "from_account": "ACC-1001",
+                    "to_account": "ACC-2002",
+                    "amount_cny": 880,
+                },
+            },
+        )
+        body = response.json()
+        assert body["status"] == "awaiting_confirmation"
+
+        revoked = client.put("/api/permissions/transfer", json={"granted": False})
+        assert revoked.status_code == 200
+
+        confirmed = client.post(
+            f"/api/confirmations/{body['confirmation']['id']}",
+            json={"approved": True, "reauth_token": "246810"},
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        assert confirmed.json()["status"] == "blocked"
+        assert "未授权" in confirmed.json()["reason"]
+        assert "results" not in confirmed.json()

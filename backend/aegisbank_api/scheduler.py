@@ -254,6 +254,39 @@ class DagScheduler:
         if pending["requires_reauth"] and reauth_token != self.demo_otp:
             raise ReauthError("二次身份校验失败，请检查演示验证码。")
 
+        # Re-check permissions immediately before execution. A grant may have been
+        # revoked while the confirmation request was waiting for the user.
+        for node in nodes:
+            tool = self.registry.get(node.tool_name)
+            decision = self.gateway.evaluate(
+                user_id=user_id,
+                tool_name=tool.metadata.name,
+                risk_level=tool.metadata.risk_level,
+                permission=tool.metadata.permission,
+                instruction=pending["instruction"],
+                arguments=node.arguments,
+            )
+            if decision.denied:
+                self.db.resolve_pending(action_id, "blocked")
+                audit_entry = self.audit.record(
+                    event="gateway_blocked",
+                    user_id=user_id,
+                    instruction=pending["instruction"],
+                    dag_path=dag_path,
+                    tool_name=node.tool_name,
+                    arguments=node.arguments,
+                    result={"reason": decision.reason},
+                    confirmation_state="blocked",
+                    risk_level=tool.metadata.risk_level.value,
+                )
+                return {
+                    "status": ExecutionStatus.BLOCKED.value,
+                    "run_id": action_id,
+                    "risk_level": tool.metadata.risk_level.value,
+                    "reason": f"确认后复检未通过：{decision.reason}",
+                    "audit_id": audit_entry["id"],
+                }
+
         self.db.resolve_pending(action_id, "approved")
         self.audit.record(
             event="confirmation_approved",
