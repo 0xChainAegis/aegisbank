@@ -47,7 +47,7 @@ pnpm lock: frontend/pnpm-lock.yaml
 | `bash scripts/bootstrap.sh` | `uv sync --frozen` 成功；`pnpm install --frozen-lockfile` 与 esbuild 构建批准成功 |
 | `bash scripts/lint.sh` | ruff 通过；TypeScript `tsc --noEmit` 通过 |
 | `bash scripts/build.sh` | 后端 compileall 通过；Vite 生产包构建成功 |
-| `bash scripts/test.sh` | 后端 6 项测试通过；前端 3 项测试通过 |
+| `bash scripts/test.sh` | 后端 7 项测试通过；前端 3 项测试通过 |
 | `bash scripts/smoke.sh` | `/api/health` 正常；绿色账单工具执行成功；审计链 `valid=true` |
 | DSH `gate.ps1` | 五阶段全部 PASS，提交 `29f460c` 带 `Verified-By: dsh-gate` |
 | 全量密钥扫描 | 48 个文件，0 findings |
@@ -91,7 +91,7 @@ cd D:\开发交流\mia03-ether
 ## 7. 当前提交
 
 ```text
-29f460c feat: 初始化 AegisBank 可信智能体开发环境与最小闭环
+098f550 fix: 确认执行前复检权限撤回状态
 Status: verified
 Verified-By: dsh-gate
 Stages: encoding=pass lint=pass build=pass test=pass security=pass
