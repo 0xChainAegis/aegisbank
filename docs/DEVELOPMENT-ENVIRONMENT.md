@@ -88,7 +88,7 @@ cd D:\开发交流\mia03-ether
 - `sync/remotes`：当前工作区使用的是脱敏工作流副本，没有配置同步远端；不影响本地门禁、hooks 与提交。
 - `security/credential-file`：`.env.example` 因文件名启发式被标记；该文件只包含本地演示变量和演示 OTP，没有任何真实凭据。DSH 全量密钥扫描为 0 命中。
 
-## 7. 当前提交
+## 7. 核心功能提交
 
 ```text
 098f550 fix: 确认执行前复检权限撤回状态
