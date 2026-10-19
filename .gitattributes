@@ -1,0 +1,17 @@
+# 统一 LF（覆盖全局 core.autocrlf=true），并标注二进制
+* text=auto eol=lf
+*.ps1 text eol=lf
+*.sh  text eol=lf
+*.py  text eol=lf
+*.js  text eol=lf
+*.ts  text eol=lf
+*.json text eol=lf
+*.md  text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.woff2 binary

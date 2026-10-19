@@ -1,0 +1,23 @@
+# 本仓库专属忽略（顶部规则来自工作流默认约定）
+node_modules/
+dist/
+build/
+out/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+coverage/
+*.log
+*.tmp
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+.DS_Store
+Thumbs.db
+.dsh-local/
