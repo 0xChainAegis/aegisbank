@@ -11,9 +11,9 @@
 | Windows 驾驶舱 | Git 2.55.0、Node.js v24.19.0、Python 3.14.6 |
 | WSL 发行版 | Ubuntu 24.04.5 LTS（WSL2，内核 6.18） |
 | WSL 工具链 | git、node v22、pnpm 12.10.1、uv 0.12.24、ruff、pytest、jq、gitleaks、shellcheck、make、gcc |
-| 工作流体检 | 26 项 OK，1 项 WARN（Windows 侧无 pytest，项目按设计使用 WSL runner） |
+| 工作流体检 | 23 项 OK，3 项 WARN，0 项 FAIL（警告均为预期/误报，见第 6 节） |
 | PATH 隔离 | 已剥离所有 `/mnt/*` Windows 路径泄漏 |
-| 子工作区 | 已接入 DSH hooks，首次骨架提交 `669c1a6` |
+| 子工作区 | 已接入 DSH hooks，首次骨架提交 `669c1a6`，完整初始化提交 `29f460c` |
 
 ## 2. 已安装的项目依赖
 
@@ -49,7 +49,8 @@ pnpm lock: frontend/pnpm-lock.yaml
 | `bash scripts/build.sh` | 后端 compileall 通过；Vite 生产包构建成功 |
 | `bash scripts/test.sh` | 后端 6 项测试通过；前端 3 项测试通过 |
 | `bash scripts/smoke.sh` | `/api/health` 正常；绿色账单工具执行成功；审计链 `valid=true` |
-| DSH `gate.ps1` | 见本文件所在提交的 `Verified-By` 尾注 |
+| DSH `gate.ps1` | 五阶段全部 PASS，提交 `29f460c` 带 `Verified-By: dsh-gate` |
+| 全量密钥扫描 | 48 个文件，0 findings |
 
 ## 4. 本地启动
 
@@ -78,4 +79,20 @@ bash scripts/smoke.sh
 ```powershell
 cd D:\开发交流\mia03-ether
 .\.dsh-workflow\scripts\doctor.ps1
+```
+
+
+## 6. Doctor 警告说明
+
+- `pytest(win)`：Windows 侧没有 pytest 是预期情况，项目门禁使用 WSL runner，Linux 引擎内 pytest 正常。
+- `sync/remotes`：当前工作区使用的是脱敏工作流副本，没有配置同步远端；不影响本地门禁、hooks 与提交。
+- `security/credential-file`：`.env.example` 因文件名启发式被标记；该文件只包含本地演示变量和演示 OTP，没有任何真实凭据。DSH 全量密钥扫描为 0 命中。
+
+## 7. 当前提交
+
+```text
+29f460c feat: 初始化 AegisBank 可信智能体开发环境与最小闭环
+Status: verified
+Verified-By: dsh-gate
+Stages: encoding=pass lint=pass build=pass test=pass security=pass
 ```
