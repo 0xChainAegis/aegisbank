@@ -21,10 +21,10 @@ index 4512530..6d09886 100644
        const snapshot = await this.snapshot();
 diff --git a/backend/src/plan.ts b/backend/src/plan.ts
 new file mode 100644
-index 0000000..c210496
+index 0000000..5a58cd9
 --- /dev/null
 +++ b/backend/src/plan.ts
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,108 @@
 +import { keccak256, toHex, type Hex } from 'viem';
 +import type { DraftPlanV1, Intent, PlanProvenance } from '@aegis/shared';
 +import type { Quote } from './chain.js';
@@ -133,7 +133,6 @@ index 0000000..c210496
 +  const expectedHash = computePlanHash(computeDraftHash(intent), computeQuoteHash(quote));
 +  return expectedHash.toLowerCase() === expected.toLowerCase();
 +}
-+
 diff --git a/backend/src/server.ts b/backend/src/server.ts
 index 2380c18..2afbd01 100644
 --- a/backend/src/server.ts
