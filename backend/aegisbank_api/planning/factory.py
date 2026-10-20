@@ -52,7 +52,7 @@ def build_planner(settings: Settings, registry: ToolRegistry) -> Planner:
     llm = OpenAICompatiblePlanner(
         registry=registry,
         base_url=settings.llm_base_url,
-        api_key=settings.llm_api_key,
+        credential=settings.llm_api_key,
         model=settings.llm_model,
         timeout_seconds=settings.llm_timeout_seconds,
     )

@@ -120,7 +120,7 @@ def test_openai_compatible_planner_parses_structured_output():
     planner = OpenAICompatiblePlanner(
         registry=registry,
         base_url="https://llm.example/v1",
-        api_key="test-key",
+        credential="test-key",
         model="demo-model",
         client=client,
     )

@@ -43,14 +43,14 @@ class OpenAICompatiblePlanner:
         *,
         registry: ToolRegistry,
         base_url: str,
-        api_key: str,
+        credential: str,
         model: str,
         timeout_seconds: float = 20.0,
         client: httpx.Client | None = None,
     ) -> None:
         self.registry = registry
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
+        self.credential = credential
         self.model = model
         self.name = f"llm:{model}"
         self._owns_client = client is None
@@ -102,8 +102,8 @@ class OpenAICompatiblePlanner:
             ],
         }
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.credential:
+            headers["Authorization"] = f"Bearer {self.credential}"
 
         try:
             response = self.client.post(
