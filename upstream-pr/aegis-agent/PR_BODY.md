@@ -1,44 +1,53 @@
-## Summary
+## 概述
 
-Adds a development-review-oriented design note for **Draft Plan Provenance**: an off-chain, versioned `DraftPlanV1` + `planHash` that binds the exact draft, parser decision and quote reviewed by the user to the resulting task evidence.
+本 PR 新增一份中文设计说明，讨论草案计划溯源（Draft Plan Provenance）：
 
-The note includes a Chinese review summary, a one-page "what this adds" table, a concrete before/after example, a trust-principle mapping from the AegisBank reference manual, and a split implementation plan for follow-up PRs.
+- 用一个版本化 `DraftPlanV1` 对象，把用户审阅的 draft、parser 决策和 preview quote 绑定起来；
+- preview 返回 `planHash`；
+- submit 必须携带 `planHash`，并由服务端重新计算；
+- task/evidence 暴露 provenance hash；
+- hash 不一致时 fail closed，不创建 task、不准备交易、不广播。
 
-This PR is documentation only. It does not change contracts, policy, signing, or the native-ETH-only scope.
+本 PR 仅修改文档，不修改合约、策略、签名或 native ETH 单动作范围。
 
-## Why
+## 为什么需要
 
-The current evidence chain verifies that a payment satisfied on-chain policy and has matching contract events. It does not let an auditor recompute the exact draft/parser/quote that the user reviewed from task evidence.
+当前证据链可以证明付款满足链上 PolicyEngine 策略，并且有匹配的交易和事件。但它不能直接证明：
 
-The proposal adds a small, additive binding:
+> 这笔付款来自用户刚刚审阅的同一份 draft、parser 结果和 quote。
 
-- hash `message`, `purpose`, normalized transfer fields and `ParserInfo`;
-- hash the preview quote and its policy/block context;
-- return `planHash` from preview and require it at submit;
-- recompute server-side and fail closed on mismatch;
-- expose hashes in task/evidence with explicit off-chain limitations.
+本设计建议增加一个可重算、可测试、可逐步落地的 provenance 契约，让 task evidence 能回答这个问题，同时明确说明它是 off-chain provenance，不是 on-chain proof。
 
-## Included
+## 文档内容
 
-- Chinese review summary and one-page change overview.
-- Problem statement and explicit off-chain trust boundary.
-- Mapping of relevant reference-manual principles to the current AegisAgent architecture.
-- `DraftPlanV1` interface and domain-separated `keccak256` hashing rules.
-- API and storage changes (`draftHash`, `quoteHash`, `planHash`).
-- Security invariants and a tamper-focused test matrix.
-- Phased rollout: off-chain hashes, then attestation/evidence bundle, then optional on-chain anchor in a new policy domain.
-- Review questions grouped by product/UX, backend/API and contract/security.
+- 中文评审摘要和 10 分钟评审路径；
+- 本 PR 增加了什么的一览表；
+- 当前状态和缺口说明；
+- 与 AegisBank 参考手册的信任原则映射；
+- 改造前后示例；
+- `DraftPlanV1`、`draftHash`、`quoteHash`、`planHash` 设计；
+- API 变更、代码归属和实现骨架；
+- 安全不变量、验收标准和测试矩阵；
+- 分阶段实现计划和评审问题。
 
-## Validation
+## 验证
 
-- Documentation-only patch generated against `main` (`71930d6`).
-- No contracts, secrets, API keys, raw messages or generated evidence added.
-- Recommended follow-up implementation: `backend/src/plan.ts` + `backend/test/plan.test.ts` + additive fields in `packages/shared/src/index.ts`.
+- 补丁基于上游 `main`（`71930d6`）生成；
+- `git apply --check` 通过；
+- 仅新增 `docs/DRAFT-PLAN-PROVENANCE.md`；
+- 不包含合约、密钥、数据库、原始模型输出或本地临时文件。
 
-## Open questions
+## 建议的后续实现
 
-1. Expose `draftHash` at creation or only at preview?
-2. Include parser `reason` in the digest? (recommended yes)
-3. Include observed block hash/number in `quoteHash`? (recommended yes)
-4. Add a CLI verifier now or later?
-5. If anchored on-chain later, extend `requestHash` domains or add a separate field/event?
+1. 先确认本设计中的 hash 契约和 API 变更；
+2. 增加 `backend/src/plan.ts` 和 `backend/test/plan.test.ts`，先做纯 hash 模块和 golden vectors；
+3. 再接入 preview/submit/task/evidence；
+4. 最后讨论是否需要在新的 policy domain 中做链上锚定。
+
+## 需要评审决定的问题
+
+1. 是否接受 `planHash` 这个 provenance 概念？
+2. hash 字段是否合理，尤其是 parser reason 和 quote 观测区块？
+3. submit 新增 `planHash` 是否立即强制，还是保留一个兼容期？
+4. 第一阶段只做 off-chain provenance 是否足够？
+5. 未来是否需要把 `planHash` 锚定到链上？

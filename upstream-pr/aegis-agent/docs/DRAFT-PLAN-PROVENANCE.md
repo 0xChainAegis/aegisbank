@@ -1,23 +1,25 @@
-# Draft Plan Provenance (Design Note)
+# 草案计划溯源（Draft Plan Provenance）设计说明
 
-Status: proposal for review · Date: 2026-10-20
-Related: `backend/src/parser.ts`, `backend/src/llm.ts`, `backend/src/service.ts`,
-`packages/shared/src/index.ts`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`
+状态：待评审建议稿
 
-## 中文评审摘要
+日期：2026-10-20
 
-这份 PR 只新增设计文档，不改代码、不改合约、不改变当前 native ETH 单动作范围。
+相关文件：`backend/src/parser.ts`、`backend/src/llm.ts`、`backend/src/service.ts`、`packages/shared/src/index.ts`、`docs/ARCHITECTURE.md`、`docs/SECURITY.md`
+
+## 评审摘要
+
+本 PR 只新增设计文档，不修改代码、不修改合约，也不改变当前 native ETH 单动作范围。
 
 要解决的问题：
 
-> 原项目可以证明付款满足链上策略并有交易事件，但还不能证明这笔任务来自用户刚刚审阅的同一份 draft、parser 结果和 quote。
+> 原项目可以证明付款满足链上策略并有匹配的交易事件，但还不能证明这笔任务来自用户刚刚审阅的同一份 draft、parser 结果和 quote。
 
 建议增加：
 
 - 一个版本化对象 `DraftPlanV1`；
 - `draftHash`、`quoteHash`、`planHash`；
 - preview 返回 `planHash`；
-- submit 必须携带并由服务端重算 `planHash`；
+- submit 必须携带 `planHash`，并由服务端重新计算；
 - task/evidence 暴露 provenance hashes；
 - hash 不一致时 fail closed，不创建 task、不准备交易、不广播。
 
@@ -25,155 +27,130 @@ Related: `backend/src/parser.ts`, `backend/src/llm.ts`, `backend/src/service.ts`
 
 1. 是否接受 `planHash` 这个 provenance 概念；
 2. hash 覆盖字段是否合理，尤其是 parser reason 和 quote 观测区块；
-3. submit 新增必填字段是否可接受，还是需要先做兼容期；
+3. submit 新增必填字段是否可接受，是否需要先做兼容期；
 4. 第一阶段只做 off-chain provenance 是否足够；
 5. 未来是否需要把 `planHash` 锚定到链上。
 
 明确不改：
 
-- Wallet、PolicyEngine、Oracle、签名、Owner 审批；
+- Wallet、PolicyEngine、Oracle、签名和 Owner 审批；
 - 单动作 native ETH 范围；
 - LLM draft-only 边界；
 - 链上 `requestHash`、事件证据和现有 API 语义。
 
-## English TL;DR
-
-AegisAgent already binds the financial request to on-chain policy and transaction
-evidence, but the exact draft the user reviewed is not cryptographically bound to
-the resulting task. This note proposes a small, off-chain-first increment: a
-canonical `DraftPlanV1`, a `planHash` returned by preview and required at submit,
-and the same hashes exposed in task evidence. It does not change contracts, policy,
-signing, or the single-action native-ETH scope in phase one.
-
 ## 0. 10 分钟评审路径
 
-1. 先读"中文评审摘要"，确认问题、建议改动和需要决策的事项。
-2. 看第 1 节"What this PR adds at a glance"，确认本 PR 的范围。
-3. 看第 5 节 before/after 示例，判断用户体验和 API 变化是否合理。
-4. 看第 7-8 节安全不变量和验收标准，确认是否存在未覆盖的篡改路径。
-5. 在第 12 节按 Product / Backend / Contract 三个维度给出评审意见。
-6. 如果认可方向，再讨论第 10 节的 PR B/C/D 拆分顺序。
+1. 先读"评审摘要"，确认问题、建议改动和需要决策的事项。
+2. 看第 1 节"本 PR 增加了什么"，确认本 PR 的范围。
+3. 看第 5 节改造前后示例，判断用户体验和 API 变化是否合理。
+4. 看第 7 至 8 节安全不变量和验收标准，确认是否存在未覆盖的篡改路径。
+5. 在第 12 节按产品、后端、合约三个维度给出评审意见。
+6. 如果认可方向，再讨论第 10 节的实现拆分顺序。
 
 本文件的建议是：先接受或修改协议，再进入实现；不建议把设计讨论和代码实现放在同一个 PR 里。
 
-## 1. What this PR adds at a glance
+## 1. 本 PR 增加了什么
 
-| Original project today | This proposal adds |
+| 原项目现状 | 本提案增加的内容 |
 |---|---|
-| `Intent`, `Quote` and `Task` contain the needed fields, but provenance is spread across records | A versioned `DraftPlanV1` contract that names exactly what is being bound |
-| Task evidence exposes recipient/amount/requestHash/parser separately | `draftHash`, `quoteHash` and `planHash` in task/evidence |
-| Preview returns quote context, but no single confirmation fingerprint | Preview returns `planHash`; the user confirms that exact value |
-| Submit checks revision and quote ID | Submit also requires `planHash` and recomputes it server-side |
-| Off-chain draft/parser changes are not detectable from task evidence | Hash mismatch blocks task creation and broadcast |
-| Parser fallback is informational | Parser kind/model/reason becomes part of the hashed provenance |
-| No dedicated verification test vector | Golden vectors and tamper cases in `backend/test/plan.test.ts` |
+| `Intent`、`Quote` 和 `Task` 已有相关字段，但 provenance 分散在多个记录中 | 一个版本化 `DraftPlanV1` 契约，明确绑定对象 |
+| task evidence 分别暴露 recipient、amount、requestHash、parser | 在 task/evidence 中增加 `draftHash`、`quoteHash`、`planHash` |
+| preview 返回 quote 上下文，但没有单一确认指纹 | preview 返回 `planHash`，用户确认这个精确值 |
+| submit 检查 revision 和 quote ID | submit 额外要求 `planHash`，并由服务端重算 |
+| 链下 draft 和 parser 被修改时，task evidence 无法检测 | hash 不一致时阻断 task 创建和广播 |
+| parser fallback 只是说明性信息 | parser kind、model、reason 进入 hash provenance |
+| 没有专门的验证向量 | 后续在 `backend/test/plan.test.ts` 增加 golden vector 和篡改测试 |
 
-No runtime code is changed by this PR. The table describes the target state that
-the follow-up implementation PRs should deliver.
+本 PR 不修改运行代码。上表描述的是后续实现 PR 应达到的目标状态。
 
-## 2. Scope and non-goals
+## 2. 范围与非目标
 
-### In scope
+### 范围内
 
-- Add a versioned, canonical draft/quote/parser provenance contract.
-- Return a `planHash` at preview time.
-- Require and recompute it at submit time.
-- Expose provenance hashes in task and evidence responses.
-- Add a deterministic test matrix for tampering and version drift.
+- 增加版本化的 draft、quote、parser provenance 契约；
+- preview 返回 `planHash`；
+- submit 要求并重新计算 `planHash`；
+- task 和 evidence 暴露 provenance hashes；
+- 增加确定性测试矩阵，覆盖篡改和版本漂移。
 
-### Out of scope
+### 范围外
 
-- No multi-action DAG, subscriptions, swaps, ERC-20s, cross-chain or bank-tool expansion.
-- No change to the native-ETH-only action set.
-- No claim that LLM reasoning is honest, complete or safe.
-- No change to Wallet, PolicyEngine, oracle, signing or approval semantics.
-- No attempt to prove the natural-language message itself; only its digest is bound.
-- No replacement for `requestHash`, chain events or on-chain policy checks.
+- 不增加多动作 DAG、订阅、swap、ERC-20、跨链或银行工具；
+- 不改变 native ETH 单动作范围；
+- 不声称 LLM 推理诚实、完整或安全；
+- 不改变 Wallet、PolicyEngine、Oracle、签名或审批语义；
+- 不证明自然语言本身，只绑定其 digest；
+- 不替代 `requestHash`、链上事件或 PolicyEngine 检查。
 
-## 3. Current state and the gap
+## 3. 当前状态与缺口
 
-The current flow is deliberately narrow and safe:
+当前流程是刻意收窄且安全的：
 
-1. `parseDraft()` / `parseDraftWithLlm()` produce a draft-only `Intent`.
-2. `preview()` creates a `Quote` bound to `draftId`, `draftVersion`, `policyVersion`,
-   quote expiry and deadline.
-3. `submit()` checks `expectedRevision`, `quoteId`, quote expiry, and the
-   recipient/amount equality between the quote and intent.
-4. The Wallet binds the financial request with an on-chain `requestHash` covering
-   agent, recipient, amount, USD cap, nonce, deadline and policy version.
-5. Event/receipt evidence determines whether the payment executed, queued or was cancelled.
+1. `parseDraft()` 或 `parseDraftWithLlm()` 生成 draft-only `Intent`；
+2. `preview()` 创建 `Quote`，绑定 `draftId`、`draftVersion`、`policyVersion`、quote 过期时间和 deadline；
+3. `submit()` 检查 `expectedRevision`、`quoteId`、quote 是否过期，以及 quote 与 intent 的 recipient、amount 是否一致；
+4. Wallet 用链上 `requestHash` 绑定 agent、recipient、amount、USD cap、nonce、deadline 和 policyVersion；
+5. 回执和事件用于判断付款是已执行、待审批还是已取消。
 
-That is a strong chain for authorization and execution. It does not prove this
-second statement:
+这条链路对授权和执行是强的，但它不能证明下面这句话：
 
-> The payment was generated from the exact draft, parser decision and quote that
-> the user reviewed.
+> 这笔付款来自用户刚刚审阅的同一份 draft、parser 结果和 quote。
 
-Why not:
+原因如下：
 
-- `Intent.message`, `purpose` and `parser` are stored off-chain but are not
-  covered by a deterministic digest.
-- `Task` copies `parser` into its record, but `publicTask()` and `evidence()` expose
-  it without a value that can be recomputed from the original draft and quote.
-- A database writer can alter a draft's message/purpose/parser metadata after the
-  fact without changing the on-chain `requestHash`, because those fields are not
-  part of the on-chain request.
-- An auditor cannot compare the displayed preview with the task using a single verifiable identifier.
+- `Intent.message`、`purpose` 和 `parser` 存在链下，没有被确定性 digest 覆盖；
+- `Task` 会复制 `parser`，但 `publicTask()` 和 `evidence()` 没有给出一个能从原始 draft 和 quote 重算的 hash；
+- 数据库写入者可以在事后修改 message、purpose 或 parser metadata，而链上 `requestHash` 不会变化，因为这些字段不在链上请求中；
+- 审核者无法用单一可验证标识对比用户看到的 preview 和最终 task。
 
-This is not a claim that the current flow is broken. It is a gap between two
-different statements:
+这不是说当前流程有漏洞，而是两个陈述之间存在差距：
 
-> The payment satisfied policy and has matching chain evidence.
+> 付款满足链上策略，并且有匹配的交易证据。
 
-and
+和
 
-> The payment was generated from the exact draft, parser decision and quote that
-> the user reviewed.
+> 付款来自用户审阅的同一份 draft、parser 决策和 quote。
 
-## 4. Relationship to the AegisBank reference manual
+第二个陈述需要明确的 provenance 契约。
 
-The PDF reference manual is about a bank agent, so its product scope is not copied
-into AegisAgent. We only borrow its trust principles.
+## 4. 与 AegisBank 参考手册的关系
 
-| Reference-manual principle | Current AegisAgent equivalent | Proposed increment |
+PDF 参考手册描述的是银行 Agent，本提案不把其产品范围复制到 AegisAgent。这里只借鉴其信任与审计原则。
+
+| 参考手册原则 | AegisAgent 当前对应实现 | 本提案增加的改进 |
 |---|---|---|
-| Identity must be unique, verifiable, callable and non-repudiable | Owner wallet challenge; executor key; on-chain actor addresses | Bind the reviewed draft/parser/quote to a recomputable plan hash |
-| The gateway is the only path to data/tools | Wallet + PolicyEngine + preview/submit checks | Recompute provenance at submit; fail closed on mismatch |
-| Tool calls should be standardized | Single native ETH action with one strict draft schema | Versioned `DraftPlanV1` contract |
-| Audit must be part of execution, not a side effect | `requestHash`, contract events, task evidence | Add pre-execution plan hashes to task evidence |
-| Green/yellow/red interaction model | Auto execute / Owner approval / reject | Keep unchanged; provenance does not alter policy decisions |
-| Signed, non-repudiable operation record | Owner transaction + contract event | Add a verifiable draft-to-task link without claiming on-chain proof |
-| Do not use P2P or store full financial data locally | Centralized wallet, minimal SQLite state | Off-chain hashes only; no raw payload in evidence |
+| 身份必须唯一、可验证、可调用、操作不可抵赖 | Owner 钱包挑战签名、executor key、链上地址 | 把已审阅的 draft、parser、quote 绑定为可重算 plan hash |
+| 网关是访问数据和工具的唯一路径 | Wallet、PolicyEngine、preview/submit 检查 | submit 时重算 provenance，不一致即 fail closed |
+| 工具调用应标准化 | 单一 native ETH 动作和严格 draft schema | 版本化 `DraftPlanV1` 契约 |
+| 审计必须属于执行链路，而不是事后附属 | `requestHash`、合约事件、task evidence | 在执行前把 plan hashes 放入 task evidence |
+| 绿、黄、红三级交互 | 自动执行、Owner 审批、拒绝 | 保持不变，provenance 不影响策略决策 |
+| 操作记录应签名且不可抵赖 | Owner 交易和合约事件 | 增加 draft 到 task 的可验证关联，但不声称它是链上证明 |
+| 不采用 P2P，不在本地保存全量金融数据 | 中心化钱包、最小 SQLite 状态 | 只使用链下 hash，不把原始 payload 放进 evidence |
 
-The PDF also says the audit record should answer: when, original instruction,
-DAG path, tool arguments, result and confirmation state. AegisAgent already has the
-financial request and chain event. The missing part is the original instruction and
-draft/quote context. This proposal adds hashes for exactly that.
+参考手册还要求审计记录回答：触发时间、原始指令、DAG 路径、工具参数、执行结果和确认状态。AegisAgent 已有金融请求和链上事件，缺的是原始指令和 draft/quote 上下文。本提案用 hash 补上这部分。
 
-## 5. Before and after: one concrete example
+## 5. 改造前后示例
 
-User request:
+用户请求：
 
 ```text
-Send 0.001 ETH to 0x1111111111111111111111111111111111111111 for hosting.
+向 0x1111111111111111111111111111111111111111 转 0.001 ETH，用途是服务器托管。
 ```
 
-### Today
+### 当前状态
 
-The task/evidence proves:
+task/evidence 可以证明：
 
-- recipient and amount;
-- requestHash and contract event;
-- parser kind/model;
-- policy version and transaction evidence.
+- 收款人和金额；
+- requestHash 和合约事件；
+- parser 类型和模型；
+- policyVersion 和交易证据。
 
-But these are not bound together by a digest over the reviewed draft and quote.
-If someone edits `message`, `purpose`, `parser.reason` or the draft revision in
-SQLite, the on-chain requestHash does not change.
+但这些记录之间没有覆盖 reviewed draft 与 quote 的 digest。如果有人修改 SQLite 中的 message、purpose、parser.reason 或 draft revision，链上 requestHash 不会变化。
 
-### After
+### 改造后
 
-The preview returns:
+preview 返回：
 
 ```json
 {
@@ -185,7 +162,7 @@ The preview returns:
 }
 ```
 
-The submit body becomes:
+submit 请求体变成：
 
 ```json
 {
@@ -195,16 +172,13 @@ The submit body becomes:
 }
 ```
 
-The task/evidence contains the same hashes and a provenance block. If the draft,
-parser reason, quote policy version or observed block context changes, the
-server's recomputation differs and the submit is rejected with
-`409 PLAN_HASH_MISMATCH`.
+task/evidence 返回相同 hash 和 provenance 对象。如果 draft、parser reason、quote policyVersion 或观测区块上下文发生变化，服务端重算结果会不同，submit 返回 `409 PLAN_HASH_MISMATCH`。
 
-## 6. Proposed design
+## 6. 方案设计
 
-### 6.1 Versioned canonical object
+### 6.1 版本化规范对象
 
-Introduce a small domain-separated contract in shared types:
+在 shared types 中增加一个小型、带 domain separation 的契约：
 
 ```ts
 export interface DraftPlanV1 {
@@ -229,55 +203,50 @@ export interface DraftPlanV1 {
 }
 ```
 
-Hashing rules:
+hash 规则：
 
 ```text
-canonicalJson = JSON with sorted keys, stable string escaping, no undefined fields
+canonicalJson = 按 key 排序、字符串转义稳定、不包含 undefined 字段的 JSON
 draftHash    = keccak256(utf8("aegis.draft-plan.v1\ndraft\n" + canonicalJson(draft)))
 quoteHash    = keccak256(utf8("aegis.draft-plan.v1\nquote\n" + canonicalJson(quote)))
 planHash     = keccak256(utf8("aegis.draft-plan.v1\nplan\n" + draftHash + quoteHash))
 ```
 
-`messageHash` and `purposeHash` are recomputed from the raw fields before the
-draft digest is calculated. `keccak256` is used instead of SHA-256 so the same
-construction can later become an on-chain `bytes32` commitment without a redesign.
-The version string is part of the domain separator and must change if the field
-set changes.
+`messageHash` 和 `purposeHash` 必须从原始字段重新计算，再参与 draft digest。使用 `keccak256` 而不是 SHA-256，是为了未来可以把同一个构造直接变成链上 `bytes32` commitment，而不需要重新设计。版本字符串属于 domain separator；字段集合变化时必须升级版本。
 
-### 6.2 Lifecycle
+### 6.2 生命周期
 
 ```text
 create/patch intent
-  -> compute draftHash from canonical Intent
+  -> 根据规范化 Intent 计算 draftHash
   -> preview(quote)
-  -> compute quoteHash + planHash
-  -> return planHash to the client
-  -> user reviews and confirms the exact planHash
+  -> 计算 quoteHash 和 planHash
+  -> 把 planHash 返回给客户端
+  -> 用户审阅并确认这个精确的 planHash
   -> submit(expectedRevision, quoteId, planHash)
-  -> server recomputes all hashes from stored entities
-  -> mismatch => 409 PLAN_HASH_MISMATCH, no task created
-  -> task stores draftHash, quoteHash, planHash
-  -> task/evidence exposes hashes and recomputation instructions
+  -> 服务端根据已存储的 intent 和 quote 重新计算
+  -> 不一致则返回 409 PLAN_HASH_MISMATCH，不创建 task
+  -> task 保存 draftHash、quoteHash、planHash
+  -> task/evidence 暴露 hashes 和重算说明
 ```
 
-The client-provided `planHash` is a confirmation binding, never an authority.
-The server must recompute it from the stored intent and quote.
+客户端传来的 `planHash` 只是确认绑定，不是授权凭证。服务端必须从存储的 intent 和 quote 重新计算，不能信任客户端值。
 
-### 6.3 API changes
+### 6.3 API 变更
 
-Additive fields only:
+采用增量字段，避免破坏现有客户端：
 
-| Endpoint | Change |
+| 接口 | 变更 |
 |---|---|
-| `GET /api/v1/intents/:id` | include `draftHash` |
-| `POST /api/v1/intents` / `PATCH /api/v1/intents/:id` | include `draftHash` |
-| `POST /api/v1/intents/:id/preview` | return `draftHash`, `quoteHash`, `planHash` |
-| `POST /api/v1/intents/:id/submit` | require `planHash` |
-| `GET /api/v1/tasks/:id` | expose `draftHash`, `quoteHash`, `planHash` |
-| `GET /api/v1/tasks/:id/evidence` | add `provenance` object |
-| `GET /api/v1/config` | advertise `planProvenance: "aegis.draft-plan.v1"` |
+| `GET /api/v1/intents/:id` | 增加 `draftHash` |
+| `POST /api/v1/intents` 和 `PATCH /api/v1/intents/:id` | 增加 `draftHash` |
+| `POST /api/v1/intents/:id/preview` | 返回 `draftHash`、`quoteHash`、`planHash` |
+| `POST /api/v1/intents/:id/submit` | 要求 `planHash` |
+| `GET /api/v1/tasks/:id` | 暴露 `draftHash`、`quoteHash`、`planHash` |
+| `GET /api/v1/tasks/:id/evidence` | 增加 `provenance` 对象 |
+| `GET /api/v1/config` | 公布 `planProvenance: "aegis.draft-plan.v1"` |
 
-Example evidence addition:
+evidence 增加示例：
 
 ```json
 {
@@ -292,178 +261,152 @@ Example evidence addition:
 }
 ```
 
-A missing `planHash` on submit is a 400-level request error, not silently defaulted.
-During rollout, the backend can advertise the field in `/config` before the UI
-starts sending it.
+submit 缺少 `planHash` 时返回 400 级请求错误，不能静默默认。上线过渡期可以先让 backend 在 `/config` 公布字段，再由前端开始发送。
 
-### 6.4 Code ownership map
+### 6.4 代码归属
 
-| File | Responsibility |
+| 文件 | 职责 |
 |---|---|
-| `packages/shared/src/index.ts` | `DraftPlanV1`, `PlanProvenance`, domain constants |
-| `backend/src/plan.ts` (new) | canonical JSON, domain-separated keccak256 helpers |
-| `backend/src/service.ts` | compute/recompute/validate hashes; persist on task |
-| `backend/src/server.ts` | strict Zod schema for `planHash` on submit |
-| `frontend/src/main.ts` | show short hash with copy action and plain-language explanation |
-| `backend/test/plan.test.ts` (new) | golden vectors and tamper cases |
-| `e2e` tests | assert preview hash is retained through confirm/submit/refresh |
+| `packages/shared/src/index.ts` | `DraftPlanV1`、`PlanProvenance`、domain 常量 |
+| `backend/src/plan.ts`（新增） | canonical JSON 和 domain-separated keccak256 函数 |
+| `backend/src/service.ts` | 计算、重算、校验 hash，并保存到 task |
+| `backend/src/server.ts` | submit 的严格 Zod schema，加入 `planHash` |
+| `frontend/src/main.ts` | 展示短 hash 和复制按钮，用清晰文案解释其含义 |
+| `backend/test/plan.test.ts`（新增） | golden vectors 和篡改测试 |
+| E2E 测试 | 验证 preview hash 经过确认、提交、刷新后保持一致 |
 
-The hash helpers must be pure and testable without RPC, LLM or SQLite.
+hash 函数必须是纯函数，可以不依赖 RPC、LLM 或 SQLite 单独测试。
 
-### 6.5 Suggested implementation skeleton
+### 6.5 建议实现骨架
 
 ```ts
 // backend/src/plan.ts
-export function canonicalJson(value: unknown): string { /* sorted keys, stable types */ }
+export function canonicalJson(value: unknown): string { /* key 排序、类型稳定 */ }
 
 export function hashDomain(domain: string, value: unknown): Hex {
   return keccak256(toUtf8Bytes(`aegis.draft-plan.v1\n${domain}\n${canonicalJson(value)}`));
 }
 
-export function computeDraftHash(intent: Intent): Hex { /* messageHash + purposeHash + fields */ }
+export function computeDraftHash(intent: Intent): Hex { /* messageHash + purposeHash + 字段 */ }
 export function computeQuoteHash(quote: Quote): Hex { /* quote + policy/block context */ }
 export function computePlanHash(draftHash: Hex, quoteHash: Hex): Hex { /* domain-separated */ }
 ```
 
-The implementation PR should include at least one golden vector so another
-process or language can reproduce the digest.
+实现 PR 至少应包含一个 golden vector，使其他进程或其他语言可以复现 digest。
 
-## 7. Security invariants
+## 7. 安全不变量
 
-1. `planHash` is recomputed server-side from persisted draft and quote data;
-   `messageHash` and `purposeHash` are recomputed from the raw fields before hashing.
-2. A draft edit invalidates the previous preview, quote and plan hash.
-3. Parser metadata (`kind`, `model`, `configuredModel`, `fallback`, `reason`) is
-   covered by the digest, so a model fallback cannot be silently rewritten later.
-4. A quote from another draft, revision or policy version cannot produce the same
-   `planHash` in practice, because all are included in the canonical object.
-5. `planHash` is not an authorization token and cannot bypass policy, approval,
-   nonce, deadline or on-chain checks.
-6. No raw message, purpose or API key is placed in task evidence or logs by this change.
-7. Mismatch is fail-closed: no task, no transaction preparation, no broadcast.
+1. `planHash` 必须由服务端根据已存储的 draft 和 quote 重新计算；`messageHash` 和 `purposeHash` 必须从原始字段重算后再参与 hash。
+2. draft 一旦被编辑，之前的 preview、quote 和 plan hash 全部失效。
+3. Parser metadata（`kind`、`model`、`configuredModel`、`fallback`、`reason`）必须纳入 digest，防止模型回退被事后改写。
+4. 来自其他 draft、revision 或 policyVersion 的 quote 不能产生相同的 `planHash`，因为相关字段都进入规范对象。
+5. `planHash` 不是授权 token，不能绕过 PolicyEngine、Owner 审批、nonce、deadline 或链上检查。
+6. 本变更不把原始 message、purpose 或 API key 放进 task evidence 或日志。
+7. 不一致时必须 fail closed：不创建 task、不准备交易、不广播。
 
-## 8. Acceptance criteria
+## 8. 验收标准
 
-- [ ] Same intent + same quote produces the same `planHash` across processes.
-- [ ] Changing any of message, purpose, recipient, amount, revision, parser model,
-      parser reason, quote id, policy version or quote expiry changes the hash.
-- [ ] Preview returns `planHash`; submit without it is rejected.
-- [ ] Submit with a valid `planHash` succeeds and the task/evidence returns the same value.
-- [ ] Submit after a draft edit, or with a hash from another quote, returns
-      `409 PLAN_HASH_MISMATCH` and creates no task.
-- [ ] Replaying the same submit with the same idempotency key returns the original
-      task and does not create a second payment.
-- [ ] Existing flow, typecheck, build, backend tests and E2E tests remain green.
-- [ ] Evidence includes `provenance` hashes and an explicit note that this is
-      off-chain provenance, not on-chain proof.
-- [ ] The UI explains the hash as "confirmation binding, not execution proof".
+- [ ] 相同 intent 和 quote 在不同进程中产生相同 `planHash`。
+- [ ] message、purpose、recipient、amount、revision、parser model、parser reason、quote id、policyVersion 或 quote 过期时间任一变化，hash 必须变化。
+- [ ] preview 返回 `planHash`；submit 缺少该字段时被拒绝。
+- [ ] 携带正确 `planHash` 的 submit 成功，task/evidence 返回相同值。
+- [ ] draft 编辑后提交旧 hash，或使用其他 quote 的 hash，返回 `409 PLAN_HASH_MISMATCH`，不创建 task。
+- [ ] 相同 idempotency key 和相同请求体重放时返回原 task，不创建第二笔付款。
+- [ ] 现有流程、typecheck、build、backend tests 和 E2E tests 保持通过。
+- [ ] evidence 包含 provenance hashes，并明确说明这是 off-chain provenance，不是 on-chain proof。
+- [ ] UI 文案明确说明 hash 是"确认绑定"，不是"执行证明"。
 
-## 9. Test matrix
+## 9. 测试矩阵
 
-| Case | Expected |
+| 场景 | 预期 |
 |---|---|
-| Create draft -> preview -> submit with returned planHash | 202, same hash in task |
-| Edit draft after preview, then submit old planHash | 409 `PLAN_HASH_MISMATCH` |
-| Reuse planHash from another draft/quote | 409 `PLAN_HASH_MISMATCH` |
-| Change parser fallback reason in stored record | recomputed hash differs; mismatch |
-| Change policyVersion in quote | mismatch |
-| Missing planHash | 400 `INVALID_REQUEST` |
-| Same idempotency key + same body | original task returned |
-| Same idempotency key + different planHash | 409 `IDEMPOTENCY_CONFLICT` |
-| Evidence recomputation | `draftHash`, `quoteHash`, `planHash` match |
-| Tampered message/purpose stored off-chain | digest mismatch; task not accepted |
-| Existing mock chain flow | unchanged behavior |
+| 创建 draft -> preview -> 用返回的 planHash submit | 202，task 中 hash 一致 |
+| preview 后编辑 draft，再用旧 planHash submit | 409 `PLAN_HASH_MISMATCH` |
+| 使用其他 draft/quote 的 planHash | 409 `PLAN_HASH_MISMATCH` |
+| 修改存储记录中的 parser fallback reason | 重算 hash 不同，submit 被拒绝 |
+| 修改 quote 的 policyVersion | hash 不一致 |
+| 缺少 planHash | 400 `INVALID_REQUEST` |
+| 相同 idempotency key 和相同请求体 | 返回原 task |
+| 相同 idempotency key 和不同 planHash | 409 `IDEMPOTENCY_CONFLICT` |
+| 按 evidence 重算 provenance | `draftHash`、`quoteHash`、`planHash` 全部匹配 |
+| 篡改链下 message 或 purpose | digest 不一致，task 不被接受 |
+| 现有 mock chain 流程 | 行为不变 |
 
-## 10. Implementation plan for review
+## 10. 评审后的实现拆分
 
-To keep the implementation reviewable, split it after this design PR:
+为了保持实现可评审，本设计 PR 之后建议拆成以下步骤：
 
-1. **PR A (this document):** agree on the contract and scope.
-2. **PR B:** add `backend/src/plan.ts`, `backend/test/plan.test.ts`, and shared types.
-   No service/API wiring yet; this is a pure hash module with golden vectors.
-3. **PR C:** wire preview/submit/task/evidence, add API compatibility and UI copy.
-4. **PR D (optional):** add a CLI verifier and put `planHash` into the evidence
-   bundle or attestation data URI.
-5. **PR E (only if needed):** on-chain anchor in a new policy domain version.
+1. **PR A（本 PR）：** 确认契约和范围。
+2. **PR B：** 增加 `backend/src/plan.ts`、`backend/test/plan.test.ts` 和 shared types。此阶段只做纯 hash 模块和 golden vectors，不接 service/API。
+3. **PR C：** 接入 preview、submit、task、evidence，补充 API 兼容和前端文案。
+4. **PR D（可选）：** 增加 CLI verifier，并将 `planHash` 放入 evidence bundle 或 attestation data URI。
+5. **PR E（仅在必要时）：** 在新 policy domain 版本中做链上锚定。
 
-This sequence keeps the first change small and lets reviewers discuss the hash
-contract without mixing in contract or deployment risk.
+这个顺序可以让第一个实现 PR 足够小，避免把 hash 契约讨论和合约、部署风险混在一起。
 
-## 11. Risks and honest limits
+## 11. 风险与边界
 
-| Risk | Mitigation |
+| 风险 | 缓解措施 |
 |---|---|
-| Off-chain hash can be recomputed by a compromised backend | state the trust boundary; plan an on-chain anchor if required |
-| Hash canonicalization diverges across Node versions | pure canonical JSON implementation + golden vector tests |
-| Schema changes silently break clients | additive API fields; version domain string |
-| Users mistake planHash for payment proof | UI copy: "confirmation binding, not execution proof" |
-| Extra hashes slow the demo | hashes are local CPU-only; no chain call |
-| Raw message contains sensitive data | export only hashes by default; raw data stays in existing local DB |
+| 链下 hash 可被完全被攻陷的后端重算 | 明确信任边界；如确有需要，再规划链上锚定 |
+| 不同 Node 版本的 canonical JSON 实现不一致 | 使用纯 canonical JSON 实现，并加入 golden vector 测试 |
+| schema 变化破坏旧客户端 | 只做增量字段，并引入版本化 domain string |
+| 用户误以为 planHash 是付款证明 | UI 和文档明确写"确认绑定，不是执行证明" |
+| 额外 hash 影响 demo 速度 | hash 只在本地 CPU 计算，不增加链上调用 |
+| 原始 message 含敏感信息 | 默认只导出 hash，原始数据继续留在现有本地 DB |
 
-Phase 1 makes accidental drift and off-chain record substitution detectable. It
-does not protect against a fully compromised backend or database administrator.
-That is why the design keeps the claim honest and leaves on-chain anchoring as an
-explicit later decision.
+第一阶段可以检测意外漂移和链下记录替换，但它不能防止完全被攻陷的后端或数据库管理员。因此文档必须保持诚实，并把链上锚定作为后续明确决策，而不是隐含承诺。
 
-## 12. Review questions
+## 12. 评审问题
 
-### Product / UX
+### 产品与交互
 
-1. Should the UI show `planHash` to every user, or only in advanced evidence?
-2. Should the label say "review fingerprint" or "plan hash"?
-3. Is the extra confirmation payload worth the UX cost for low-risk automatic
-   payments? The current proposal applies the hash to the preview/submit boundary,
-   not to the automatic execution decision itself.
+1. `planHash` 是展示给所有用户，还是只放在高级 evidence 页面？
+2. 文案用"审阅指纹"还是"plan hash"？
+3. 对低风险自动执行，增加确认 payload 是否值得？当前提案把 hash 放在 preview/submit 边界，不影响 PolicyEngine 的自动执行决策。
 
-### Backend / API
+### 后端与 API
 
-4. Should `draftHash` be exposed on creation, or only once preview is ready?
-5. Should submit require `planHash` immediately, or should there be a one-release
-   compatibility window where missing hashes are logged and rejected later?
-6. Should `quoteHash` include observed block hash/number? Recommendation: yes.
-7. Should parser `reason` be in the hash? Recommendation: yes; it is part of the
-   provenance record and is already stored in `ParserInfo`.
+4. `draftHash` 在创建时暴露，还是等 preview 再暴露？
+5. submit 是否立即强制要求 `planHash`，还是先提供一个版本的兼容期，缺失时记录日志，之后强制？
+6. `quoteHash` 是否包含 observed block hash 和 block number？建议包含。
+7. parser `reason` 是否进入 hash？建议进入，因为它已经是 `ParserInfo` 的一部分，是重要的 provenance 信息。
 
-### Contract / security
+### 合约与安全
 
-8. Is off-chain provenance sufficient for the current phase?
-9. If we later anchor on-chain, should `planHash` become part of `requestHash` or
-   a separate field/event? A separate field is clearer but costs storage.
-10. Do we want a CLI verifier in Phase 1, or only documented recomputation?
+8. 当前阶段只做链下 provenance 是否足够？
+9. 如果未来做链上锚定，`planHash` 应该进入 `requestHash`，还是单独字段或事件？单独字段更清楚，但占存储；进入 requestHash 更省，但需要升级 domain version。
+10. 第一阶段是否需要 CLI verifier，还是只提供文档化的重算步骤？
 
-## 13. Why this fits the current repo
+## 13. 为什么适合当前仓库
 
-- It preserves the single-action native-ETH scope.
-- It extends the existing `Intent`, `Quote`, `Task` and evidence model rather than
-  introducing a parallel agent framework.
-- It strengthens the project's central claim - executable, verifiable, traceable -
-  without pretending that the LLM or off-chain database is trustworthy.
-- It creates a clean interface for a later on-chain commitment while keeping the
-  first PR small, testable and reviewable.
+- 保留单动作 native ETH 范围；
+- 扩展现有 `Intent`、`Quote`、`Task` 和 evidence 模型，不引入并行 Agent 框架；
+- 强化项目"可执行、可验证、可追溯"的定位，但不假装 LLM 或链下数据库可信；
+- 为未来是否做链上 commitment 留出清晰接口，同时保持第一个 PR 小而可测。
 
-The smallest honest version is one pure hash module, one submit field, one task
-provenance object and a tamper-focused test file.
+最小且诚实的版本是：一个纯 hash 模块、一个 submit 字段、一个 task provenance 对象和一组以篡改为核心的测试。
 
-## Appendix A. Development discussion checklist
+## 附录 A：开发讨论检查清单
 
-Use this checklist when reviewing the proposal:
+评审时可以直接逐项确认：
 
-- [ ] Is the problem statement accepted?
-- [ ] Is the single-action scope preserved?
-- [ ] Are the hashed fields sufficient and not excessive?
-- [ ] Is the failure mode fail-closed and observable?
-- [ ] Are existing API clients kept compatible?
-- [ ] Is the evidence claim clearly limited to off-chain provenance?
-- [ ] Is there a small first implementation PR that can be tested without a chain?
-- [ ] Is on-chain anchoring explicitly deferred rather than implied?
+- [ ] 问题陈述是否成立？
+- [ ] 是否保持单动作范围？
+- [ ] hash 字段是否充分且不过度？
+- [ ] 失败模式是否 fail closed 且可观测？
+- [ ] 现有 API 客户端是否保持兼容？
+- [ ] evidence 的声明是否明确限制为 off-chain provenance？
+- [ ] 是否存在不依赖链即可测试的第一个实现 PR？
+- [ ] 链上锚定是否被明确推迟，而不是被暗示为已完成？
 
-## Appendix B. Non-claims
+## 附录 B：非声明
 
-This design does not claim:
+本设计不声称：
 
-- that the LLM produced a correct or honest plan;
-- that the raw natural language is proven;
-- that the off-chain database is tamper-proof;
-- that `planHash` replaces `requestHash` or contract events;
-- that policy decisions or approvals are changed;
-- that multi-action planning is part of this project.
+- LLM 产生的计划正确或诚实；
+- 原始自然语言本身被证明；
+- 链下数据库不可篡改；
+- `planHash` 可以替代 `requestHash` 或合约事件；
+- 本提案改变策略决策或审批流程；
+- 多动作规划属于当前项目范围。

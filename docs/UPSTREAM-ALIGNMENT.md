@@ -138,3 +138,12 @@ upstream-pr/aegis-agent/DRAFT-PLAN-PROVENANCE.patch
 - hash 不一致时 fail closed，不创建 task、不广播；
 - 证据响应可重算 provenance；
 - PR 不包含本地密钥、数据库、测试运行产物或原始模型输出。
+
+## 7. 当前 PR 状态
+
+- PR：<https://github.com/0xChainAegis/aegis-agent/pull/11>
+- 标题：docs(plan): 说明草案计划溯源绑定
+- 分支：LQZ5885:docs/draft-plan-provenance -> 0xChainAegis:main
+- 文件：docs/DRAFT-PLAN-PROVENANCE.md
+- 状态：文档已改为中文，等待上游评审
+- CI：首次 Fork PR 的 workflow 需要上游维护者批准后运行
