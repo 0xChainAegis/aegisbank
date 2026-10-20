@@ -127,6 +127,8 @@ aegisbank智能体/
 - [架构说明](docs/ARCHITECTURE.md)
 - [完整架构图 PNG](docs/architecture/aegisbank-architecture.png)
 - [开发工具与技术栈](docs/TECH-STACK.md)
+- [AegisAgent 上游项目对齐说明](docs/UPSTREAM-ALIGNMENT.md)
+- [上游 PR 设计文件与补丁](upstream-pr/aegis-agent/README.md)
 - [开发环境与验收记录](docs/DEVELOPMENT-ENVIRONMENT.md)
 - [安全边界与生产化待办](docs/SECURITY.md)
 - [参考手册](docs/reference/aegisbank-reference.pdf)
