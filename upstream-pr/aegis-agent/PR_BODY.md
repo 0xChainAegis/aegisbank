@@ -1,6 +1,8 @@
 ## Summary
 
-Adds a design note for **Draft Plan Provenance**: an off-chain, versioned `DraftPlanV1` + `planHash` that binds the exact draft, parser decision and quote reviewed by the user to the resulting task evidence.
+Adds a development-review-oriented design note for **Draft Plan Provenance**: an off-chain, versioned `DraftPlanV1` + `planHash` that binds the exact draft, parser decision and quote reviewed by the user to the resulting task evidence.
+
+The note includes a Chinese review summary, a one-page "what this adds" table, a concrete before/after example, a trust-principle mapping from the AegisBank reference manual, and a split implementation plan for follow-up PRs.
 
 This PR is documentation only. It does not change contracts, policy, signing, or the native-ETH-only scope.
 
@@ -18,11 +20,14 @@ The proposal adds a small, additive binding:
 
 ## Included
 
+- Chinese review summary and one-page change overview.
 - Problem statement and explicit off-chain trust boundary.
+- Mapping of relevant reference-manual principles to the current AegisAgent architecture.
 - `DraftPlanV1` interface and domain-separated `keccak256` hashing rules.
 - API and storage changes (`draftHash`, `quoteHash`, `planHash`).
 - Security invariants and a tamper-focused test matrix.
 - Phased rollout: off-chain hashes, then attestation/evidence bundle, then optional on-chain anchor in a new policy domain.
+- Review questions grouped by product/UX, backend/API and contract/security.
 
 ## Validation
 

@@ -66,7 +66,7 @@ AegisAgent 不是一个银行多工具 DAG 项目，而是一个面向智能体�
 - task/evidence 暴露 provenance hashes；
 - 不修改合约、PolicyEngine、签名或 native ETH 范围。
 
-设计文件：
+设计文件（含中文评审摘要、10 分钟评审路径、PDF 原则映射和实现拆分）：
 
 ```text
 upstream-pr/aegis-agent/docs/DRAFT-PLAN-PROVENANCE.md
