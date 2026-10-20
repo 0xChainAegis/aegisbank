@@ -47,7 +47,8 @@ pnpm lock: frontend/pnpm-lock.yaml
 | `bash scripts/bootstrap.sh` | `uv sync --frozen` 成功；`pnpm install --frozen-lockfile` 与 esbuild 构建批准成功 |
 | `bash scripts/lint.sh` | ruff 通过；TypeScript `tsc --noEmit` 通过 |
 | `bash scripts/build.sh` | 后端 compileall 通过；Vite 生产包构建成功 |
-| `bash scripts/test.sh` | 后端 7 项测试通过；前端 3 项测试通过 |
+| `python scripts/render_architecture.py` | 生成完整架构图 SVG / PNG |
+| `bash scripts/test.sh` | 后端 15 项测试通过；前端 3 项测试通过 |
 | `bash scripts/smoke.sh` | `/api/health` 正常；绿色账单工具执行成功；审计链 `valid=true` |
 | DSH `gate.ps1` | 五阶段全部 PASS，提交 `29f460c` 带 `Verified-By: dsh-gate` |
 | 全量密钥扫描 | 48 个文件，0 findings |

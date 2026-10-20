@@ -24,6 +24,16 @@ echo "[smoke] health"
 curl -fsS http://127.0.0.1:8000/api/health
 echo
 
+echo "[smoke] planner info"
+curl -fsS http://127.0.0.1:8000/api/planner/info
+echo
+
+echo "[smoke] structured plan preview (no execution)"
+curl -fsS -X POST http://127.0.0.1:8000/api/planner/plan \
+  -H 'Content-Type: application/json' \
+  -d '{"instruction":"向 ACC-2002 转账 880 元"}'
+echo
+
 echo "[smoke] green tool run"
 curl -fsS -X POST http://127.0.0.1:8000/api/agent/run \
   -H 'Content-Type: application/json' \

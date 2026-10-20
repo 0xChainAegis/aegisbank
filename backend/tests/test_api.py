@@ -38,6 +38,8 @@ def test_green_tool_executes_and_audit_chain_is_valid(tmp_path):
         body = response.json()
         assert body["status"] == "completed"
         assert body["risk_level"] == "green"
+        assert body["plan"]["intent"] == "query_bill"
+        assert len(body["plan"]["plan_hash"]) == 64
         assert body["results"][0]["data"]["simulated"] is True
 
         audit = client.get("/api/audit")
@@ -167,3 +169,21 @@ def test_permission_revoked_while_pending_blocks_execution(tmp_path):
         assert confirmed.json()["status"] == "blocked"
         assert "未授权" in confirmed.json()["reason"]
         assert "results" not in confirmed.json()
+
+
+def test_agent_run_returns_structured_plan_and_clarification(tmp_path):
+    with make_client(tmp_path) as client:
+        planned = client.post(
+            "/api/agent/run",
+            json={"instruction": "向 ACC-2002 转账 880 元"},
+        )
+        assert planned.status_code == 200, planned.text
+        body = planned.json()
+        assert body["plan"]["planner"] == "rule"
+        assert body["plan"]["steps"][0]["tool_name"] == "transfer"
+        assert body["status"] == "awaiting_confirmation"
+
+        vague = client.post("/api/agent/run", json={"instruction": "帮我处理一下"})
+        assert vague.status_code == 200, vague.text
+        assert vague.json()["status"] == "needs_clarification"
+        assert vague.json()["plan"]["needs_clarification"] is True

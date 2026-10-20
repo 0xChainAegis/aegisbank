@@ -304,6 +304,49 @@ function App() {
                     </div>
                   </div>
                   <p className="result-reason">{lastRun.reason}</p>
+                  {lastRun.plan && (
+                    <div className="plan-block">
+                      <div className="plan-meta">
+                        <span className="eyebrow">STRUCTURED EXECUTION PLAN</span>
+                        <span className="plan-planner">{lastRun.plan.planner}</span>
+                        <span className="plan-confidence">
+                          置信度 {Math.round(lastRun.plan.confidence * 100)}%
+                        </span>
+                        {lastRun.plan.plan_hash && (
+                          <code className="plan-hash" title={lastRun.plan.plan_hash}>
+                            {lastRun.plan.plan_hash.slice(0, 12)}…
+                          </code>
+                        )}
+                      </div>
+                      {lastRun.plan.steps.length > 0 && (
+                        <ol className="plan-steps">
+                          {lastRun.plan.steps.map((step) => (
+                            <li key={step.id}>
+                              <div className="plan-step-head">
+                                <span className="plan-step-id">{step.id}</span>
+                                <strong>{step.title || step.tool_name}</strong>
+                                {step.risk_level && riskBadge(step.risk_level)}
+                              </div>
+                              <div className="plan-step-tool">
+                                <code>{step.tool_name}</code>
+                                {step.depends_on.length > 0 && (
+                                  <span>依赖 {step.depends_on.join(', ')}</span>
+                                )}
+                              </div>
+                              <pre>{JSON.stringify(step.arguments, null, 2)}</pre>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                      {lastRun.plan.assumptions.length > 0 && (
+                        <div className="plan-assumptions">
+                          {lastRun.plan.assumptions.map((item) => (
+                            <span key={item}>{item}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {lastRun.results?.map((result) => (
                     <div className="result-block" key={result.tool_name}>
                       <div className="result-tool">

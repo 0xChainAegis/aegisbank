@@ -18,6 +18,7 @@ class RiskLevel(StrEnum):
 class ExecutionStatus(StrEnum):
     COMPLETED = "completed"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
+    NEEDS_CLARIFICATION = "needs_clarification"
     BLOCKED = "blocked"
     REJECTED = "rejected"
     FAILED = "failed"
@@ -83,9 +84,15 @@ class PlanNode:
     id: str
     tool_name: str
     arguments: dict[str, Any]
+    depends_on: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "tool_name": self.tool_name, "arguments": self.arguments}
+        return {
+            "id": self.id,
+            "tool_name": self.tool_name,
+            "arguments": self.arguments,
+            "depends_on": self.depends_on,
+        }
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> PlanNode:
@@ -93,4 +100,5 @@ class PlanNode:
             id=str(value["id"]),
             tool_name=str(value["tool_name"]),
             arguments=dict(value.get("arguments") or {}),
+            depends_on=[str(item) for item in value.get("depends_on") or []],
         )

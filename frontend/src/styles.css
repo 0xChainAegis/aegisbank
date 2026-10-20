@@ -213,6 +213,30 @@ textarea:focus, input:focus { border-color: rgba(15,92,83,0.55); box-shadow: 0 0
 .status-awaiting_confirmation { color: var(--amber); background: var(--amber-soft); }
 .status-blocked, .status-rejected, .status-failed { color: var(--red); background: var(--red-soft); }
 .result-reason { color: var(--ink-soft); font-size: 13px; }
+.plan-block {
+  margin-top: 18px;
+  padding: 17px;
+  border: 1px solid rgba(15, 92, 83, 0.16);
+  border-radius: 13px;
+  background: linear-gradient(180deg, rgba(217, 235, 229, 0.46), rgba(255, 255, 255, 0.42));
+}
+.plan-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.plan-planner, .plan-confidence, .plan-hash {
+  padding: 3px 7px; border-radius: 99px; font-size: 9px;
+  color: var(--teal); background: rgba(255, 255, 255, 0.68);
+}
+.plan-hash { color: var(--ink-soft); }
+.plan-steps { display: grid; gap: 9px; list-style: none; padding: 0; margin: 14px 0 0; }
+.plan-steps li { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,0.62); }
+.plan-step-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.plan-step-head strong { font-size: 12px; }
+.plan-step-id { font-family: 'Cascadia Mono', Consolas, monospace; color: var(--teal); font-size: 9px; }
+.plan-step-tool { display: flex; gap: 10px; align-items: center; margin-top: 7px; color: #8d9691; font-size: 9px; }
+.plan-steps pre { max-height: 180px; overflow: auto; margin: 9px 0 0; padding: 9px; border-radius: 7px; background: rgba(23,37,37,0.045); font-size: 10px; white-space: pre-wrap; }
+.plan-assumptions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.plan-assumptions span { padding: 4px 7px; border-radius: 7px; background: var(--amber-soft); color: var(--amber); font-size: 9px; }
+.status-needs_clarification { color: var(--amber); background: var(--amber-soft); }
+
 .result-block { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 18px; }
 .result-tool { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .result-tool span { font-weight: 700; }

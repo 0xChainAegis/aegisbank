@@ -12,6 +12,7 @@ from .audit import AuditService
 from .config import Settings, get_settings
 from .db import Database
 from .gateway import PermissionGateway, PermissionStore
+from .planning.factory import build_planner, describe_planner
 from .scheduler import DagScheduler, IntentError, ReauthError
 from .schemas import AgentRunRequest, ConfirmationRequest, PermissionUpdateRequest
 from .tools.finance import build_registry
@@ -32,7 +33,9 @@ def create_app(
     permission_store.seed("demo-user", registry)
     gateway = PermissionGateway(registry=registry, permissions=permission_store)
     audit = AuditService(db)
+    planner = build_planner(config, registry)
     scheduler = DagScheduler(
+        planner=planner,
         registry=registry,
         gateway=gateway,
         db=db,
@@ -57,11 +60,32 @@ def create_app(
             "service": config.app_name,
             "version": "0.1.0",
             "mode": "local-mvp",
+            "planner": describe_planner(planner),
         }
 
     @app.get(f"{config.api_prefix}/tools")
     def list_tools(user_id: str = Query(default="demo-user", max_length=64)) -> dict[str, Any]:
         return {"tools": permission_store.list(user_id, registry)}
+
+    @app.get(f"{config.api_prefix}/planner/info")
+    def planner_info() -> dict[str, Any]:
+        return {
+            **describe_planner(planner),
+            "tools": registry.names(),
+            "structured_output": "ExecutionPlan/v1",
+        }
+
+    @app.post(f"{config.api_prefix}/planner/plan")
+    def preview_plan(body: AgentRunRequest) -> dict[str, Any]:
+        try:
+            return scheduler.preview(
+                user_id=body.user_id,
+                instruction=body.instruction,
+                tool_name=body.tool_name,
+                arguments=body.arguments,
+            )
+        except IntentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get(f"{config.api_prefix}/permissions")
     def list_permissions(

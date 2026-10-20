@@ -40,6 +40,7 @@ class QueryBillTool(BaseTool):
         input_schema=QueryBillArgs.model_json_schema(),
         output_schema=QueryBillOutput.model_json_schema(),
     )
+    arguments_model = QueryBillArgs
 
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
         args = QueryBillArgs.model_validate(arguments)
@@ -93,6 +94,7 @@ class AdjustRepaymentDateTool(BaseTool):
         input_schema=AdjustRepaymentDateArgs.model_json_schema(),
         output_schema=AdjustRepaymentDateOutput.model_json_schema(),
     )
+    arguments_model = AdjustRepaymentDateArgs
 
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
         args = AdjustRepaymentDateArgs.model_validate(arguments)
@@ -137,6 +139,7 @@ class TransferTool(BaseTool):
         input_schema=TransferArgs.model_json_schema(),
         output_schema=TransferOutput.model_json_schema(),
     )
+    arguments_model = TransferArgs
 
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
         args = TransferArgs.model_validate(arguments)

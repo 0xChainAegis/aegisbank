@@ -46,6 +46,7 @@ class Database:
                     user_id TEXT NOT NULL,
                     instruction TEXT NOT NULL,
                     dag_json TEXT NOT NULL,
+                    plan_json TEXT NOT NULL DEFAULT '{}',
                     risk_level TEXT NOT NULL,
                     requires_reauth INTEGER NOT NULL DEFAULT 0,
                     status TEXT NOT NULL,
@@ -71,6 +72,13 @@ class Database:
                 );
                 """
             )
+            columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(pending_actions)")
+            }
+            if "plan_json" not in columns:
+                conn.execute(
+                    "ALTER TABLE pending_actions ADD COLUMN plan_json TEXT NOT NULL DEFAULT '{}'"
+                )
 
     # ---------- permissions ----------
     def seed_permissions(self, user_id: str, tool_names: list[str]) -> None:
@@ -120,9 +128,9 @@ class Database:
             conn.execute(
                 """
                 INSERT INTO pending_actions
-                (id, user_id, instruction, dag_json, risk_level, requires_reauth,
+                (id, user_id, instruction, dag_json, plan_json, risk_level, requires_reauth,
                  status, created_at, expires_at, resolved_at)
-                VALUES (:id, :user_id, :instruction, :dag_json, :risk_level,
+                VALUES (:id, :user_id, :instruction, :dag_json, :plan_json, :risk_level,
                         :requires_reauth, :status, :created_at, :expires_at, NULL)
                 """,
                 record,

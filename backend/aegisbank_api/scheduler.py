@@ -1,9 +1,8 @@
-"""Rule-based intent planning and a confirmation-aware DAG scheduler."""
+"""Structured planning and a confirmation-aware DAG scheduler."""
 
 from __future__ import annotations
 
 import json
-import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -12,6 +11,8 @@ from .audit import AuditService
 from .db import Database
 from .domain import ExecutionContext, ExecutionStatus, PlanNode, RiskLevel
 from .gateway import PermissionGateway
+from .planning.compiler import CompiledPlan, PlanCompilationError, PlanCompiler
+from .planning.contracts import ExecutionPlan, Planner, PlanningRequest, PlanStep
 from .registry import ToolRegistry
 
 
@@ -23,43 +24,11 @@ class ReauthError(ValueError):
     pass
 
 
-def infer_tool(instruction: str) -> str:
-    text = instruction.lower()
-    if any(word in text for word in ("转账", "汇款", "transfer")):
-        return "transfer"
-    if any(word in text for word in ("还款日", "repayment")):
-        return "adjust_repayment_date"
-    if any(word in text for word in ("账单", "余额", "bill", "statement")):
-        return "query_bill"
-    raise IntentError("暂时无法识别该指令。可尝试查询账单、调整还款日或小额转账。")
-
-
-def infer_arguments(instruction: str, tool_name: str) -> dict[str, Any]:
-    amounts = re.findall(r"(\d+(?:\.\d+)?)\s*(?:元|rmb|cny)", instruction, re.IGNORECASE)
-    accounts = re.findall(r"ACC-\d+", instruction, re.IGNORECASE)
-    if tool_name == "transfer":
-        return {
-            "from_account": accounts[0] if accounts else "ACC-1001",
-            "to_account": accounts[1] if len(accounts) > 1 else "ACC-2002",
-            "amount_cny": float(amounts[0]) if amounts else 880.0,
-            "note": instruction[:120],
-        }
-    if tool_name == "adjust_repayment_date":
-        day_match = re.search(r"(\d{1,2})\s*日", instruction)
-        return {
-            "card_id": "CARD-8821",
-            "new_day": int(day_match.group(1)) if day_match else 18,
-        }
-    return {
-        "account_id": accounts[0] if accounts else "ACC-1001",
-        "period": "current_month",
-    }
-
-
 class DagScheduler:
     def __init__(
         self,
         *,
+        planner: Planner,
         registry: ToolRegistry,
         gateway: PermissionGateway,
         db: Database,
@@ -67,29 +36,54 @@ class DagScheduler:
         confirmation_ttl_seconds: int,
         demo_otp: str,
     ) -> None:
+        self.planner = planner
         self.registry = registry
         self.gateway = gateway
         self.db = db
         self.audit = audit
+        self.compiler = PlanCompiler(registry)
         self.confirmation_ttl_seconds = confirmation_ttl_seconds
         self.demo_otp = demo_otp
 
-    def _plan(
-        self, instruction: str, tool_name: str | None, arguments: dict[str, Any]
-    ) -> list[PlanNode]:
-        resolved_name = tool_name or infer_tool(instruction)
+    def _propose(self, request: PlanningRequest) -> ExecutionPlan:
         try:
-            tool = self.registry.get(resolved_name)
-        except KeyError as exc:
-            raise IntentError(str(exc)) from exc
-        resolved_args = arguments or infer_arguments(instruction, resolved_name)
-        return [
-            PlanNode(
-                id="node-1",
-                tool_name=tool.metadata.name,
-                arguments=resolved_args,
-            )
-        ]
+            return self.planner.plan(request)
+        except Exception as exc:
+            raise IntentError(f"Planner 生成计划失败：{exc}") from exc
+
+    def _compile(self, plan: ExecutionPlan) -> CompiledPlan:
+        try:
+            return self.compiler.compile(plan)
+        except PlanCompilationError as exc:
+            raise IntentError(f"计划校验失败：{exc}") from exc
+
+    def preview(
+        self,
+        *,
+        user_id: str,
+        instruction: str,
+        tool_name: str | None = None,
+        arguments: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        request = PlanningRequest(
+            user_id=user_id,
+            instruction=instruction,
+            tool_name=tool_name,
+            arguments=arguments or {},
+        )
+        plan = self._propose(request)
+        if plan.needs_clarification:
+            return {
+                "status": ExecutionStatus.NEEDS_CLARIFICATION.value,
+                "plan": plan.model_dump(),
+                "reason": plan.clarification,
+            }
+        compiled = self._compile(plan)
+        return {
+            "status": "planned",
+            "plan": compiled.as_dict(),
+            "reason": "计划已通过 Schema、工具注册和 DAG 依赖校验。",
+        }
 
     @staticmethod
     def _dag_path(nodes: list[PlanNode]) -> str:
@@ -103,6 +97,25 @@ class DagScheduler:
             key=lambda item: order[item],
         )
 
+    def _restore_plan(self, nodes: list[PlanNode], pending: dict[str, Any]) -> dict[str, Any]:
+        stored = json.loads(pending.get("plan_json") or "{}")
+        if stored:
+            return stored
+        restored = ExecutionPlan(
+            intent="confirmed_action",
+            planner="stored",
+            steps=[
+                PlanStep(
+                    id=node.id,
+                    tool_name=node.tool_name,
+                    arguments=node.arguments,
+                    depends_on=node.depends_on,
+                )
+                for node in nodes
+            ],
+        )
+        return self.compiler.compile(restored).as_dict()
+
     def run(
         self,
         *,
@@ -111,9 +124,39 @@ class DagScheduler:
         tool_name: str | None = None,
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        nodes = self._plan(instruction, tool_name, arguments or {})
-        dag_path = self._dag_path(nodes)
         run_id = uuid4().hex
+        request = PlanningRequest(
+            user_id=user_id,
+            instruction=instruction,
+            tool_name=tool_name,
+            arguments=arguments or {},
+        )
+        plan = self._propose(request)
+        if plan.needs_clarification:
+            audit_entry = self.audit.record(
+                event="planning_clarification",
+                user_id=user_id,
+                instruction=instruction,
+                dag_path="planner",
+                tool_name="planner",
+                arguments={"tool_name": tool_name, "arguments": arguments or {}},
+                result={"clarification": plan.clarification},
+                confirmation_state="clarification",
+                risk_level=RiskLevel.GREEN.value,
+            )
+            return {
+                "status": ExecutionStatus.NEEDS_CLARIFICATION.value,
+                "run_id": run_id,
+                "risk_level": RiskLevel.GREEN.value,
+                "reason": plan.clarification,
+                "plan": plan.model_dump(),
+                "audit_id": audit_entry["id"],
+            }
+
+        compiled = self._compile(plan)
+        nodes = compiled.nodes
+        plan_payload = compiled.as_dict()
+        dag_path = compiled.dag_path
         decisions: list[tuple[PlanNode, Any]] = []
         for node in nodes:
             tool = self.registry.get(node.tool_name)
@@ -138,7 +181,7 @@ class DagScheduler:
                 dag_path=dag_path,
                 tool_name=node.tool_name,
                 arguments=node.arguments,
-                result={"reason": decision.reason},
+                result={"reason": decision.reason, "plan_hash": compiled.plan_hash},
                 confirmation_state="blocked",
                 risk_level=metadata.risk_level.value,
             )
@@ -147,6 +190,7 @@ class DagScheduler:
                 "run_id": run_id,
                 "risk_level": metadata.risk_level.value,
                 "reason": decision.reason,
+                "plan": plan_payload,
                 "audit_id": audit_entry["id"],
             }
 
@@ -162,7 +206,10 @@ class DagScheduler:
                     "id": action_id,
                     "user_id": user_id,
                     "instruction": instruction,
-                    "dag_json": json.dumps([node.as_dict() for node in nodes], ensure_ascii=False),
+                    "dag_json": json.dumps(
+                        [node.as_dict() for node in nodes], ensure_ascii=False
+                    ),
+                    "plan_json": json.dumps(plan_payload, ensure_ascii=False),
                     "risk_level": risk_level.value,
                     "requires_reauth": int(decision.requires_reauth),
                     "status": "pending",
@@ -177,7 +224,10 @@ class DagScheduler:
                 dag_path=dag_path,
                 tool_name=nodes[0].tool_name,
                 arguments=nodes[0].arguments,
-                result={"reason": decision.reason},
+                result={
+                    "reason": decision.reason,
+                    "plan_hash": compiled.plan_hash,
+                },
                 confirmation_state="pending",
                 risk_level=risk_level.value,
             )
@@ -186,6 +236,7 @@ class DagScheduler:
                 "run_id": run_id,
                 "risk_level": risk_level.value,
                 "reason": decision.reason,
+                "plan": plan_payload,
                 "audit_id": audit_entry["id"],
                 "confirmation": {
                     "id": action_id,
@@ -206,6 +257,7 @@ class DagScheduler:
             "run_id": run_id,
             "risk_level": risk_level.value,
             "reason": "全部节点通过权限网关。",
+            "plan": plan_payload,
             "results": results,
         }
 
@@ -230,6 +282,7 @@ class DagScheduler:
             raise IntentError("确认请求已过期，请重新发起操作。")
 
         nodes = [PlanNode.from_dict(item) for item in json.loads(pending["dag_json"])]
+        plan_payload = self._restore_plan(nodes, pending)
         dag_path = self._dag_path(nodes)
 
         if not approved:
@@ -247,7 +300,10 @@ class DagScheduler:
             )
             return {
                 "status": ExecutionStatus.REJECTED.value,
+                "run_id": action_id,
+                "risk_level": pending["risk_level"],
                 "reason": "用户已拒绝该操作。",
+                "plan": plan_payload,
                 "audit_id": audit_entry["id"],
             }
 
@@ -284,6 +340,7 @@ class DagScheduler:
                     "run_id": action_id,
                     "risk_level": tool.metadata.risk_level.value,
                     "reason": f"确认后复检未通过：{decision.reason}",
+                    "plan": plan_payload,
                     "audit_id": audit_entry["id"],
                 }
 
@@ -312,6 +369,7 @@ class DagScheduler:
             "run_id": action_id,
             "risk_level": pending["risk_level"],
             "reason": "确认通过，任务已执行。",
+            "plan": plan_payload,
             "results": results,
         }
 
