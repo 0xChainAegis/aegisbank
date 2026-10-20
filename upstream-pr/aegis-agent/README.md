@@ -36,4 +36,4 @@ git push -u origin docs/draft-plan-provenance
 
 ## 范围
 
-仅新增设计文档。方案保持当前单动作 native ETH 范围，并明确区分链下 provenance 与链上 proof。
+本次 PR 包含中文设计说明、纯 hash 模块、API 绑定、task/evidence provenance 和测试。保持不变的是当前单动作 native ETH 范围、PolicyEngine、签名和审批语义；方案明确区分链下 provenance 与链上 proof。
