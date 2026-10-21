@@ -100,8 +100,8 @@ npm run check
 - backend build 通过
 - frontend production build 通过
 - 34 项合约测试通过
-- 51 项后端测试通过
-- Playwright 16 个用例可被正确发现
+- 55 项后端测试通过
+- Playwright 38 个用例可被正确发现
 
 未在本地启动完整浏览器 E2E 环境；CI 会在批准 workflow 后执行 Playwright。
 

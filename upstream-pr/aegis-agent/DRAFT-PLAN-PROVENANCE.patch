@@ -1,5 +1,5 @@
 diff --git a/backend/src/chain.ts b/backend/src/chain.ts
-index 4512530..6d09886 100644
+index b1f1b2b..fc0d8fe 100644
 --- a/backend/src/chain.ts
 +++ b/backend/src/chain.ts
 @@ -59,6 +59,7 @@ export interface Quote {
@@ -10,7 +10,7 @@ index 4512530..6d09886 100644
  }
  export interface Prepared {
    rawTransaction: Hex; hash: Hex; senderNonce: string; requestNonce: string; requestHash: Hex;
-@@ -122,7 +123,7 @@ export class ViemGateway implements Gateway {
+@@ -123,7 +124,7 @@ export class ViemGateway implements Gateway {
        await this.requireChain();
        const addresses = [this.config.walletAddress, this.config.aclAddress, this.config.attestationAddress, this.config.oracleAddress, this.config.policyEngineAddress, this.config.feedAddress];
        const code = await Promise.all(addresses.map(address => this.publicClient.getBytecode({ address })));
@@ -134,7 +134,7 @@ index 0000000..5a58cd9
 +  return expectedHash.toLowerCase() === expected.toLowerCase();
 +}
 diff --git a/backend/src/server.ts b/backend/src/server.ts
-index 2380c18..2afbd01 100644
+index 524edff..36b3695 100644
 --- a/backend/src/server.ts
 +++ b/backend/src/server.ts
 @@ -14,7 +14,7 @@ const draftSchema = z.object({ message: z.string().max(4000).optional(), recipie
@@ -154,7 +154,7 @@ index 2380c18..2afbd01 100644
            planner: {
              kind: config.llm.mode === 'off' ? 'rule_parser' : 'llm',
              mode: config.llm.mode,
-@@ -132,7 +133,7 @@ export function createApiServer(service: AegisService) {
+@@ -133,7 +134,7 @@ export function createApiServer(service: AegisService) {
              }
              if (request.method === 'POST' && action === 'submit') {
                const body = submitSchema.parse(raw);
@@ -907,10 +907,10 @@ index 54c77d8..5669b1d 100644
   expect(created).toHaveLength(1);
   expect(created[0].body).toMatchObject({amountWei:'1000000000000000',recipient:cfg.recipientAddress});
 diff --git a/frontend/src/main.ts b/frontend/src/main.ts
-index 26994d2..beaf4f4 100644
+index 837a441..7794765 100644
 --- a/frontend/src/main.ts
 +++ b/frontend/src/main.ts
-@@ -413,7 +413,7 @@ function drawer(): string {
+@@ -417,7 +417,7 @@ function drawer(): string {
    const c = isDraft && quote ? column({ status: s }) : column(task);
    const transactions = Array.isArray(task.transactions) ? task.transactions as Data[] : [];
    return `<div class="drawer-backdrop" data-action="close-drawer"></div><aside class="drawer" aria-label="操作详情" role="dialog" aria-modal="true"><div class="drawer-header"><span>${icon(isDraft ? 'layers' : 'activity')} ${isDraft ? '确认操作' : '操作详情'}</span><button class="icon-button" data-action="close-drawer" aria-label="关闭详情">${icon('close')}</button></div><div class="drawer-body"><div class="drawer-title"><div class="eyebrow">${isDraft ? '提交前确认' : `AEG-${esc(taskId.slice(-6).toUpperCase())}`}</div><h2>${esc(taskName(task))}</h2><span class="badge ${c}">${isDraft && !quote ? '等待预览' : statusLabel({ status: s })}</span></div><div class="transfer-hero"><span>付款金额</span><strong>${eth(taskAmount(task))}<small> ETH</small></strong>${get(quote, 'costUsd6') !== undefined ? `<span>预计 ${usd(get(quote, 'costUsd6'))} · 执行时重新计价</span>` : ''}</div>${isDraft ? reserveDraftSection(task) : ''}<div class="detail-section"><h3>付款信息</h3>${detailRow('收款地址', taskRecipient(task), true)}${detailRow('所在网络', `${mode()} · Chain ${expectedChain() || '—'}`)}${detailRow('资金池合约', walletAddress(), true)}${detailRow('任务 ID', taskId, true)}${detailRow('策略版本', value(quote, 'policyVersion') || value(task, 'policyVersion'))}</div>
@@ -919,7 +919,7 @@ index 26994d2..beaf4f4 100644
      ${taskReason(task) ? `<div class="info-panel error-panel">${icon('info')}<p>${esc(taskReason(task))}</p></div>` : ''}
      ${transactions.length ? `<div class="detail-section"><h3>交易记录</h3>${transactions.map(tx => { const hash = value(tx, 'txHash', 'hash', 'transactionHash'); const link = explorer(hash); return `<div class="transaction-item"><div><span>${esc(value(tx, 'action', 'kind', 'type') || '链上交易')}</span><span>${esc(value(tx, 'status') || '待核对')}</span></div>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" class="mono">${esc(short(hash, 12))}${icon('external')}</a>` : `<span class="mono">${esc(hash || '尚未取得交易哈希')}</span>`}</div>`; }).join('')}</div>` : ''}
      ${!isDraft ? `<div class="detail-section"><div class="section-title-row"><h3>结果验证</h3><button class="text-button" data-action="load-evidence">${icon('refresh')}重新核验</button></div>${evidenceView()}</div>` : `<div class="review-note">${icon('info')}<p>请核对完整地址与金额。确认后由服务发起链上请求；若需要审批，Owner 仍需在钱包中签名。</p></div>`}</div>
-@@ -436,7 +436,7 @@ function evidenceView(): string {
+@@ -440,7 +440,7 @@ function evidenceView(): string {
    const verification = value(evidence, 'status', 'verification.status', 'verificationStatus');
    const chainVerified = get(evidence, 'verification.chainVerified') === true;
    const hashVerified = get(evidence, 'verification.hashVerified') === true;
@@ -928,7 +928,7 @@ index 26994d2..beaf4f4 100644
    return `${verification ? `<div class="verification-summary"><span class="status-dot ${chainVerified ? 'green' : 'neutral'}"></span>${esc(statusLabel({ status: verification }))}</div>` : ''}${rows}${nativeChecks}${value(evidence, 'message', 'summary') ? `<p class="muted">${esc(value(evidence, 'message', 'summary'))}</p>` : ''}<p class="muted" style="font-size:9px;margin-top:12px">${chainVerified && verification === 'EXECUTED' ? '匹配到付款执行事件。' : verification === 'AWAITING_APPROVAL' ? '入队事件表示等待审批，资金尚未支付。' : '状态与交易事件需一并核对。'}一次 mined 确认不表示最终不可逆。</p><details class="raw-evidence"><summary>查看原始验证数据${icon('down')}</summary><pre>${esc(JSON.stringify(evidence, null, 2))}</pre></details>`;
  }
  
-@@ -514,7 +514,7 @@ async function submitIntent() {
+@@ -517,7 +517,7 @@ async function submitIntent() {
    if (!state.draft || !state.quote || disabled()) return;
    await run('submit', async () => {
      const reserveContext = reserveDraftFor(state.draft);

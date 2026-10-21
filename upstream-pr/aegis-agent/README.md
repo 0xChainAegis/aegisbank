@@ -7,10 +7,25 @@
 ## 已提交 PR
 
 - 地址：<https://github.com/0xChainAegis/aegis-agent/pull/11>
-- 标题：`docs(plan): 说明草案计划溯源绑定`
+- 标题：`feat(plan): 实现草案计划溯源绑定`
 - 来源分支：`LQZ5885:docs/draft-plan-provenance`
 - 目标分支：`0xChainAegis:main`
-- 状态：Open，等待上游评审
+- 状态：Open，已 rebase 到最新 upstream/main，等待上游维护者批准 workflow 和评审
+
+## 上游 PR 实际变更
+
+```text
+docs/DRAFT-PLAN-PROVENANCE.md
+backend/src/plan.ts
+backend/test/plan.test.ts
+backend/src/chain.ts
+backend/src/server.ts
+backend/src/service.ts
+backend/test/api.test.ts
+frontend/src/main.ts
+e2e/wallet.topup.spec.ts
+packages/shared/src/index.ts
+```
 
 ## 文件说明
 
@@ -27,8 +42,8 @@ git clone https://github.com/0xChainAegis/aegis-agent.git
 cd aegis-agent
 git checkout -b docs/draft-plan-provenance
 git apply /path/to/DRAFT-PLAN-PROVENANCE.patch
-git add docs/DRAFT-PLAN-PROVENANCE.md
-git commit -m "docs(plan): 说明草案计划溯源绑定"
+git add -A
+git commit -m "feat(plan): 实现草案计划溯源绑定"
 git push -u origin docs/draft-plan-provenance
 ```
 

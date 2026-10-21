@@ -1,14 +1,16 @@
 # 草案计划溯源（Draft Plan Provenance）设计说明
 
-状态：待评审建议稿
+状态：设计说明 + 初始实现草案
 
 日期：2026-10-20
+
+实现范围：纯 hash 模块、preview/submit 绑定、task/evidence provenance、测试
 
 相关文件：`backend/src/parser.ts`、`backend/src/llm.ts`、`backend/src/service.ts`、`packages/shared/src/index.ts`、`docs/ARCHITECTURE.md`、`docs/SECURITY.md`
 
 ## 评审摘要
 
-本 PR 只新增设计文档，不修改代码、不修改合约，也不改变当前 native ETH 单动作范围。
+本 PR 包含设计说明和第一阶段最小实现。实现只作用于链下 draft/quote provenance，不修改合约、PolicyEngine、签名，也不改变当前 native ETH 单动作范围。
 
 要解决的问题：
 
@@ -45,9 +47,9 @@
 3. 看第 5 节改造前后示例，判断用户体验和 API 变化是否合理。
 4. 看第 7 至 8 节安全不变量和验收标准，确认是否存在未覆盖的篡改路径。
 5. 在第 12 节按产品、后端、合约三个维度给出评审意见。
-6. 如果认可方向，再讨论第 10 节的实现拆分顺序。
+6. 如果认可方向，再讨论第 10 节的后续拆分和是否需要在后续 PR 中增加 CLI/链上锚定。
 
-本文件的建议是：先接受或修改协议，再进入实现；不建议把设计讨论和代码实现放在同一个 PR 里。
+本 PR 把设计说明和最小实现一起提交，便于评审者对照协议、代码和测试；如果上游更倾向先评审设计，也可以将实现部分移到后续 PR。
 
 ## 1. 本 PR 增加了什么
 
@@ -61,7 +63,7 @@
 | parser fallback 只是说明性信息 | parser kind、model、reason 进入 hash provenance |
 | 没有专门的验证向量 | 后续在 `backend/test/plan.test.ts` 增加 golden vector 和篡改测试 |
 
-本 PR 不修改运行代码。上表描述的是后续实现 PR 应达到的目标状态。
+本 PR 已包含上表字段、preview/submit 绑定、task/evidence 暴露和 hash 测试的最小实现；后续仍可按第 10 节继续拆分。
 
 ## 2. 范围与非目标
 
@@ -188,17 +190,25 @@ export interface DraftPlanV1 {
   action: 'transfer';
   messageHash: Hex;
   purposeHash: Hex;
-  recipient: Hex;
-  amountWei: string;
+  recipient: Hex | null;
+  amountWei: string | null;
   parser: ParserInfo;
   quote: {
     quoteId: string;
     draftVersion: number;
+    chainId: number;
+    walletAddress: Hex;
+    agentAddress: Hex;
+    recipient: Hex;
+    amountWei: string;
+    costUsd6: string;
+    maxUsdCost6: string;
     policyVersion: string;
     quoteExpiresAtSeconds: number;
     requestDeadlineSeconds: number;
     observedBlockNumber: string;
     observedBlockHash: Hex;
+    decision: 'AUTO' | 'OWNER_APPROVAL' | 'BLOCK';
   };
 }
 ```
@@ -207,9 +217,11 @@ hash 规则：
 
 ```text
 canonicalJson = 按 key 排序、字符串转义稳定、不包含 undefined 字段的 JSON
+messageHash  = keccak256(utf8("aegis.draft-plan.v1\nmessage\n" + message))
+purposeHash  = keccak256(utf8("aegis.draft-plan.v1\npurpose\n" + purpose))
 draftHash    = keccak256(utf8("aegis.draft-plan.v1\ndraft\n" + canonicalJson(draft)))
 quoteHash    = keccak256(utf8("aegis.draft-plan.v1\nquote\n" + canonicalJson(quote)))
-planHash     = keccak256(utf8("aegis.draft-plan.v1\nplan\n" + draftHash + quoteHash))
+planHash     = keccak256(utf8("aegis.draft-plan.v1\nplan\n" + draftHash + "\n" + quoteHash))
 ```
 
 `messageHash` 和 `purposeHash` 必须从原始字段重新计算，再参与 draft digest。使用 `keccak256` 而不是 SHA-256，是为了未来可以把同一个构造直接变成链上 `bytes32` commitment，而不需要重新设计。版本字符串属于 domain separator；字段集合变化时必须升级版本。
@@ -336,13 +348,11 @@ export function computePlanHash(draftHash: Hex, quoteHash: Hex): Hex { /* domain
 
 为了保持实现可评审，本设计 PR 之后建议拆成以下步骤：
 
-1. **PR A（本 PR）：** 确认契约和范围。
-2. **PR B：** 增加 `backend/src/plan.ts`、`backend/test/plan.test.ts` 和 shared types。此阶段只做纯 hash 模块和 golden vectors，不接 service/API。
-3. **PR C：** 接入 preview、submit、task、evidence，补充 API 兼容和前端文案。
-4. **PR D（可选）：** 增加 CLI verifier，并将 `planHash` 放入 evidence bundle 或 attestation data URI。
-5. **PR E（仅在必要时）：** 在新 policy domain 版本中做链上锚定。
+1. **本次 PR：** 设计说明 + `backend/src/plan.ts` + shared types + preview/submit/task/evidence 接入 + `backend/test/plan.test.ts`。
+2. **后续 PR：** 增加 CLI verifier，并将 `planHash` 放入 evidence bundle 或 attestation data URI。
+3. **条件性后续 PR：** 在新 policy domain 版本中做链上锚定。
 
-这个顺序可以让第一个实现 PR 足够小，避免把 hash 契约讨论和合约、部署风险混在一起。
+本次 PR 不触碰合约、PolicyEngine、签名或部署流程；hash 契约和运行链路可以在同一套测试里被评审。
 
 ## 11. 风险与边界
 

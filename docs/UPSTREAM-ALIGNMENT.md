@@ -146,5 +146,5 @@ upstream-pr/aegis-agent/DRAFT-PLAN-PROVENANCE.patch
 - 分支：LQZ5885:docs/draft-plan-provenance -> 0xChainAegis:main
 - 文件：docs/DRAFT-PLAN-PROVENANCE.md、backend/src/plan.ts、backend/test/plan.test.ts、shared types、service/server/frontend 变更
 - 状态：已包含设计说明与第一阶段实现，等待上游评审
-- 本地验收：npm run check 通过（34 项合约测试、51 项后端测试、类型检查与生产构建）
+- 本地验收：npm run check 通过（34 项合约测试、55 项后端测试、类型检查与生产构建；已 rebase 到最新 upstream/main）
 - CI：首次 Fork PR 的 workflow 需要上游维护者批准后运行
