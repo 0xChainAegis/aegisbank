@@ -13,7 +13,7 @@ AegisBank 的技术栈围绕四个约束选择：
 
 | 层 | 技术 | 版本/状态 | 用途 |
 |---|---|---|---|
-| 操作系统 | Windows 11 + WSL2 Ubuntu 24.04 | 已就绪 | Windows 驾驶舱，Linux 执行引擎 |
+| 操作系统 | WSL2 Ubuntu 24.04（ext4 原生工作区）+ Windows 11 桌面 | 已就绪 | Linux 为开发与执行主线，Windows 仅作展示与备份 |
 | 后端语言 | Python | 3.12.3 | Agent 编排、网关、工具和执行器 |
 | Web 框架 | FastAPI | 0.148 | REST API、OpenAPI、依赖注入 |
 | 数据契约 | Pydantic v2 | 2.14 | Planner、工具参数、API Schema |

@@ -1,5 +1,7 @@
 # AegisBank 产品路线图
 
+> 总规划与阶段详细设计见 [MASTER-PLAN.md](MASTER-PLAN.md)。
+
 ## 阶段 0：产品边界与仓库定型（已完成）
 
 目标：让 `LQZ5885/aegisbank` 成为独立产品仓库，而不是上游 AegisAgent 的附属 PR。
@@ -10,7 +12,16 @@
 - 上游计划溯源 PR 材料从产品 `main` 移出；
 - 历史材料归档到独立 branch：`archive/upstream-plan-provenance`；
 - README 不再把上游 PR 作为产品入口；
-- 产品、文档、截图、MIT License 和 GitHub 仓库已就绪。
+- 产品、文档、截图、MIT License 和 GitHub 仓库已就绪；
+- 工程文件补齐：`AGENTS.md`（项目规则）、`CONTRIBUTING.md`（贡献指南）；
+- 环境记录更新为 Linux ext4 主线（`docs/DEVELOPMENT-ENVIRONMENT.md`）；
+- 新增 `docs/MASTER-PLAN.md` 作为项目总规划。
+
+阶段 0 验收（2026-10-23）：
+
+- `main` 不包含 `upstream-pr/`，历史材料仅存在于归档分支；
+- lint / build / test 全绿（后端 20 项 pytest、前端 7 项 Vitest）；
+- 文档与实现一致，Windows 旧副本已冻结，开发主线仅保留 Linux ext4。
 
 ## 阶段 1：吸收 AegisAgent 的信任工程
 

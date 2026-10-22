@@ -316,7 +316,7 @@ bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 | 2.5 | 人工用户体验（开发者 Dogfooding） | 新增阶段 |
 | 3 | PPT、视频、安全自评和最终交付 | 计划中 |
 
-阶段 2.5 要求开发者在做比赛材料前，以真实用户路径连续完成三个场景、确认/MFA、撤权和审计，并形成可回归的 UX 记录。详见 [产品路线图](docs/ROADMAP.md) 和 [Dogfooding 清单](docs/UX-DOGFOODING.md)。
+阶段 2.5 要求开发者在做比赛材料前，以真实用户路径连续完成三个场景、确认/MFA、撤权和审计，并形成可回归的 UX 记录。整体阶段设计见 [项目总规划](docs/MASTER-PLAN.md)，分阶段任务见 [产品路线图](docs/ROADMAP.md) 和 [Dogfooding 清单](docs/UX-DOGFOODING.md)。
 
 ## 目录结构
 
@@ -341,17 +341,21 @@ aegisbank/
 ├─ docs/
 │  ├─ screenshots/         # 真实运行截图
 │  ├─ architecture/        # 架构图 PNG / SVG / Mermaid
+│  ├─ MASTER-PLAN.md       # 总规划与阶段设计
+│  ├─ ROADMAP.md           # 路线图
 │  ├─ ARCHITECTURE.md      # 模块边界与端到端数据流
 │  ├─ BANKING-DOMAIN.md    # 银行领域模型、三场景与跨场景 DAG
 │  ├─ SECURITY.md          # 安全边界与生产化清单
 │  └─ TECH-STACK.md        # 开发工具与技术栈
 ├─ scripts/                # bootstrap / dev / lint / build / test / smoke
 ├─ LICENSE                 # MIT License
+├─ CONTRIBUTING.md         # 贡献指南
 └─ README.md
 ```
 
 ## 文档索引
 
+- [项目总规划（Master Plan）](docs/MASTER-PLAN.md)
 - [银行领域模型与三场景闭环](docs/BANKING-DOMAIN.md)
 - [架构说明](docs/ARCHITECTURE.md)
 - [完整架构图](docs/architecture/aegisbank-architecture.png)
