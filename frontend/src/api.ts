@@ -1,22 +1,44 @@
-import type { AuditResponse, BankingOverview, RunResponse, ToolMetadata } from './types';
+import type {
+  AgentRunInput,
+  AuditResponse,
+  AuditVerification,
+  BankingOverview,
+  ExecutionPlan,
+  RunResponse,
+  ToolMetadata,
+} from './types';
+import { normalizeBankingOverview } from './viewModel';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error('无法连接后端服务，请确认 AegisBank API 已启动。');
+  }
+
+  const payload: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail =
-      typeof payload === 'object' && payload && 'detail' in payload
-        ? String((payload as { detail: unknown }).detail)
-        : `请求失败（HTTP ${response.status}）`;
-    throw new Error(detail);
+      payload !== null && typeof payload === 'object' && 'detail' in payload
+        ? (payload as { detail: unknown }).detail
+        : null;
+    const message =
+      typeof detail === 'string'
+        ? detail
+        : detail
+          ? JSON.stringify(detail)
+          : `请求失败（HTTP ${response.status}）`;
+    throw new Error(message);
   }
   return payload as T;
 }
@@ -25,7 +47,14 @@ export async function fetchTools(userId = 'demo-user'): Promise<ToolMetadata[]> 
   const payload = await request<{ tools: ToolMetadata[] }>(
     `/tools?user_id=${encodeURIComponent(userId)}`,
   );
-  return payload.tools;
+  return payload.tools ?? [];
+}
+
+export async function fetchPermissions(userId = 'demo-user'): Promise<ToolMetadata[]> {
+  const payload = await request<{ permissions: ToolMetadata[] }>(
+    `/permissions?user_id=${encodeURIComponent(userId)}`,
+  );
+  return payload.permissions ?? [];
 }
 
 export async function updatePermission(
@@ -39,12 +68,19 @@ export async function updatePermission(
   });
 }
 
-export async function runAgent(input: {
-  instruction: string;
-  tool_name?: string;
-  arguments?: Record<string, unknown>;
-  user_id?: string;
-}): Promise<RunResponse> {
+export async function fetchBankingOverview(): Promise<BankingOverview> {
+  const payload = await request<unknown>('/banking/overview?user_id=demo-user');
+  return normalizeBankingOverview(payload);
+}
+
+export async function previewPlan(input: AgentRunInput): Promise<ExecutionPlan> {
+  return request<ExecutionPlan>('/planner/plan', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: 'demo-user', ...input }),
+  });
+}
+
+export async function runAgent(input: AgentRunInput): Promise<RunResponse> {
   return request<RunResponse>('/agent/run', {
     method: 'POST',
     body: JSON.stringify({ user_id: 'demo-user', ...input }),
@@ -62,15 +98,10 @@ export async function resolveConfirmation(
   });
 }
 
-export async function fetchAudit(limit = 50): Promise<AuditResponse> {
-  return request<AuditResponse>(`/audit?limit=${limit}`);
+export async function fetchAudit(limit = 100): Promise<AuditResponse> {
+  return request<AuditResponse>(`/audit?limit=${encodeURIComponent(limit)}`);
 }
 
-export async function verifyAudit(): Promise<{ valid: boolean; checked: number }> {
-  return request('/audit/verify');
-}
-
-
-export async function fetchBankingOverview(userId = 'demo-user'): Promise<BankingOverview> {
-  return request<BankingOverview>(`/banking/overview?user_id=${encodeURIComponent(userId)}`);
+export async function verifyAudit(): Promise<AuditVerification> {
+  return request<AuditVerification>('/audit/verify');
 }

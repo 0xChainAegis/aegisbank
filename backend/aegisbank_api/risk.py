@@ -118,6 +118,22 @@ class DynamicRiskEngine:
                 score=45,
             )
 
+        if tool_name == "set_transaction_limit":
+            amount = float(arguments.get("daily_limit_cny") or 0)
+            if amount > 5000:
+                return self._assessment(
+                    level=RiskLevel.RED,
+                    base_risk=base_risk,
+                    reasons=[f"设置交易限额至 {amount:.2f} 元，超过 5000 元阈值。"],
+                    score=85,
+                )
+            return self._assessment(
+                level=RiskLevel.YELLOW,
+                base_risk=base_risk,
+                reasons=["信用卡交易限额调整需要用户确认。"],
+                score=45,
+            )
+
         if tool_name in {"report_card_lost", "unlock_card"}:
             return self._assessment(
                 level=RiskLevel.RED,
