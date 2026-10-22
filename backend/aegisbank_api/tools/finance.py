@@ -1,17 +1,20 @@
-"""Simulated banking tools used by the MVP demo.
+"""Deterministic mock banking tools backed by the bank repository.
 
-No real account, card, or money movement is touched. Replacing these adapters with
-bank-grade APIs is intentionally isolated from the scheduler and gateway.
+The tools deliberately contain no business-data literals. All account, bill,
+card and subscription facts come from BankingRepository so the Planner and LLM
+cannot invent financial data.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from pathlib import Path
+from tempfile import gettempdir
 from typing import Any
-from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
 
+from ..banking.repository import BankingRepository
+from ..db import Database
 from ..domain import ExecutionContext, RiskLevel, ToolMetadata, ToolResult
 from ..registry import BaseTool, ToolRegistry
 
@@ -24,17 +27,18 @@ class QueryBillArgs(BaseModel):
 class QueryBillOutput(BaseModel):
     account_id: str
     period: str
-    total_due_cny: float
-    minimum_due_cny: float
-    due_date: str
+    total_spend_cny: float
+    categories: dict[str, float]
+    anomalies: list[str]
+    suspicious_subscription_id: str | None
     transactions: list[dict[str, Any]]
 
 
 class QueryBillTool(BaseTool):
     metadata = ToolMetadata(
         name="query_bill",
-        title="查询账单",
-        description="读取指定账户的账单汇总与近期交易，只读操作。",
+        title="分析账单",
+        description="读取并分析指定账户的本月账单，识别消费分类和异常订阅，只读操作。",
         risk_level=RiskLevel.GREEN,
         permission="billing:read",
         input_schema=QueryBillArgs.model_json_schema(),
@@ -42,24 +46,57 @@ class QueryBillTool(BaseTool):
     )
     arguments_model = QueryBillArgs
 
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
         args = QueryBillArgs.model_validate(arguments)
-        data = {
-            "account_id": args.account_id,
-            "period": args.period,
-            "total_due_cny": 3280.50,
-            "minimum_due_cny": 328.05,
-            "due_date": "2026-11-08",
-            "transactions": [
-                {"date": "2026-10-16", "merchant": "城市生活超市", "amount_cny": -286.40},
-                {"date": "2026-10-14", "merchant": "工资入账", "amount_cny": 18500.00},
-                {"date": "2026-10-11", "merchant": "公共交通", "amount_cny": -54.00},
-            ],
-            "simulated": True,
-        }
+        bill = self.repository.bill(context.user_id, args.account_id, args.period)
         return ToolResult(
             tool_name=self.metadata.name,
-            message="已完成账单查询（演示数据）。",
+            message="已完成账单分析（演示银行数据）。",
+            data={**bill.model_dump(), "simulated": True},
+        )
+
+
+class TransferArgs(BaseModel):
+    from_account: str = Field(default="ACC-1001", min_length=3, max_length=32)
+    to_account: str = Field(default="ACC-2002", min_length=3, max_length=32)
+    amount_cny: float = Field(default=880.0, gt=0, le=50_000)
+    note: str = Field(default="AegisBank 演示转账", max_length=120)
+
+
+class TransferOutput(BaseModel):
+    transaction_id: str
+    from_account: str
+    to_account: str
+    amount_cny: float
+    status: str
+    daily_transfer_total_cny: float
+    simulated: bool
+
+
+class TransferTool(BaseTool):
+    metadata = ToolMetadata(
+        name="transfer",
+        title="智能转账",
+        description="从本人账户向指定账户转账；金额和日累计决定最终风险等级。",
+        risk_level=RiskLevel.YELLOW,
+        permission="transfer:execute",
+        input_schema=TransferArgs.model_json_schema(),
+        output_schema=TransferOutput.model_json_schema(),
+    )
+    arguments_model = TransferArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        args = TransferArgs.model_validate(arguments)
+        data = self.repository.transfer(context.user_id, args.model_dump())
+        return ToolResult(
+            tool_name=self.metadata.name,
+            message="转账指令已通过风险校验并完成模拟执行。",
             data=data,
         )
 
@@ -76,94 +113,199 @@ class AdjustRepaymentDateArgs(BaseModel):
         return value
 
 
-class AdjustRepaymentDateOutput(BaseModel):
-    card_id: str
-    previous_day: int
-    new_day: int
-    effective_from: str
-    simulated: bool
-
-
 class AdjustRepaymentDateTool(BaseTool):
     metadata = ToolMetadata(
         name="adjust_repayment_date",
         title="调整还款日",
-        description="调整信用卡每月还款日，属于会影响账户设置的黄色操作。",
+        description="调整信用卡每月还款日，属于会修改账户设置的黄色操作。",
         risk_level=RiskLevel.YELLOW,
         permission="card:manage",
         input_schema=AdjustRepaymentDateArgs.model_json_schema(),
-        output_schema=AdjustRepaymentDateOutput.model_json_schema(),
+        output_schema={},
     )
     arguments_model = AdjustRepaymentDateArgs
 
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
         args = AdjustRepaymentDateArgs.model_validate(arguments)
-        data = {
-            "card_id": args.card_id,
-            "previous_day": 8,
-            "new_day": args.new_day,
-            "effective_from": "2026-11-01",
-            "simulated": True,
-        }
-        return ToolResult(
-            tool_name=self.metadata.name,
-            message="还款日调整已生效（演示数据）。",
-            data=data,
-        )
+        data = self.repository.adjust_repayment_date(context.user_id, args.card_id, args.new_day)
+        return ToolResult(self.metadata.name, "还款日调整已生效（演示数据）。", data)
 
 
-class TransferArgs(BaseModel):
-    from_account: str = Field(default="ACC-1001", min_length=3, max_length=32)
-    to_account: str = Field(default="ACC-2002", min_length=3, max_length=32)
-    amount_cny: float = Field(default=880.0, gt=0, le=50_000)
-    note: str = Field(default="AegisBank MVP demo", max_length=120)
+class AdjustCardLimitArgs(BaseModel):
+    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    new_limit_cny: float = Field(default=5000.0, gt=0, le=100_000)
 
 
-class TransferOutput(BaseModel):
-    transaction_id: str
-    from_account: str
-    to_account: str
-    amount_cny: float
-    status: str
-    executed_at: str
-    simulated: bool
-
-
-class TransferTool(BaseTool):
+class AdjustCardLimitTool(BaseTool):
     metadata = ToolMetadata(
-        name="transfer",
-        title="小额转账",
-        description="从本人账户向指定账户转账，属于红色高风险操作。",
-        risk_level=RiskLevel.RED,
-        permission="transfer:execute",
-        input_schema=TransferArgs.model_json_schema(),
-        output_schema=TransferOutput.model_json_schema(),
+        name="adjust_card_limit",
+        title="调整卡片额度",
+        description="调整信用卡额度；超过 5000 元会升级为红色强验证。",
+        risk_level=RiskLevel.YELLOW,
+        permission="card:manage",
+        input_schema=AdjustCardLimitArgs.model_json_schema(),
+        output_schema={},
     )
-    arguments_model = TransferArgs
+    arguments_model = AdjustCardLimitArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
 
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
-        args = TransferArgs.model_validate(arguments)
-        if args.from_account == args.to_account:
-            raise ValueError("转出账户与转入账户不能相同")
-        data = {
-            "transaction_id": f"SIM-{uuid4().hex[:12].upper()}",
-            "from_account": args.from_account,
-            "to_account": args.to_account,
-            "amount_cny": args.amount_cny,
-            "status": "simulated_success",
-            "executed_at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "simulated": True,
-        }
+        args = AdjustCardLimitArgs.model_validate(arguments)
+        data = self.repository.adjust_card_limit(context.user_id, args.card_id, args.new_limit_cny)
+        return ToolResult(self.metadata.name, "卡片额度调整已生效（演示数据）。", data)
+
+
+class SetTransactionLimitArgs(BaseModel):
+    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    daily_limit_cny: float = Field(default=2000.0, gt=0, le=100_000)
+
+
+class SetTransactionLimitTool(BaseTool):
+    metadata = ToolMetadata(
+        name="set_transaction_limit",
+        title="设置交易限额",
+        description="设置信用卡每日交易限额，属于账户设置变更。",
+        risk_level=RiskLevel.YELLOW,
+        permission="card:manage",
+        input_schema=SetTransactionLimitArgs.model_json_schema(),
+        output_schema={},
+    )
+    arguments_model = SetTransactionLimitArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        args = SetTransactionLimitArgs.model_validate(arguments)
+        data = self.repository.set_transaction_limit(
+            context.user_id, args.card_id, args.daily_limit_cny
+        )
+        return ToolResult(self.metadata.name, "交易限额已更新（演示数据）。", data)
+
+
+class CardActionArgs(BaseModel):
+    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+
+
+class ReportCardLostTool(BaseTool):
+    metadata = ToolMetadata(
+        name="report_card_lost",
+        title="卡片挂失",
+        description="挂失信用卡，属于高风险账户安全操作。",
+        risk_level=RiskLevel.RED,
+        permission="card:security",
+        input_schema=CardActionArgs.model_json_schema(),
+        output_schema={},
+    )
+    arguments_model = CardActionArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        args = CardActionArgs.model_validate(arguments)
+        data = self.repository.set_card_status(context.user_id, args.card_id, "lost")
+        return ToolResult(self.metadata.name, "卡片已挂失（演示数据）。", data)
+
+
+class UnlockCardTool(BaseTool):
+    metadata = ToolMetadata(
+        name="unlock_card",
+        title="卡片解挂",
+        description="解除信用卡挂失状态，属于高风险账户安全操作。",
+        risk_level=RiskLevel.RED,
+        permission="card:security",
+        input_schema=CardActionArgs.model_json_schema(),
+        output_schema={},
+    )
+    arguments_model = CardActionArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        args = CardActionArgs.model_validate(arguments)
+        data = self.repository.set_card_status(context.user_id, args.card_id, "active")
+        return ToolResult(self.metadata.name, "卡片解挂已生效（演示数据）。", data)
+
+
+class ListSubscriptionsArgs(BaseModel):
+    include_cancelled: bool = False
+
+
+class ListSubscriptionsTool(BaseTool):
+    metadata = ToolMetadata(
+        name="list_subscriptions",
+        title="订阅查询",
+        description="查询当前订阅及异常扣费提示，只读操作。",
+        risk_level=RiskLevel.GREEN,
+        permission="subscription:read",
+        input_schema=ListSubscriptionsArgs.model_json_schema(),
+        output_schema={},
+    )
+    arguments_model = ListSubscriptionsArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        args = ListSubscriptionsArgs.model_validate(arguments)
+        items = self.repository.subscriptions(context.user_id)
+        if not args.include_cancelled:
+            items = [item for item in items if item.status == "active"]
         return ToolResult(
-            tool_name=self.metadata.name,
-            message="转账指令已通过红色风险校验并完成模拟执行。",
-            data=data,
+            self.metadata.name,
+            "已读取订阅列表（演示数据）。",
+            {"subscriptions": [item.model_dump() for item in items], "simulated": True},
         )
 
 
-def build_registry() -> ToolRegistry:
+class CancelSubscriptionArgs(BaseModel):
+    subscription_id: str = Field(min_length=3, max_length=64)
+
+
+class CancelSubscriptionTool(BaseTool):
+    metadata = ToolMetadata(
+        name="cancel_subscription",
+        title="取消订阅",
+        description="取消指定订阅，属于会改变扣费状态的黄色操作。",
+        risk_level=RiskLevel.YELLOW,
+        permission="subscription:manage",
+        input_schema=CancelSubscriptionArgs.model_json_schema(),
+        output_schema={},
+    )
+    arguments_model = CancelSubscriptionArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        args = CancelSubscriptionArgs.model_validate(arguments)
+        data = self.repository.cancel_subscription(context.user_id, args.subscription_id)
+        return ToolResult(self.metadata.name, "订阅取消已生效（演示数据）。", data)
+
+
+def _default_repository() -> BankingRepository:
+    # Used by planner unit tests and isolated tool catalogs. API runtime always
+    # injects the real repository tied to the application database.
+    return BankingRepository(Database(Path(gettempdir()) / "aegisbank-tool-registry.db"))
+
+
+def build_registry(repository: BankingRepository | None = None) -> ToolRegistry:
+    repo = repository or _default_repository()
     registry = ToolRegistry()
-    registry.register(QueryBillTool())
-    registry.register(AdjustRepaymentDateTool())
-    registry.register(TransferTool())
+    registry.register(QueryBillTool(repo))
+    registry.register(TransferTool(repo))
+    registry.register(AdjustRepaymentDateTool(repo))
+    registry.register(AdjustCardLimitTool(repo))
+    registry.register(SetTransactionLimitTool(repo))
+    registry.register(ReportCardLostTool(repo))
+    registry.register(UnlockCardTool(repo))
+    registry.register(ListSubscriptionsTool(repo))
+    registry.register(CancelSubscriptionTool(repo))
     return registry

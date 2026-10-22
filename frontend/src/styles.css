@@ -335,3 +335,15 @@ details[open] .audit-chevron { transform: rotate(180deg); }
   .policy-note .eyebrow { flex-basis: auto; }
   .page-heading h1 { font-size: 30px; }
 }
+
+
+.bank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.bank-grid .table-card { overflow: hidden; }
+.bank-grid .table-card .section-head h2 { font-size: 18px; }
+.risk-reasons { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 12px 0 2px; }
+.risk-reasons .eyebrow { flex-basis: 100%; }
+.risk-reasons span:not(.eyebrow), .step-risk-reasons span {
+  padding: 4px 8px; border-radius: 7px; background: var(--amber-soft); color: var(--amber); font-size: 9px;
+}
+.step-risk-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+@media (max-width: 900px) { .bank-grid { grid-template-columns: 1fr; } }

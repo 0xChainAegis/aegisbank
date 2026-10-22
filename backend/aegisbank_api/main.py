@@ -9,10 +9,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .audit import AuditService
+from .banking.repository import BankingRepository
 from .config import Settings, get_settings
 from .db import Database
 from .gateway import PermissionGateway, PermissionStore
 from .planning.factory import build_planner, describe_planner
+from .risk import DynamicRiskEngine
 from .scheduler import DagScheduler, IntentError, ReauthError
 from .schemas import AgentRunRequest, ConfirmationRequest, PermissionUpdateRequest
 from .tools.finance import build_registry
@@ -28,16 +30,19 @@ def create_app(
         config.database_path = Path(database_path)
 
     db = Database(config.database_path)
-    registry = build_registry()
+    bank_repository = BankingRepository(db)
+    registry = build_registry(bank_repository)
     permission_store = PermissionStore(db)
     permission_store.seed("demo-user", registry)
     gateway = PermissionGateway(registry=registry, permissions=permission_store)
+    risk_engine = DynamicRiskEngine(bank_repository)
     audit = AuditService(db)
     planner = build_planner(config, registry)
     scheduler = DagScheduler(
         planner=planner,
         registry=registry,
         gateway=gateway,
+        risk_engine=risk_engine,
         db=db,
         audit=audit,
         confirmation_ttl_seconds=config.confirmation_ttl_seconds,
@@ -62,6 +67,12 @@ def create_app(
             "mode": "local-mvp",
             "planner": describe_planner(planner),
         }
+
+    @app.get(f"{config.api_prefix}/banking/overview")
+    def banking_overview(
+        user_id: str = Query(default="demo-user", max_length=64),
+    ) -> dict[str, Any]:
+        return bank_repository.overview(user_id).model_dump()
 
     @app.get(f"{config.api_prefix}/tools")
     def list_tools(user_id: str = Query(default="demo-user", max_length=64)) -> dict[str, Any]:

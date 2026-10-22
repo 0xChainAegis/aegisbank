@@ -2,7 +2,7 @@
 
 AegisBank 是一个面向银行场景的安全自治智能体原型。项目把「结构化规划 → Plan 编译 → DAG 调度 → 统一权限网关 → 分级确认 → 签名审计」串成一条可运行的闭环，避免把工具逻辑硬编码进 Agent 主流程。
 
-当前仓库完成的是**可开发的初始环境与最小闭环骨架**：可插拔结构化 Planner、确定性 Plan Compiler、三类示例金融工具、绿/黄/红风险策略、SQLite 哈希链审计、React 控制台、自动化测试和 DSH 工作流门禁都已就位。
+当前仓库完成的是**可开发的银行 Agent 最小闭环**：可插拔结构化 Planner、确定性 Plan Compiler、银行账户/卡片/订阅领域模型、动态风险引擎、账单分析/智能转账/卡片管理三场景、跨场景 DAG、SQLite 哈希链审计、React 控制台和自动化测试都已就位。
 
 > 所有账户、账单、转账结果均为本地模拟数据，不连接任何真实银行系统。
 
@@ -71,13 +71,19 @@ cd frontend && pnpm dev
 
 ## 三条演示链路
 
-| 指令 | 工具节点 | 风险级别 | 预期行为 |
+| 场景 | 示例指令 | 动态风险 | 预期行为 |
 |---|---|---|---|
-| 查询我的本月账单 | `query_bill` | 绿色 | 网关放行后立即执行 |
-| 把还款日调整到每月 18 日 | `adjust_repayment_date` | 黄色 | 创建待确认请求，确认后执行 |
-| 向 ACC-2002 转账 880 元 | `transfer` | 红色 | 二次校验（演示验证码 `246810`）后执行 |
+| 账单分析 | 分析我的本月账单 | 绿色 | 直接执行，返回分类、异常交易和异常订阅 |
+| 智能转账 | 向 ACC-2002 转账 880 元 | 黄色 | 日累计 ≤ 1000 元，确认后执行 |
+| 智能转账 | 向 ACC-2002 转账 1200 元 | 红色 | 需演示 OTP `246810` 后执行 |
+| 卡片管理 | 把信用卡额度调整到 8000 元 | 红色 | 额度 > 5000 元，强验证后执行 |
+| 卡片管理 | 把还款日调整到每月 18 日 | 黄色 | 确认后执行 |
+| 跨场景 DAG | 分析我的账单并取消异常订阅 | 黄色 | `query_bill` → 变量解析 → `cancel_subscription` |
 
 在「权限控制台」撤回任一工具权限后，再次调用会在进入调度器之前被统一网关拦截。所有结果都会写入「操作审计」，并可校验 SHA-256 哈希链。
+
+银行演示数据通过 `GET /api/banking/overview` 查看，所有账户、卡片、交易和订阅都来自后端 Mock Bank Core，不由 LLM 编造。
+
 
 ## 工程命令
 
@@ -104,12 +110,14 @@ DSH 工作流门禁与提交：
 aegisbank智能体/
 ├─ backend/
 │  ├─ aegisbank_api/
+│  │  ├─ banking/         # 账户、卡片、交易、订阅 Mock Bank Core
 │  │  ├─ planning/        # 结构化 Planner、Compiler、LLM 适配器
+│  │  ├─ risk.py          # 动态金额/日累计/操作风险引擎
 │  │  ├─ gateway.py       # 统一权限网关：注入/越权/风险分级
-│  │  ├─ scheduler.py     # DAG 调度与确认恢复
+│  │  ├─ scheduler.py     # DAG 调度、变量解析与确认恢复
 │  │  ├─ audit.py         # SHA-256 审计哈希链
 │  │  ├─ registry.py      # 可插拔工具 SDK
-│  │  └─ tools/finance.py # 三类示例金融工具
+│  │  └─ tools/finance.py # 银行标准工具节点
 │  └─ tests/              # API 闭环 + Planner 契约测试
 ├─ frontend/
 │  └─ src/                # 控制台 UI、API 客户端、风险展示
@@ -125,6 +133,7 @@ aegisbank智能体/
 ## 文档
 
 - [架构说明](docs/ARCHITECTURE.md)
+- [银行领域模型与三场景闭环](docs/BANKING-DOMAIN.md)
 - [完整架构图 PNG](docs/architecture/aegisbank-architecture.png)
 - [开发工具与技术栈](docs/TECH-STACK.md)
 - [AegisAgent 上游项目对齐说明](docs/UPSTREAM-ALIGNMENT.md)

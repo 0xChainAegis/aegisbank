@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,16 @@ class Database:
                 conn.execute(
                     "ALTER TABLE pending_actions ADD COLUMN plan_json TEXT NOT NULL DEFAULT '{}'"
                 )
+
+    @contextmanager
+    def transaction(self):
+        """Yield a short-lived connection with an explicit transaction boundary."""
+        with self._lock, self._connect() as conn:
+            try:
+                yield conn
+            except Exception:
+                conn.rollback()
+                raise
 
     # ---------- permissions ----------
     def seed_permissions(self, user_id: str, tool_names: list[str]) -> None:

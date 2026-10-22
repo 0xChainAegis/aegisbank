@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -14,6 +15,7 @@ from .gateway import PermissionGateway
 from .planning.compiler import CompiledPlan, PlanCompilationError, PlanCompiler
 from .planning.contracts import ExecutionPlan, Planner, PlanningRequest, PlanStep
 from .registry import ToolRegistry
+from .risk import DynamicRiskEngine, RiskAssessment
 
 
 class IntentError(ValueError):
@@ -31,6 +33,7 @@ class DagScheduler:
         planner: Planner,
         registry: ToolRegistry,
         gateway: PermissionGateway,
+        risk_engine: DynamicRiskEngine,
         db: Database,
         audit: AuditService,
         confirmation_ttl_seconds: int,
@@ -39,6 +42,7 @@ class DagScheduler:
         self.planner = planner
         self.registry = registry
         self.gateway = gateway
+        self.risk_engine = risk_engine
         self.db = db
         self.audit = audit
         self.compiler = PlanCompiler(registry)
@@ -56,6 +60,64 @@ class DagScheduler:
             return self.compiler.compile(plan)
         except PlanCompilationError as exc:
             raise IntentError(f"计划校验失败：{exc}") from exc
+
+    def _assess_nodes(
+        self, nodes: list[PlanNode], user_id: str, instruction: str
+    ) -> dict[str, RiskAssessment]:
+        assessments: dict[str, RiskAssessment] = {}
+        for node in nodes:
+            tool = self.registry.get(node.tool_name)
+            assessments[node.id] = self.risk_engine.assess(
+                user_id=user_id,
+                tool_name=tool.metadata.name,
+                arguments=node.arguments,
+                base_risk=tool.metadata.risk_level,
+                instruction=instruction,
+            )
+        return assessments
+
+    @staticmethod
+    def _decorate_plan(
+        plan_payload: dict[str, Any], assessments: dict[str, RiskAssessment]
+    ) -> dict[str, Any]:
+        for step in plan_payload.get("steps", []):
+            assessment = assessments.get(str(step.get("id")))
+            if assessment:
+                step["risk_level"] = assessment.level.value
+                step["risk_reasons"] = assessment.reasons
+                step["requires_reauth"] = assessment.requires_reauth
+                step["risk_score"] = assessment.score
+        return plan_payload
+
+    @staticmethod
+    def _max_assessed_risk(assessments: dict[str, RiskAssessment]) -> RiskLevel:
+        order = {RiskLevel.GREEN: 0, RiskLevel.YELLOW: 1, RiskLevel.RED: 2}
+        return max(
+            (assessment.level for assessment in assessments.values()),
+            key=lambda item: order[item],
+        )
+
+    @classmethod
+    def _resolve_arguments(cls, value: Any, results: dict[str, dict[str, Any]]) -> Any:
+        if isinstance(value, dict):
+            return {key: cls._resolve_arguments(item, results) for key, item in value.items()}
+        if isinstance(value, list):
+            return [cls._resolve_arguments(item, results) for item in value]
+        if isinstance(value, str):
+            match = re.fullmatch(r"\$\{steps\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_.-]+)\}", value)
+            if match:
+                step_id, path = match.groups()
+                current: Any = results.get(step_id)
+                if current is None:
+                    raise ValueError(f"步骤结果不存在：{step_id}")
+                for part in path.split("."):
+                    if not isinstance(current, dict) or part not in current:
+                        raise ValueError(f"步骤 {step_id} 缺少结果字段：{path}")
+                    current = current[part]
+                if current is None:
+                    raise ValueError(f"步骤 {step_id} 的字段为空：{path}")
+                return current
+        return value
 
     def preview(
         self,
@@ -79,10 +141,23 @@ class DagScheduler:
                 "reason": plan.clarification,
             }
         compiled = self._compile(plan)
+        assessments = self._assess_nodes(compiled.nodes, user_id, instruction)
+        risk_level = self._max_assessed_risk(assessments)
+        plan_payload = self._decorate_plan(compiled.as_dict(), assessments)
         return {
             "status": "planned",
-            "plan": compiled.as_dict(),
-            "reason": "计划已通过 Schema、工具注册和 DAG 依赖校验。",
+            "plan": plan_payload,
+            "risk_level": risk_level.value,
+            "risk": {
+                "level": risk_level.value,
+                "reasons": [
+                    reason
+                    for assessment in assessments.values()
+                    for reason in assessment.reasons
+                ],
+                "requires_reauth": any(item.requires_reauth for item in assessments.values()),
+            },
+            "reason": "计划已通过 Schema、工具注册、DAG 依赖和动态风险校验。",
         }
 
     @staticmethod
@@ -155,25 +230,42 @@ class DagScheduler:
 
         compiled = self._compile(plan)
         nodes = compiled.nodes
-        plan_payload = compiled.as_dict()
+        assessments = self._assess_nodes(nodes, user_id, instruction)
+        risk_level = self._max_assessed_risk(assessments)
+        plan_payload = self._decorate_plan(compiled.as_dict(), assessments)
         dag_path = compiled.dag_path
-        decisions: list[tuple[PlanNode, Any]] = []
+        decisions: list[tuple[PlanNode, Any, RiskAssessment]] = []
         for node in nodes:
             tool = self.registry.get(node.tool_name)
+            assessment = assessments[node.id]
             decision = self.gateway.evaluate(
                 user_id=user_id,
                 tool_name=tool.metadata.name,
-                risk_level=tool.metadata.risk_level,
+                risk_level=assessment.level,
                 permission=tool.metadata.permission,
                 instruction=instruction,
                 arguments=node.arguments,
             )
-            decisions.append((node, decision))
+            decisions.append((node, decision, assessment))
 
-        blocked = next(((node, dec) for node, dec in decisions if dec.denied), None)
+        risk = {
+            "level": risk_level.value,
+            "reasons": [
+                reason for assessment in assessments.values() for reason in assessment.reasons
+            ],
+            "requires_reauth": any(item.requires_reauth for item in assessments.values()),
+        }
+
+        blocked = next(
+            (
+                (node, decision, assessment)
+                for node, decision, assessment in decisions
+                if decision.denied
+            ),
+            None,
+        )
         if blocked:
-            node, decision = blocked
-            metadata = self.registry.get(node.tool_name).metadata
+            node, decision, assessment = blocked
             audit_entry = self.audit.record(
                 event="gateway_blocked",
                 user_id=user_id,
@@ -181,23 +273,35 @@ class DagScheduler:
                 dag_path=dag_path,
                 tool_name=node.tool_name,
                 arguments=node.arguments,
-                result={"reason": decision.reason, "plan_hash": compiled.plan_hash},
+                result={
+                    "reason": decision.reason,
+                    "plan_hash": compiled.plan_hash,
+                    "risk": assessment.as_dict(),
+                },
                 confirmation_state="blocked",
-                risk_level=metadata.risk_level.value,
+                risk_level=assessment.level.value,
             )
             return {
                 "status": ExecutionStatus.BLOCKED.value,
                 "run_id": run_id,
-                "risk_level": metadata.risk_level.value,
+                "risk_level": assessment.level.value,
+                "risk": risk,
                 "reason": decision.reason,
                 "plan": plan_payload,
                 "audit_id": audit_entry["id"],
             }
 
-        pending = next(((node, dec) for node, dec in decisions if not dec.allowed_now), None)
-        risk_level = self._max_risk(nodes, self.registry)
+        pending = next(
+            (
+                (node, decision, assessment)
+                for node, decision, assessment in decisions
+                if not decision.allowed_now
+            ),
+            None,
+        )
         if pending:
-            _, decision = pending
+            _, decision, _ = pending
+            requires_reauth = any(item.requires_reauth for item in assessments.values())
             action_id = f"cfm_{uuid4().hex}"
             created = datetime.now(UTC)
             expires = created + timedelta(seconds=self.confirmation_ttl_seconds)
@@ -211,7 +315,7 @@ class DagScheduler:
                     ),
                     "plan_json": json.dumps(plan_payload, ensure_ascii=False),
                     "risk_level": risk_level.value,
-                    "requires_reauth": int(decision.requires_reauth),
+                    "requires_reauth": int(requires_reauth),
                     "status": "pending",
                     "created_at": created.isoformat(timespec="seconds"),
                     "expires_at": expires.isoformat(timespec="seconds"),
@@ -227,6 +331,7 @@ class DagScheduler:
                 result={
                     "reason": decision.reason,
                     "plan_hash": compiled.plan_hash,
+                    "risk": risk,
                 },
                 confirmation_state="pending",
                 risk_level=risk_level.value,
@@ -235,12 +340,13 @@ class DagScheduler:
                 "status": ExecutionStatus.AWAITING_CONFIRMATION.value,
                 "run_id": run_id,
                 "risk_level": risk_level.value,
+                "risk": risk,
                 "reason": decision.reason,
                 "plan": plan_payload,
                 "audit_id": audit_entry["id"],
                 "confirmation": {
                     "id": action_id,
-                    "requires_reauth": decision.requires_reauth,
+                    "requires_reauth": requires_reauth,
                     "expires_at": expires.isoformat(timespec="seconds"),
                 },
             }
@@ -256,6 +362,7 @@ class DagScheduler:
             "status": ExecutionStatus.COMPLETED.value,
             "run_id": run_id,
             "risk_level": risk_level.value,
+            "risk": risk,
             "reason": "全部节点通过权限网关。",
             "plan": plan_payload,
             "results": results,
@@ -307,17 +414,22 @@ class DagScheduler:
                 "audit_id": audit_entry["id"],
             }
 
-        if pending["requires_reauth"] and reauth_token != self.demo_otp:
+        assessments = self._assess_nodes(nodes, user_id, pending["instruction"])
+        plan_payload = self._decorate_plan(plan_payload, assessments)
+        current_risk = self._max_assessed_risk(assessments)
+        requires_reauth = any(item.requires_reauth for item in assessments.values())
+        if requires_reauth and reauth_token != self.demo_otp:
             raise ReauthError("二次身份校验失败，请检查演示验证码。")
 
-        # Re-check permissions immediately before execution. A grant may have been
-        # revoked while the confirmation request was waiting for the user.
+        # Re-check permissions and dynamic risk immediately before execution.
+        # Permissions and daily cumulative amounts may have changed while pending.
         for node in nodes:
             tool = self.registry.get(node.tool_name)
+            assessment = assessments[node.id]
             decision = self.gateway.evaluate(
                 user_id=user_id,
                 tool_name=tool.metadata.name,
-                risk_level=tool.metadata.risk_level,
+                risk_level=assessment.level,
                 permission=tool.metadata.permission,
                 instruction=pending["instruction"],
                 arguments=node.arguments,
@@ -331,14 +443,14 @@ class DagScheduler:
                     dag_path=dag_path,
                     tool_name=node.tool_name,
                     arguments=node.arguments,
-                    result={"reason": decision.reason},
+                    result={"reason": decision.reason, "risk": assessment.as_dict()},
                     confirmation_state="blocked",
-                    risk_level=tool.metadata.risk_level.value,
+                    risk_level=assessment.level.value,
                 )
                 return {
                     "status": ExecutionStatus.BLOCKED.value,
                     "run_id": action_id,
-                    "risk_level": tool.metadata.risk_level.value,
+                    "risk_level": assessment.level.value,
                     "reason": f"确认后复检未通过：{decision.reason}",
                     "plan": plan_payload,
                     "audit_id": audit_entry["id"],
@@ -367,7 +479,16 @@ class DagScheduler:
         return {
             "status": ExecutionStatus.COMPLETED.value,
             "run_id": action_id,
-            "risk_level": pending["risk_level"],
+            "risk_level": current_risk.value,
+            "risk": {
+                "level": current_risk.value,
+                "reasons": [
+                    reason
+                    for assessment in assessments.values()
+                    for reason in assessment.reasons
+                ],
+                "requires_reauth": requires_reauth,
+            },
             "reason": "确认通过，任务已执行。",
             "plan": plan_payload,
             "results": results,
@@ -384,6 +505,7 @@ class DagScheduler:
     ) -> list[dict[str, Any]]:
         dag_path = self._dag_path(nodes)
         results: list[dict[str, Any]] = []
+        results_by_id: dict[str, dict[str, Any]] = {}
         for node in nodes:
             tool = self.registry.get(node.tool_name)
             context = ExecutionContext(
@@ -393,8 +515,8 @@ class DagScheduler:
                 dag_path=dag_path,
             )
             try:
-                result = tool.execute(node.arguments, context).as_dict()
-            except Exception as exc:  # noqa: BLE001 - tool errors become audited failures
+                resolved_args = self._resolve_arguments(node.arguments, results_by_id)
+            except Exception as exc:  # noqa: BLE001
                 self.audit.record(
                     event="tool_failed",
                     user_id=user_id,
@@ -407,16 +529,40 @@ class DagScheduler:
                     risk_level=tool.metadata.risk_level.value,
                 )
                 raise
+            assessment = self.risk_engine.assess(
+                user_id=user_id,
+                tool_name=tool.metadata.name,
+                arguments=resolved_args,
+                base_risk=tool.metadata.risk_level,
+                instruction=instruction,
+            )
+            try:
+                result = tool.execute(resolved_args, context).as_dict()
+            except Exception as exc:  # noqa: BLE001 - tool errors become audited failures
+                self.audit.record(
+                    event="tool_failed",
+                    user_id=user_id,
+                    instruction=instruction,
+                    dag_path=dag_path,
+                    tool_name=node.tool_name,
+                    arguments=resolved_args,
+                    result={"error": str(exc), "risk": assessment.as_dict()},
+                    confirmation_state=confirmation_state,
+                    risk_level=assessment.level.value,
+                )
+                raise
+            result["risk"] = assessment.as_dict()
             self.audit.record(
                 event="tool_executed",
                 user_id=user_id,
                 instruction=instruction,
                 dag_path=dag_path,
                 tool_name=node.tool_name,
-                arguments=node.arguments,
+                arguments=resolved_args,
                 result=result,
                 confirmation_state=confirmation_state,
-                risk_level=tool.metadata.risk_level.value,
+                risk_level=assessment.level.value,
             )
+            results_by_id[node.id] = result
             results.append(result)
         return results

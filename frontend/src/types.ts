@@ -23,6 +23,54 @@ export interface Confirmation {
   expires_at: string;
 }
 
+export interface RiskAssessment {
+  level: RiskLevel;
+  score: number;
+  reasons: string[];
+  base_risk: RiskLevel;
+  requires_reauth: boolean;
+}
+
+export interface AccountInfo {
+  account_id: string;
+  name: string;
+  kind: string;
+  currency: string;
+  balance_cny: number;
+  available_cny: number;
+}
+
+export interface CardInfo {
+  card_id: string;
+  account_id: string;
+  masked_number: string;
+  status: string;
+  credit_limit_cny: number;
+  available_limit_cny: number;
+  repayment_day: number;
+  transaction_limit_cny: number;
+}
+
+export interface SubscriptionInfo {
+  subscription_id: string;
+  merchant: string;
+  amount_cny: number;
+  cycle: string;
+  next_charge_date: string;
+  status: string;
+  risk_flag?: string | null;
+}
+
+export interface BankingOverview {
+  accounts: AccountInfo[];
+  cards: CardInfo[];
+  subscriptions: SubscriptionInfo[];
+  monthly_spend_cny: number;
+  daily_transfer_total_cny: number;
+  suspicious_subscription_id: string | null;
+  suspicious_reason: string | null;
+}
+
 export interface PlanStep {
   id: string;
   tool_name: string;
@@ -31,6 +79,9 @@ export interface PlanStep {
   description?: string | null;
   title?: string;
   risk_level?: RiskLevel;
+  risk_reasons?: string[];
+  risk_score?: number;
+  requires_reauth?: boolean;
   permission?: string;
 }
 
@@ -57,6 +108,7 @@ export interface RunResponse {
   run_id: string;
   risk_level: RiskLevel;
   reason: string;
+  risk?: RiskAssessment;
   plan?: ExecutionPlan;
   confirmation?: Confirmation;
   results?: ToolResult[];

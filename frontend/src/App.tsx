@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   fetchAudit,
+  fetchBankingOverview,
   fetchTools,
   resolveConfirmation,
   runAgent,
@@ -8,29 +9,85 @@ import {
   verifyAudit,
 } from './api';
 import { formatCny, isHighRisk, riskLabels } from './risk';
-import type { AuditEntry, RiskLevel, RunResponse, ToolMetadata } from './types';
+import type { AuditEntry, BankingOverview, RiskLevel, RunResponse, ToolMetadata } from './types';
 
-type Page = 'console' | 'permissions' | 'audit';
+type Page = 'console' | 'bank' | 'permissions' | 'audit';
 
-const quickActions: Record<string, { instruction: string; arguments: Record<string, unknown> }> = {
-  query_bill: {
-    instruction: '查询我的本月账单',
+interface ScenarioAction {
+  key: string;
+  tool: string;
+  label: string;
+  instruction: string;
+  arguments?: Record<string, unknown>;
+}
+
+const scenarioActions: ScenarioAction[] = [
+  {
+    key: 'bill-analysis',
+    tool: 'query_bill',
+    label: '分析账单',
+    instruction: '分析我的本月账单',
     arguments: { account_id: 'ACC-1001', period: 'current_month' },
   },
-  adjust_repayment_date: {
-    instruction: '把还款日调整到每月 18 日',
-    arguments: { card_id: 'CARD-8821', new_day: 18 },
-  },
-  transfer: {
+  {
+    key: 'transfer-small',
+    tool: 'transfer',
+    label: '小额转账 880',
     instruction: '向 ACC-2002 转账 880 元',
     arguments: {
       from_account: 'ACC-1001',
       to_account: 'ACC-2002',
       amount_cny: 880,
-      note: 'Console quick action',
+      note: 'Console 小额转账',
     },
   },
-};
+  {
+    key: 'transfer-large',
+    tool: 'transfer',
+    label: '大额转账 1200',
+    instruction: '向 ACC-2002 转账 1200 元',
+    arguments: {
+      from_account: 'ACC-1001',
+      to_account: 'ACC-2002',
+      amount_cny: 1200,
+      note: 'Console 大额转账',
+    },
+  },
+  {
+    key: 'bill-cleanup',
+    tool: 'query_bill',
+    label: '分析并取消异常订阅',
+    instruction: '分析我的账单并取消异常订阅',
+  },
+  {
+    key: 'repayment-day',
+    tool: 'adjust_repayment_date',
+    label: '调整还款日',
+    instruction: '把还款日调整到每月 18 日',
+    arguments: { card_id: 'CARD-8821', new_day: 18 },
+  },
+  {
+    key: 'card-limit',
+    tool: 'adjust_card_limit',
+    label: '调整额度 8000',
+    instruction: '把信用卡额度调整到 8000 元',
+    arguments: { card_id: 'CARD-8821', new_limit_cny: 8000 },
+  },
+  {
+    key: 'card-transaction-limit',
+    tool: 'set_transaction_limit',
+    label: '设置交易限额',
+    instruction: '把 CARD-8821 的单日交易限额设置为 3000 元',
+    arguments: { card_id: 'CARD-8821', daily_limit_cny: 3000 },
+  },
+  {
+    key: 'card-lost',
+    tool: 'report_card_lost',
+    label: '卡片挂失',
+    instruction: '挂失卡片 CARD-9902',
+    arguments: { card_id: 'CARD-9902' },
+  },
+];
 
 function riskBadge(risk: RiskLevel) {
   return <span className={`risk-badge risk-${risk}`}>{risk.toUpperCase()}</span>;
@@ -52,6 +109,7 @@ function eventLabel(event: string): string {
 function App() {
   const [page, setPage] = useState<Page>('console');
   const [tools, setTools] = useState<ToolMetadata[]>([]);
+  const [banking, setBanking] = useState<BankingOverview | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditValid, setAuditValid] = useState<boolean | null>(null);
   const [instruction, setInstruction] = useState('查询我的本月账单');
@@ -66,12 +124,14 @@ function App() {
 
   async function refresh() {
     try {
-      const [nextTools, nextAudit, chain] = await Promise.all([
+      const [nextTools, nextAudit, chain, nextBanking] = await Promise.all([
         fetchTools(),
         fetchAudit(),
         verifyAudit(),
+        fetchBankingOverview(),
       ]);
       setTools(nextTools);
+      setBanking(nextBanking);
       setAudit(nextAudit.entries);
       setAuditValid(chain.valid);
     } catch (err) {
@@ -111,11 +171,15 @@ function App() {
     void execute({ instruction: instruction.trim() });
   }
 
-  function triggerQuick(tool: ToolMetadata) {
-    const action = quickActions[tool.name];
-    if (!action) return;
+  function triggerScenario(action: ScenarioAction) {
+    const tool = tools.find((item) => item.name === action.tool);
+    if (!tool?.granted) return;
     setInstruction(action.instruction);
-    void execute({ instruction: action.instruction, tool_name: tool.name, arguments: action.arguments });
+    void execute({
+      instruction: action.instruction,
+      tool_name: action.tool,
+      arguments: action.arguments ?? {},
+    });
   }
 
   async function decision(approved: boolean) {
@@ -176,15 +240,19 @@ function App() {
               <span className="nav-index">01</span>
               任务控制台
             </button>
+            <button className={page === 'bank' ? 'active' : ''} onClick={() => setPage('bank')}>
+              <span className="nav-index">02</span>
+              银行概览
+            </button>
             <button
               className={page === 'permissions' ? 'active' : ''}
               onClick={() => setPage('permissions')}
             >
-              <span className="nav-index">02</span>
+              <span className="nav-index">03</span>
               权限控制台
             </button>
             <button className={page === 'audit' ? 'active' : ''} onClick={() => setPage('audit')}>
-              <span className="nav-index">03</span>
+              <span className="nav-index">04</span>
               操作审计
             </button>
           </nav>
@@ -272,19 +340,22 @@ function App() {
                 </form>
 
                 <div className="quick-actions">
-                  {tools.map((tool) => (
-                    <button
-                      key={tool.name}
-                      className="tool-chip"
-                      onClick={() => triggerQuick(tool)}
-                      disabled={busy || !tool.granted}
-                      title={tool.granted ? tool.description : '该工具权限已撤回'}
-                    >
-                      {riskBadge(tool.risk_level)}
-                      <span>{tool.title}</span>
-                      <small>{tool.permission}</small>
-                    </button>
-                  ))}
+                  {scenarioActions.map((action) => {
+                    const tool = tools.find((item) => item.name === action.tool);
+                    return (
+                      <button
+                        key={action.key}
+                        className="tool-chip"
+                        onClick={() => triggerScenario(action)}
+                        disabled={busy || !tool?.granted}
+                        title={tool?.granted ? tool.description : '该工具权限已撤回'}
+                      >
+                        {riskBadge(tool?.risk_level ?? 'green')}
+                        <span>{action.label}</span>
+                        <small>{action.tool}</small>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -304,6 +375,14 @@ function App() {
                     </div>
                   </div>
                   <p className="result-reason">{lastRun.reason}</p>
+                  {lastRun.risk?.reasons?.length ? (
+                    <div className="risk-reasons">
+                      <span className="eyebrow">DYNAMIC RISK</span>
+                      {lastRun.risk.reasons.map((reason) => (
+                        <span key={reason}>{reason}</span>
+                      ))}
+                    </div>
+                  ) : null}
                   {lastRun.plan && (
                     <div className="plan-block">
                       <div className="plan-meta">
@@ -334,6 +413,13 @@ function App() {
                                 )}
                               </div>
                               <pre>{JSON.stringify(step.arguments, null, 2)}</pre>
+                              {step.risk_reasons?.length ? (
+                                <div className="step-risk-reasons">
+                                  {step.risk_reasons.map((reason) => (
+                                    <span key={reason}>{reason}</span>
+                                  ))}
+                                </div>
+                              ) : null}
                             </li>
                           ))}
                         </ol>
@@ -386,6 +472,116 @@ function App() {
                   <li><span>04</span><strong>签名审计</strong><small>哈希链留痕</small></li>
                 </ol>
               </div>
+            </section>
+          )}
+
+          {page === 'bank' && (
+            <section className="page-stack">
+              <div className="page-heading">
+                <span className="eyebrow">DETERMINISTIC MOCK BANK CORE</span>
+                <h1>银行概览</h1>
+                <p>
+                  账户、卡片、交易和订阅都来自后端银行仓储。Agent 只能用这些事实，
+                  不能编造余额或扣费记录。
+                </p>
+              </div>
+              {!banking ? (
+                <div className="empty-state card">正在读取银行演示数据…</div>
+              ) : (
+                <>
+                  <div className="metrics-row">
+                    <div className="metric card">
+                      <span>本月支出</span>
+                      <strong>{formatCny(banking.monthly_spend_cny)}</strong>
+                      <small>来自 posted 交易</small>
+                    </div>
+                    <div className="metric card">
+                      <span>今日累计转账</span>
+                      <strong>{formatCny(banking.daily_transfer_total_cny)}</strong>
+                      <small>超过 1000 元升级红色</small>
+                    </div>
+                    <div className="metric card">
+                      <span>账户 / 卡片</span>
+                      <strong>{banking.accounts.length} / {banking.cards.length}</strong>
+                      <small>确定性 Mock Bank Core</small>
+                    </div>
+                  </div>
+
+                  <div className="card table-card">
+                    <div className="section-head" style={{ padding: '20px 20px 0' }}>
+                      <div>
+                        <span className="eyebrow">ACCOUNTS</span>
+                        <h2>账户与余额</h2>
+                      </div>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr><th>账户</th><th>类型</th><th>余额</th><th>可用余额</th></tr>
+                      </thead>
+                      <tbody>
+                        {banking.accounts.map((account) => (
+                          <tr key={account.account_id}>
+                            <td><strong>{account.name}</strong><small>{account.account_id}</small></td>
+                            <td>{account.kind}</td>
+                            <td>{formatCny(account.balance_cny)}</td>
+                            <td>{formatCny(account.available_cny)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="bank-grid">
+                    <div className="card table-card">
+                      <div className="section-head" style={{ padding: '20px 20px 0' }}>
+                        <div><span className="eyebrow">CARDS</span><h2>卡片管理</h2></div>
+                      </div>
+                      <table>
+                        <thead>
+                          <tr><th>卡片</th><th>状态</th><th>额度</th><th>还款日</th></tr>
+                        </thead>
+                        <tbody>
+                          {banking.cards.map((card) => (
+                            <tr key={card.card_id}>
+                              <td><strong>{card.masked_number}</strong><small>{card.card_id}</small></td>
+                              <td><span className={card.status === 'active' ? 'grant-on' : 'grant-off'}>{card.status}</span></td>
+                              <td>{formatCny(card.credit_limit_cny)}</td>
+                              <td>{card.repayment_day} 日</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="card table-card">
+                      <div className="section-head" style={{ padding: '20px 20px 0' }}>
+                        <div><span className="eyebrow">SUBSCRIPTIONS</span><h2>订阅与异常</h2></div>
+                      </div>
+                      <table>
+                        <thead>
+                          <tr><th>商户</th><th>金额</th><th>状态</th><th>风险</th></tr>
+                        </thead>
+                        <tbody>
+                          {banking.subscriptions.map((subscription) => (
+                            <tr key={subscription.subscription_id}>
+                              <td><strong>{subscription.merchant}</strong><small>{subscription.subscription_id}</small></td>
+                              <td>{formatCny(subscription.amount_cny)}/月</td>
+                              <td>{subscription.status}</td>
+                              <td>{subscription.risk_flag ? <span className="risk-badge risk-red">异常</span> : <span className="grant-on">正常</span>}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {banking.suspicious_subscription_id && (
+                    <div className="alert alert-error">
+                      检测到异常订阅：{banking.suspicious_subscription_id}。{banking.suspicious_reason}
+                    </div>
+                  )}
+                </>
+              )}
             </section>
           )}
 

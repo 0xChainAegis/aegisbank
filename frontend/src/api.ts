@@ -1,4 +1,4 @@
-import type { AuditResponse, RunResponse, ToolMetadata } from './types';
+import type { AuditResponse, BankingOverview, RunResponse, ToolMetadata } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -68,4 +68,9 @@ export async function fetchAudit(limit = 50): Promise<AuditResponse> {
 
 export async function verifyAudit(): Promise<{ valid: boolean; checked: number }> {
   return request('/audit/verify');
+}
+
+
+export async function fetchBankingOverview(userId = 'demo-user'): Promise<BankingOverview> {
+  return request<BankingOverview>(`/banking/overview?user_id=${encodeURIComponent(userId)}`);
 }

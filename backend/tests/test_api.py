@@ -18,9 +18,20 @@ def test_health_and_tool_catalog(tmp_path):
         tools = client.get("/api/tools")
         assert tools.status_code == 200
         catalog = {item["name"]: item for item in tools.json()["tools"]}
-        assert set(catalog) == {"query_bill", "adjust_repayment_date", "transfer"}
+        assert set(catalog) == {
+            "query_bill",
+            "transfer",
+            "adjust_repayment_date",
+            "adjust_card_limit",
+            "set_transaction_limit",
+            "report_card_lost",
+            "unlock_card",
+            "list_subscriptions",
+            "cancel_subscription",
+        }
         assert catalog["query_bill"]["risk_level"] == "green"
-        assert catalog["transfer"]["risk_level"] == "red"
+        assert catalog["transfer"]["risk_level"] == "yellow"
+        assert catalog["report_card_lost"]["risk_level"] == "red"
         assert all(item["granted"] for item in catalog.values())
 
 
@@ -78,12 +89,12 @@ def test_red_tool_requires_reauth_and_rejects_wrong_otp(tmp_path):
         response = client.post(
             "/api/agent/run",
             json={
-                "instruction": "向 ACC-2002 转账 880 元",
+                "instruction": "向 ACC-2002 转账 1200 元",
                 "tool_name": "transfer",
                 "arguments": {
                     "from_account": "ACC-1001",
                     "to_account": "ACC-2002",
-                    "amount_cny": 880,
+                    "amount_cny": 1200,
                 },
             },
         )
@@ -105,7 +116,7 @@ def test_red_tool_requires_reauth_and_rejects_wrong_otp(tmp_path):
         )
         assert good.status_code == 200, good.text
         assert good.json()["status"] == "completed"
-        assert good.json()["results"][0]["data"]["amount_cny"] == 880
+        assert good.json()["results"][0]["data"]["amount_cny"] == 1200
 
 
 def test_revoked_permission_blocks_tool(tmp_path):
@@ -146,12 +157,12 @@ def test_permission_revoked_while_pending_blocks_execution(tmp_path):
         response = client.post(
             "/api/agent/run",
             json={
-                "instruction": "向 ACC-2002 转账 880 元",
+                "instruction": "向 ACC-2002 转账 1200 元",
                 "tool_name": "transfer",
                 "arguments": {
                     "from_account": "ACC-1001",
                     "to_account": "ACC-2002",
-                    "amount_cny": 880,
+                    "amount_cny": 1200,
                 },
             },
         )
@@ -187,3 +198,117 @@ def test_agent_run_returns_structured_plan_and_clarification(tmp_path):
         assert vague.status_code == 200, vague.text
         assert vague.json()["status"] == "needs_clarification"
         assert vague.json()["plan"]["needs_clarification"] is True
+
+
+def test_small_transfer_is_yellow_and_daily_total_escalates_to_red(tmp_path):
+    with make_client(tmp_path) as client:
+        first = client.post(
+            "/api/agent/run",
+            json={
+                "instruction": "向 ACC-2002 转账 600 元",
+                "tool_name": "transfer",
+                "arguments": {
+                    "from_account": "ACC-1001",
+                    "to_account": "ACC-2002",
+                    "amount_cny": 600,
+                },
+            },
+        ).json()
+        assert first["status"] == "awaiting_confirmation"
+        assert first["risk_level"] == "yellow"
+        assert first["confirmation"]["requires_reauth"] is False
+        confirmed = client.post(
+            f"/api/confirmations/{first['confirmation']['id']}",
+            json={"approved": True},
+        )
+        assert confirmed.status_code == 200
+        assert confirmed.json()["results"][0]["data"]["daily_transfer_total_cny"] == 600.0
+
+        second = client.post(
+            "/api/agent/run",
+            json={
+                "instruction": "再向 ACC-2002 转账 500 元",
+                "tool_name": "transfer",
+                "arguments": {
+                    "from_account": "ACC-1001",
+                    "to_account": "ACC-2002",
+                    "amount_cny": 500,
+                },
+            },
+        ).json()
+        assert second["status"] == "awaiting_confirmation"
+        assert second["risk_level"] == "red"
+        assert second["confirmation"]["requires_reauth"] is True
+        assert any("1000" in reason for reason in second["risk"]["reasons"])
+
+
+def test_banking_overview_and_bill_analysis_expose_real_demo_facts(tmp_path):
+    with make_client(tmp_path) as client:
+        overview = client.get("/api/banking/overview")
+        assert overview.status_code == 200
+        body = overview.json()
+        assert body["accounts"][0]["account_id"] == "ACC-1001"
+        assert body["cards"][0]["card_id"] == "CARD-8821"
+        assert body["suspicious_subscription_id"] == "SUB-3002"
+        assert body["monthly_spend_cny"] > 0
+
+        bill = client.post(
+            "/api/agent/run",
+            json={"instruction": "分析我的本月账单", "arguments": {"account_id": "ACC-1001"}},
+        ).json()
+        assert bill["status"] == "completed"
+        data = bill["results"][0]["data"]
+        assert data["total_spend_cny"] > 0
+        assert data["categories"]
+        assert data["suspicious_subscription_id"] == "SUB-3002"
+
+
+def test_bill_analysis_to_subscription_cancel_is_a_real_dag(tmp_path):
+    with make_client(tmp_path) as client:
+        response = client.post(
+            "/api/agent/run",
+            json={"instruction": "分析我的账单并取消异常订阅"},
+        ).json()
+        assert response["status"] == "awaiting_confirmation"
+        assert response["risk_level"] == "yellow"
+        assert [step["tool_name"] for step in response["plan"]["steps"]] == [
+            "query_bill",
+            "cancel_subscription",
+        ]
+        assert response["plan"]["steps"][1]["depends_on"] == ["step-1"]
+
+        confirmed = client.post(
+            f"/api/confirmations/{response['confirmation']['id']}",
+            json={"approved": True},
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        body = confirmed.json()
+        assert body["status"] == "completed"
+        assert body["results"][0]["data"]["suspicious_subscription_id"] == "SUB-3002"
+        assert body["results"][1]["data"]["subscription_id"] == "SUB-3002"
+        assert body["results"][1]["data"]["status"] == "cancelled"
+
+        subscriptions = client.get("/api/banking/overview").json()["subscriptions"]
+        cancelled = next(item for item in subscriptions if item["subscription_id"] == "SUB-3002")
+        assert cancelled["status"] == "cancelled"
+
+
+def test_card_limit_change_escalates_to_red_and_updates_card(tmp_path):
+    with make_client(tmp_path) as client:
+        response = client.post(
+            "/api/agent/run",
+            json={"instruction": "把信用卡额度调整到 8000 元"},
+        ).json()
+        assert response["status"] == "awaiting_confirmation"
+        assert response["risk_level"] == "red"
+        assert response["confirmation"]["requires_reauth"] is True
+        assert any("5000" in reason for reason in response["risk"]["reasons"])
+
+        confirmed = client.post(
+            f"/api/confirmations/{response['confirmation']['id']}",
+            json={"approved": True, "reauth_token": "246810"},
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        cards = client.get("/api/banking/overview").json()["cards"]
+        card = next(item for item in cards if item["card_id"] == "CARD-8821")
+        assert card["credit_limit_cny"] == 8000.0
