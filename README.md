@@ -306,6 +306,18 @@ bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 6. 在权限控制台撤回某工具权限，再次执行应被网关阻断；
 7. 在操作审计页校验 SHA-256 哈希链。
 
+## 路线图
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| 0 | 产品边界与仓库定型 | 已完成 |
+| 1 | 吸收 AegisAgent 的信任工程 | 下一步 |
+| 2 | 比赛硬要求：回退、熔断、沙箱、MFA、IM | 计划中 |
+| 2.5 | 人工用户体验（开发者 Dogfooding） | 新增阶段 |
+| 3 | PPT、视频、安全自评和最终交付 | 计划中 |
+
+阶段 2.5 要求开发者在做比赛材料前，以真实用户路径连续完成三个场景、确认/MFA、撤权和审计，并形成可回归的 UX 记录。详见 [产品路线图](docs/ROADMAP.md) 和 [Dogfooding 清单](docs/UX-DOGFOODING.md)。
+
 ## 目录结构
 
 ```text
@@ -346,7 +358,9 @@ aegisbank/
 - [安全边界与生产化清单](docs/SECURITY.md)
 - [开发工具与技术栈](docs/TECH-STACK.md)
 - [开发环境与验收记录](docs/DEVELOPMENT-ENVIRONMENT.md)
-- [上游项目对齐说明](docs/UPSTREAM-ALIGNMENT.md)
+- [产品路线图](docs/ROADMAP.md)
+- [人工用户体验（Dogfooding）](docs/UX-DOGFOODING.md)
+- [上游设计参考说明](docs/UPSTREAM-NOTES.md)
 - [单文件产品介绍页](docs/product-overview.html)
 - [产品介绍页渲染图](docs/screenshots/product-overview.png)
 - [真实截图目录](docs/screenshots/README.md)
