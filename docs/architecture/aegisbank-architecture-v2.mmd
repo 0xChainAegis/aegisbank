@@ -1,0 +1,48 @@
+flowchart TB
+  subgraph UX["用户入口"]
+    UI["React 控制台<br/>银行概览 / 六场景 / 任务 / 权限 / 2A 能力 / 运维 / 审计"]
+    IM["IM / CLI / Webhook 渠道适配器"]
+  end
+
+  subgraph PLAN["意图与计划层"]
+    P["Planner<br/>rule / llm / auto（只生成计划）"]
+    C["Plan Compiler<br/>Schema / DAG / plan_hash"]
+  end
+
+  subgraph TRUST["信任与编排层"]
+    R["动态风险引擎<br/>绿 / 黄 / 红（只升不降）"]
+    G["统一权限网关<br/>注入拦截 / 角色能力 / 最小权限 / 分级"]
+    E["ActionEnvelope 绑定<br/>plan_hash + arguments_hash + nonce + 过期"]
+    S["DAG 调度器<br/>暂停 / 确认 / 状态机 / 幂等 / 补偿回滚 / 熔断"]
+  end
+
+  subgraph EXEC["执行层"]
+    X["ToolExecutor + ExecutionGuard<br/>沙箱：超时 / 网络阻断 / 体积 / 白名单"]
+    T["Mock Bank Core 工具<br/>核心 9 + 场景 25 + 2A 扩展 14"]
+  end
+
+  subgraph SCEN["六场景能力"]
+    S1["账单分析"]
+    S2["卡片管理"]
+    S3["智能转账"]
+    S4["订阅代扣"]
+    S5["理财操作"]
+    S6["跨场景联动 / 定时触发"]
+  end
+
+  subgraph AUDIT["审计与证据"]
+    A["审计服务<br/>SHA-256 哈希链 + 证据分层"]
+    DB[("SQLite<br/>Mock Bank Core / 信任表 / 审计链")]
+  end
+
+  UI --> P
+  IM --> P
+  P --> C --> R --> G --> E --> S
+  S --> X --> T
+  T --> SCEN
+  S --> A
+  T --> DB
+  A --> DB
+  S --> DB
+  R --> DB
+  G --> DB

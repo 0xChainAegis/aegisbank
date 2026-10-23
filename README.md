@@ -517,9 +517,9 @@ bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 | 2A | 比赛硬要求（回退补偿、可疑行为熔断、沙箱、MFA Provider、IM、多角色） | ✅ 已完成 |
 | 2B | 六场景完整覆盖 | ✅ 已完成（6/6） |
 | 2.5 | 人工用户体验（开发者 Dogfooding） | 计划中 |
-| 3 | PPT、视频、安全自评和最终交付 | 计划中 |
+| 3 | PPT、视频、安全自评和最终交付 | 材料已产出（`deliverables/`）；视频待录制、截图待 2.5 |
 
-阶段 2A 的六项产物与证据见 [产品路线图](docs/ROADMAP.md)；当前验证基线与生产化剩余项见 [总规划](docs/MASTER-PLAN.md) §4/§7。下一步为阶段 2.5（Dogfooding）与阶段 3（比赛材料）。
+阶段 2A 的六项产物与证据见 [产品路线图](docs/ROADMAP.md)；当前验证基线与生产化剩余项见 [总规划](docs/MASTER-PLAN.md) §4/§7。阶段 3 交付材料已产出到 [`deliverables/`](deliverables/README.md)（视频待人工录制）；阶段 2.5 人工体验推迟，后续重新进行。
 
 ## 目录结构
 
@@ -542,9 +542,9 @@ aegisbank/
 │  │  ├─ audit.py          # 证据分层 + SHA-256 审计哈希链
 │  │  ├─ db.py             # SQLite 表与事务（信任层持久化）
 │  │  └─ main.py           # FastAPI 入口与 API 路由
-│  └─ tests/               # API、Planner、信任层、六场景与 2A 测试（14 个文件）
+│  └─ tests/               # API、Planner、信任层、六场景与 2A 测试（15 个文件，144 条）
 ├─ frontend/
-│  └─ src/                 # React 控制台（5 页）、API 客户端、风险展示与测试
+│  └─ src/                 # React 控制台（7 页）、API 客户端、风险展示与测试
 ├─ docs/
 │  ├─ screenshots/         # 真实运行截图
 │  ├─ architecture/        # 架构图 PNG / SVG / Mermaid
@@ -554,7 +554,8 @@ aegisbank/
 │  ├─ BANKING-DOMAIN.md    # 数据模型、48 个工具、补偿矩阵与六场景闭环
 │  ├─ SECURITY.md          # 安全边界与信任层实现
 │  └─ TECH-STACK.md        # 开发工具与技术栈
-├─ scripts/                # bootstrap / dev / lint / build / test / smoke
+├─ deliverables/           # 阶段 3 参赛交付包（简介/技术文档/PPT/视频脚本/安全自评/部署/测试）
+├─ scripts/                # bootstrap / dev / lint / build / test / smoke / scenario-check
 ├─ LICENSE                 # MIT License
 ├─ CONTRIBUTING.md         # 贡献指南
 └─ README.md
@@ -563,9 +564,11 @@ aegisbank/
 ## 文档索引
 
 - [项目总规划（Master Plan）](docs/MASTER-PLAN.md)
+- [阶段 3 参赛交付包（简介/技术文档/PPT/视频脚本/安全自评/部署/测试复现）](deliverables/README.md)
 - [银行领域模型与六场景闭环](docs/BANKING-DOMAIN.md)
 - [架构说明（含信任层与场景扩展契约）](docs/ARCHITECTURE.md)
-- [完整架构图](docs/architecture/aegisbank-architecture.png)
+- [完整架构图（PNG）](docs/architecture/aegisbank-architecture.png)
+- [当前架构图（Mermaid 源文件）](docs/architecture/aegisbank-architecture-v2.mmd)
 - [安全边界、信任层实现与生产化清单](docs/SECURITY.md)
 - [开发工具与技术栈](docs/TECH-STACK.md)
 - [开发环境与验收记录](docs/DEVELOPMENT-ENVIRONMENT.md)
