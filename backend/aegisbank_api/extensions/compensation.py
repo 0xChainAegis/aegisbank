@@ -50,6 +50,14 @@ CREATE TABLE IF NOT EXISTS compensation_demo_ledger (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS compensation_reversals (
+    original_kind TEXT NOT NULL,
+    original_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    reversal_id TEXT NOT NULL,
+    PRIMARY KEY (original_kind, original_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_compensation_demo_ledger_action
     ON compensation_demo_ledger(action_id, created_at);
 """
@@ -67,6 +75,19 @@ def _iso_now() -> str:
 def _result_data(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload.get("data") if isinstance(payload, dict) else None
     return data if isinstance(data, dict) else {}
+
+
+def _reserve_reversal(conn, *, kind: str, original_id: str, user_id: str, reversal_id: str):
+    if conn.execute(
+        "SELECT 1 FROM compensation_reversals WHERE original_kind=? AND original_id=?",
+        (kind, original_id),
+    ).fetchone():
+        raise ValueError("原交易已冲正，禁止再次返款。")
+    conn.execute(
+        "INSERT INTO compensation_reversals (original_kind,original_id,user_id,reversal_id) "
+        "VALUES (?,?,?,?)",
+        (kind, original_id, user_id, reversal_id),
+    )
 
 
 class ReverseArgs(BaseModel):
@@ -307,20 +328,53 @@ class ReverseTransferTool(BaseTool):
         now = _iso_now()
         reversal_id = f"RV-{uuid4().hex[:12].upper()}"
         with self.services.db.transaction() as conn:
+            original_id = str(data.get("transaction_id") or "")
+            transaction = conn.execute(
+                "SELECT * FROM bank_transactions WHERE transaction_id=? AND user_id=?",
+                (original_id, context.user_id),
+            ).fetchone()
+            if (
+                transaction is None
+                or transaction["category"] != "transfer"
+                or transaction["account_id"] != from_account
+                or transaction["merchant"] != to_account
+                or int(transaction["amount_cents"]) != -amount_cents
+            ):
+                raise ValueError("冲正失败：原交易证据与账本不一致。")
+            _reserve_reversal(
+                conn,
+                kind="transfer",
+                original_id=original_id,
+                user_id=context.user_id,
+                reversal_id=reversal_id,
+            )
+            target = conn.execute(
+                "SELECT 1 FROM bank_accounts WHERE user_id=? AND account_id=?",
+                (context.user_id, to_account),
+            ).fetchone()
+            if target is not None:
+                debited = conn.execute(
+                    "UPDATE bank_accounts SET balance_cents=balance_cents-?, "
+                    "available_cents=available_cents-? WHERE user_id=? AND account_id=? "
+                    "AND balance_cents>=? AND available_cents>=?",
+                    (
+                        amount_cents,
+                        amount_cents,
+                        context.user_id,
+                        to_account,
+                        amount_cents,
+                        amount_cents,
+                    ),
+                ).rowcount
+                if debited != 1:
+                    raise ValueError("收款账户资金已被使用或锁定，不能自动冲正，需人工对账。")
             credited = conn.execute(
                 "UPDATE bank_accounts SET balance_cents = balance_cents + ?, "
                 "available_cents = available_cents + ? WHERE user_id = ? AND account_id = ?",
                 (amount_cents, amount_cents, context.user_id, from_account),
             ).rowcount
             if not credited:
-                raise ValueError(
-                    f"冲正失败：付款账户不存在或不属于当前用户：{from_account}"
-                )
-            conn.execute(
-                "UPDATE bank_accounts SET balance_cents = balance_cents - ?, "
-                "available_cents = available_cents - ? WHERE user_id = ? AND account_id = ?",
-                (amount_cents, amount_cents, context.user_id, to_account),
-            )
+                raise ValueError(f"冲正失败：付款账户不存在或不属于当前用户：{from_account}")
             conn.execute(
                 """
                 INSERT INTO bank_transactions
@@ -472,15 +526,12 @@ class ReactivateSubscriptionTool(BaseTool):
         args = ReverseArgs.model_validate(arguments)
         data = _result_data(args.original_result)
         original = args.original_arguments or {}
-        subscription_id = str(
-            original.get("subscription_id") or data.get("subscription_id") or ""
-        )
+        subscription_id = str(original.get("subscription_id") or data.get("subscription_id") or "")
         if not subscription_id:
             raise ValueError("恢复订阅失败：缺少订阅编号。")
         with self.services.db.transaction() as conn:
             row = conn.execute(
-                "SELECT status FROM bank_subscriptions WHERE user_id = ? "
-                "AND subscription_id = ?",
+                "SELECT status FROM bank_subscriptions WHERE user_id = ? AND subscription_id = ?",
                 (context.user_id, subscription_id),
             ).fetchone()
             if row is None:
@@ -522,15 +573,12 @@ class CancelVirtualCardApplicationTool(BaseTool):
         args = ReverseArgs.model_validate(arguments)
         data = _result_data(args.original_result)
         original = args.original_arguments or {}
-        application_id = str(
-            original.get("application_id") or data.get("application_id") or ""
-        )
+        application_id = str(original.get("application_id") or data.get("application_id") or "")
         if not application_id:
             raise ValueError("撤销虚拟卡申请失败：缺少申请编号。")
         with self.services.db.transaction() as conn:
             row = conn.execute(
-                "SELECT status FROM card_applications WHERE user_id = ? "
-                "AND application_id = ?",
+                "SELECT status FROM card_applications WHERE user_id = ? AND application_id = ?",
                 (context.user_id, application_id),
             ).fetchone()
             if row is None:
@@ -580,9 +628,7 @@ class RestoreWealthRiskTool(BaseTool):
         previous = data.get("previous_preference")
         with self.services.db.transaction() as conn:
             if previous is None:
-                conn.execute(
-                    "DELETE FROM wealth_profile WHERE user_id = ?", (context.user_id,)
-                )
+                conn.execute("DELETE FROM wealth_profile WHERE user_id = ?", (context.user_id,))
             else:
                 conn.execute(
                     """
@@ -641,20 +687,46 @@ class ReversePurchaseWealthTool(BaseTool):
         now = _iso_now()
         reversal_order = f"WOD-RV-{uuid4().hex[:8].upper()}"
         with self.services.db.transaction() as conn:
+            original_id = str(data.get("order_id") or "")
+            order = conn.execute(
+                "SELECT * FROM wealth_orders WHERE order_id=? AND user_id=?",
+                (original_id, context.user_id),
+            ).fetchone()
+            if (
+                order is None
+                or order["side"] != "purchase"
+                or order["status"] != "completed"
+                or order["product_id"] != product_id
+                or int(order["amount_cents"]) != amount_cents
+                or float(order["shares"]) != shares
+                or amount_cents <= 0
+                or shares <= 0
+            ):
+                raise ValueError("撤销申购失败：原订单证据与账本不一致。")
+            _reserve_reversal(
+                conn,
+                kind="wealth_purchase",
+                original_id=original_id,
+                user_id=context.user_id,
+                reversal_id=reversal_order,
+            )
             holding = conn.execute(
                 "SELECT * FROM wealth_holdings WHERE holding_id = ? AND user_id = ?",
                 (holding_id, context.user_id),
             ).fetchone()
             if holding is None:
                 raise ValueError(f"撤销理财申购失败：持仓不存在：{holding_id}")
-            remaining_shares = round(float(holding["shares"]) - shares, 2)
+            if (
+                holding["status"] != "active"
+                or float(holding["shares"]) < shares
+                or int(holding["principal_cents"]) < amount_cents
+                or int(holding["market_value_cents"]) < amount_cents
+            ):
+                raise ValueError("原持仓已赎回或发生变化，禁止重复返款，请人工对账。")
+            remaining_shares = round(float(holding["shares"]) - shares, 8)
             remaining_principal = int(holding["principal_cents"]) - amount_cents
             remaining_market = int(holding["market_value_cents"]) - amount_cents
-            if (
-                remaining_shares <= 0.01
-                or remaining_principal <= 0
-                or remaining_market <= 0
-            ):
+            if remaining_shares == 0 and remaining_principal == 0 and remaining_market == 0:
                 conn.execute(
                     "UPDATE wealth_holdings SET shares = 0, principal_cents = 0, "
                     "market_value_cents = 0, status = 'closed' WHERE holding_id = ?",
@@ -662,6 +734,8 @@ class ReversePurchaseWealthTool(BaseTool):
                 )
                 holding_status = "closed"
             else:
+                if min(remaining_shares, remaining_principal, remaining_market) <= 0:
+                    raise ValueError("剩余份额与金额不一致，自动撤销已拒绝，请人工对账。")
                 conn.execute(
                     "UPDATE wealth_holdings SET shares = ?, principal_cents = ?, "
                     "market_value_cents = ? WHERE holding_id = ?",
@@ -911,8 +985,7 @@ class _DemoReverseTool(BaseTool):
             raise ValueError("演示补偿失败：缺少原账本条目编号。")
         with self.services.db.transaction() as conn:
             row = conn.execute(
-                "SELECT * FROM compensation_demo_ledger "
-                "WHERE entry_id = ? AND user_id = ?",
+                "SELECT * FROM compensation_demo_ledger WHERE entry_id = ? AND user_id = ?",
                 (entry_id, context.user_id),
             ).fetchone()
             if row is None:
@@ -1118,9 +1191,7 @@ def _coverage(services: CoreServices) -> dict[str, Any]:
         "read_only_tools": sorted(read_only),
         "unregistered_mutating_tools": sorted(missing),
         "fully_covered": not missing,
-        "inverse_tools": sorted(
-            inverse_tools.values(), key=lambda item: str(item["tool_name"])
-        ),
+        "inverse_tools": sorted(inverse_tools.values(), key=lambda item: str(item["tool_name"])),
     }
 
 
@@ -1155,18 +1226,10 @@ def router(services: CoreServices) -> APIRouter:
         return {
             "specs": specs,
             "count": len(specs),
-            "compensable": [
-                str(spec["tool_name"]) for spec in specs if not spec["irreversible"]
-            ],
-            "irreversible": [
-                str(spec["tool_name"]) for spec in specs if spec["irreversible"]
-            ],
+            "compensable": [str(spec["tool_name"]) for spec in specs if not spec["irreversible"]],
+            "irreversible": [str(spec["tool_name"]) for spec in specs if spec["irreversible"]],
             "compensation_tools": sorted(
-                {
-                    str(spec["compensation_tool"])
-                    for spec in specs
-                    if not spec["irreversible"]
-                }
+                {str(spec["compensation_tool"]) for spec in specs if not spec["irreversible"]}
             ),
             "coverage": _coverage(services),
             "demo": {
@@ -1204,9 +1267,7 @@ def router(services: CoreServices) -> APIRouter:
                 detail=f"未知的演示模式：{effective_mode}（可选：{'、'.join(DEMO_MODES)}）",
             )
         effective_pause = (
-            request.pause_after_first
-            if pause_after_first is None
-            else pause_after_first
+            request.pause_after_first if pause_after_first is None else pause_after_first
         )
         effective_user = user_id or request.user_id
         nodes = _demo_nodes(effective_mode, effective_pause)
@@ -1306,4 +1367,3 @@ def router(services: CoreServices) -> APIRouter:
         return response
 
     return api
-

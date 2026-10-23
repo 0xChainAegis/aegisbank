@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from ..banking.models import AccountInfo
 from ..banking.repository import BankingRepository
 from ..db import Database
 from ..domain import ExecutionContext, RiskLevel, ToolMetadata, ToolResult
@@ -22,6 +23,39 @@ from ..registry import BaseTool, ToolRegistry
 class QueryBillArgs(BaseModel):
     account_id: str = Field(default="ACC-1001", min_length=3, max_length=32)
     period: str = Field(default="current_month", max_length=32)
+
+
+class QueryBalanceArgs(BaseModel):
+    account_id: str = Field(default="ACC-1001", min_length=3, max_length=32)
+
+
+class QueryBalanceOutput(AccountInfo):
+    simulated: bool
+
+
+class QueryBalanceTool(BaseTool):
+    metadata = ToolMetadata(
+        name="query_balance",
+        title="查询余额",
+        description="读取指定本人模拟账户的余额与可用余额。",
+        risk_level=RiskLevel.GREEN,
+        permission="account:read",
+        input_schema=QueryBalanceArgs.model_json_schema(),
+        output_schema=QueryBalanceOutput.model_json_schema(),
+    )
+    arguments_model = QueryBalanceArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        args = QueryBalanceArgs.model_validate(arguments)
+        account = self.repository.account(context.user_id, args.account_id)
+        if account is None:
+            raise ValueError("指定账户不存在或不属于当前用户。")
+        return ToolResult(
+            self.metadata.name, "已读取模拟账户余额。", {**account.model_dump(), "simulated": True}
+        )
 
 
 class QueryBillOutput(BaseModel):
@@ -61,8 +95,8 @@ class QueryBillTool(BaseTool):
 
 class TransferArgs(BaseModel):
     from_account: str = Field(default="ACC-1001", min_length=3, max_length=32)
-    to_account: str = Field(default="ACC-2002", min_length=3, max_length=32)
-    amount_cny: float = Field(default=880.0, gt=0, le=50_000)
+    to_account: str = Field(min_length=3, max_length=32)
+    amount_cny: float = Field(gt=0, le=50_000)
     note: str = Field(default="AegisBank 演示转账", max_length=120)
 
 
@@ -105,7 +139,7 @@ class TransferTool(BaseTool):
 
 class AdjustRepaymentDateArgs(BaseModel):
     card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
-    new_day: int = Field(default=18, ge=1, le=28)
+    new_day: int = Field(ge=1, le=28)
 
     @field_validator("new_day")
     @classmethod
@@ -140,7 +174,7 @@ class AdjustRepaymentDateTool(BaseTool):
 
 class AdjustCardLimitArgs(BaseModel):
     card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
-    new_limit_cny: float = Field(default=5000.0, gt=0, le=100_000)
+    new_limit_cny: float = Field(gt=0, le=100_000)
 
 
 class AdjustCardLimitTool(BaseTool):
@@ -168,7 +202,7 @@ class AdjustCardLimitTool(BaseTool):
 
 class SetTransactionLimitArgs(BaseModel):
     card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
-    daily_limit_cny: float = Field(default=2000.0, gt=0, le=100_000)
+    daily_limit_cny: float = Field(gt=0, le=100_000)
 
 
 class SetTransactionLimitTool(BaseTool):
@@ -308,6 +342,7 @@ def build_registry(repository: BankingRepository | None = None) -> ToolRegistry:
     repo = repository or _default_repository()
     registry = ToolRegistry()
     registry.register(QueryBillTool(repo))
+    registry.register(QueryBalanceTool(repo))
     registry.register(TransferTool(repo))
     registry.register(AdjustRepaymentDateTool(repo))
     registry.register(AdjustCardLimitTool(repo))

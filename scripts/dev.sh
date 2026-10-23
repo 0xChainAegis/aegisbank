@@ -14,7 +14,7 @@ trap cleanup EXIT INT TERM
 
 (
   cd "$ROOT/backend"
-  exec uv run uvicorn aegisbank_api.main:app --reload --host 0.0.0.0 --port 8000
+  exec uv run uvicorn aegisbank_api.main:app --reload --host 127.0.0.1 --port 8000
 ) &
 PIDS+=("$!")
 

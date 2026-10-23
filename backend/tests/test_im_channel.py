@@ -1,4 +1,4 @@
-﻿"""Stage-2A IM channel adapter tests.
+"""Stage-2A IM channel adapter tests.
 
 Coverage: green run through IM, red run + IM text confirmation with OTP, wrong
 OTP rejection with audit, ``message_id`` idempotency, clarification receipts,
@@ -159,9 +159,7 @@ def test_unknown_instruction_returns_clarification_receipt(tmp_path: Path) -> No
         assert "无法识别" in body["text"] or "请补充" in body["text"]
         assert body["structured"]["plan"]["needs_clarification"] is True
         entry = next(
-            item
-            for item in audit_entries(client)
-            if item["event"] == "im_message_executed"
+            item for item in audit_entries(client) if item["event"] == "im_message_executed"
         )
         assert entry["result"]["status"] == "needs_clarification"
 
@@ -215,14 +213,12 @@ def test_direct_adapter_handles_cli_and_missing_confirmation(tmp_path: Path) -> 
             ImMessage(channel="im", sender_id="bot", text="确认 cfm_missing 246810"),
         )
         assert missing.status == "rejected"
-        assert "确认请求不存在" in missing.text
-        assert any(
-            item["event"] == "im_message_rejected" for item in audit_entries(client)
-        )
+        assert "不属于该通道发送者" in missing.text
+        assert any(item["event"] == "im_message_rejected" for item in audit_entries(client))
 
         with_error = adapter.handle(
             services,
             ImMessage(channel="cli", sender_id="ops", text="确认 cfm_missing"),
         )
         assert with_error.status == "rejected"
-        assert "验证码" in with_error.text or "确认请求不存在" in with_error.text
+        assert "验证码" in with_error.text or "不属于该通道发送者" in with_error.text

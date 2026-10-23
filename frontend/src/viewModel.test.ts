@@ -294,3 +294,11 @@ describe('receipt headline (UX-14)', () => {
     expect(resultExecutedAt(rejected)).toBe('');
   });
 });
+
+describe('financial facts fail closed', () => {
+  it('does not invent identifiers, numeric values or safe risk levels', () => {
+    expect(() => normalizeBankingOverview({ accounts: [{}] })).toThrow();
+    expect(() => normalizeBankingOverview({ accounts: [{ account_id: 'real' }] })).toThrow();
+    expect(runRiskLevel({ status: 'completed', run_id: 'unknown-risk', reason: '' })).toBe('red');
+  });
+});

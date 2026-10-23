@@ -48,19 +48,27 @@ function messageOf(error: unknown): string {
 export function isConfirmationExpiredError(error: unknown): boolean {
   const status = statusOf(error);
   const code = codeOf(error);
-  return status === 409 || code.startsWith('ENVELOPE_');
+  return (status === 409 && !isInProgress(error)) || code.startsWith('ENVELOPE_');
+}
+
+function isInProgress(error: unknown): boolean {
+  return ['ACTION_IN_PROGRESS', 'IDEMPOTENCY_IN_PROGRESS'].includes(codeOf(error));
 }
 
 /** 终态错误：弹窗应关闭并刷新，而不是让用户对着一个永远失败的重试按钮。 */
 export function isTerminalConfirmationError(error: unknown): boolean {
   const status = statusOf(error);
-  return status === 409 || status === 400 || status === 422;
+  return !isInProgress(error) && (status === 409 || status === 400 || status === 422);
 }
 
 export function describeError(error: unknown, context: ErrorContext = 'run'): ErrorExplanation {
   const status = statusOf(error);
   const code = codeOf(error);
   const raw = messageOf(error);
+
+  if (isInProgress(error)) {
+    return { message: '原请求仍在处理中，请保留当前操作并查询原结果。', action: 'retry', detail: raw };
+  }
 
   if (status === 403 && /验证|OTP|token|生物识别|二次身份/i.test(raw)) {
     return { message: `验证未通过：${raw}`, action: 'retry', detail: raw };
@@ -81,7 +89,7 @@ export function describeError(error: unknown, context: ErrorContext = 'run'): Er
   }
   if (status === 422) {
     return {
-      message: `操作未执行：${raw}`,
+      message: `请求未完成：${raw}。请核对步骤记录和账户结果。`,
       action: context === 'confirmation' ? 'refresh' : 'retry',
       detail: raw,
     };
@@ -98,7 +106,7 @@ export function describeError(error: unknown, context: ErrorContext = 'run'): Er
   }
   if (status === 0) {
     return {
-      message: '无法连接后端服务，请确认 API 已启动后重试。',
+      message: '连接中断或超时，执行结果尚未确认；请使用原请求查询结果。',
       action: 'retry',
       detail: raw,
     };

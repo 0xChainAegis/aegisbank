@@ -1,4 +1,4 @@
-﻿"""In-process tool execution sandbox for stage 2A.
+"""In-process tool execution sandbox for stage 2A.
 
 The sandbox wraps every tool run with four predictable controls:
 
@@ -20,13 +20,17 @@ from __future__ import annotations
 import json
 import socket
 import threading
+import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
 from typing import Any
 
 from ..audit import AuditService
 from ..config import Settings
+from ..db import execution_deadline
 from ..domain import ExecutionContext, ToolResult
 from ..executor import ExecutionGuard, SandboxViolation, ToolExecutor
 from ..registry import BaseTool
@@ -35,6 +39,9 @@ from .evidence import evidence_payload, policy_decision_evidence, tool_result_ev
 SANDBOX_BLOCKED_EVENT = "sandbox_blocked"
 SANDBOX_TIMEOUT_EVENT = "sandbox_timeout"
 DEFAULT_MAX_ARGUMENT_BYTES = 8_192
+_TOOL_NETWORK_BLOCKED: ContextVar[bool] = ContextVar("tool_network_blocked", default=False)
+_WORKERS = ThreadPoolExecutor(max_workers=8, thread_name_prefix="aegis-sandbox")
+_CAPACITY = threading.BoundedSemaphore(16)
 
 
 def _json_size(value: Any) -> int:
@@ -54,27 +61,39 @@ def _network_violation(address: Any) -> SandboxViolation:
 
 
 def _blocked_connect(_sock: Any, address: Any, *_args: Any, **_kwargs: Any) -> Any:
+    if not _TOOL_NETWORK_BLOCKED.get():
+        return _NETWORK_SHIELD._original_connect(_sock, address, *_args, **_kwargs)
     raise _network_violation(address)
 
 
 def _blocked_connect_ex(_sock: Any, address: Any, *_args: Any, **_kwargs: Any) -> Any:
+    if not _TOOL_NETWORK_BLOCKED.get():
+        return _NETWORK_SHIELD._original_connect_ex(_sock, address, *_args, **_kwargs)
     raise _network_violation(address)
 
 
 def _blocked_create_connection(address: Any, *_args: Any, **_kwargs: Any) -> Any:
+    if not _TOOL_NETWORK_BLOCKED.get():
+        return _NETWORK_SHIELD._original_create_connection(address, *_args, **_kwargs)
     raise _network_violation(address)
 
 
 def _blocked_sendto(_sock: Any, *args: Any, **_kwargs: Any) -> Any:
+    if not _TOOL_NETWORK_BLOCKED.get():
+        return _NETWORK_SHIELD._original_sendto(_sock, *args, **_kwargs)
     address = args[-1] if args else None
     raise _network_violation(address)
 
 
 def _blocked_getaddrinfo(host: Any, *_args: Any, **_kwargs: Any) -> Any:
+    if not _TOOL_NETWORK_BLOCKED.get():
+        return _NETWORK_SHIELD._original_getaddrinfo(host, *_args, **_kwargs)
     raise _network_violation(host)
 
 
 def _blocked_gethostbyname(host: Any) -> Any:
+    if not _TOOL_NETWORK_BLOCKED.get():
+        return _NETWORK_SHIELD._original_gethostbyname(host)
     raise _network_violation(host)
 
 
@@ -137,12 +156,6 @@ class _NetworkShield:
             socket.getaddrinfo = self._original_getaddrinfo
         if self._original_gethostbyname is not None:
             socket.gethostbyname = self._original_gethostbyname
-        self._original_connect = None
-        self._original_connect_ex = None
-        self._original_create_connection = None
-        self._original_sendto = None
-        self._original_getaddrinfo = None
-        self._original_gethostbyname = None
 
 
 _NETWORK_SHIELD = _NetworkShield()
@@ -252,8 +265,11 @@ class SandboxGuard:
                 ),
             )
         if self.policy.block_network:
-            _NETWORK_SHIELD.enter()
-            self._entered.value = True
+            depth = getattr(self._entered, "depth", 0)
+            if depth == 0:
+                _NETWORK_SHIELD.enter()
+                self._entered.token = _TOOL_NETWORK_BLOCKED.set(True)
+            self._entered.depth = depth + 1
 
     def after_execute(
         self,
@@ -281,13 +297,16 @@ class SandboxGuard:
 
     def release_thread(self) -> None:
         """Release the network block entered by this thread, if any."""
-        if getattr(self._entered, "value", False):
-            self._entered.value = False
-            _NETWORK_SHIELD.exit()
+        depth = getattr(self._entered, "depth", 0)
+        if depth:
+            self._entered.depth = depth - 1
+            if depth == 1:
+                _TOOL_NETWORK_BLOCKED.reset(self._entered.token)
+                _NETWORK_SHIELD.exit()
 
     def force_release(self) -> None:
-        """Best-effort release from another thread (timeout path)."""
-        _NETWORK_SHIELD.exit()
+        """Only the owning worker may release its network scope."""
+        return None
 
     def _block(
         self,
@@ -298,39 +317,10 @@ class SandboxGuard:
         kind: str,
         reason: str,
     ) -> None:
-        audit_id: int | None = None
-        audited = False
-        if self.audit is not None:
-            try:
-                entry = self.audit.record(
-                    event=SANDBOX_BLOCKED_EVENT,
-                    user_id=context.user_id,
-                    instruction=context.instruction,
-                    dag_path=context.dag_path or "sandbox",
-                    tool_name=tool.metadata.name,
-                    arguments=dict(arguments),
-                    result={
-                        "kind": kind,
-                        "reason": reason,
-                        "policy": self.policy.as_dict(),
-                    },
-                    confirmation_state="blocked",
-                    risk_level=tool.metadata.risk_level.value,
-                    evidence=evidence_payload(
-                        policy_decision_evidence(True, f"沙箱拦截：{reason}"),
-                        tool_result_evidence(False, "工具调用未通过沙箱检查"),
-                    ),
-                )
-            except Exception as exc:  # noqa: BLE001 - the block must still take effect
-                reason = f"{reason}（审计写入失败：{exc}）"
-            else:
-                audit_id = int(entry["id"])
-                audited = True
         violation = SandboxViolation(reason)
         violation.sandbox_kind = kind
         violation.sandbox_event = SANDBOX_BLOCKED_EVENT
-        violation.sandbox_audited = audited
-        violation.sandbox_audit_id = audit_id
+        violation.sandbox_audited = False
         raise violation
 
 
@@ -365,7 +355,7 @@ class SandboxedToolExecutor(ToolExecutor):
         audit: AuditService | None = None,
         policy: SandboxPolicy | None = None,
     ) -> None:
-        super().__init__(guards)
+        super().__init__(guards, db=audit.db if audit is not None else None)
         self.audit = audit or _audit_from_guards(self.guards)
         self.policy = policy or _policy_from_guards(self.guards)
 
@@ -374,19 +364,48 @@ class SandboxedToolExecutor(ToolExecutor):
         tool: BaseTool,
         arguments: dict[str, Any],
         context: ExecutionContext,
+        *,
+        on_success: Callable[[dict[str, Any]], None] | None = None,
+        authorize: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
-        if not self.policy.enabled or self.policy.timeout_seconds <= 0:
-            return super().execute(tool, arguments, context)
+        if (
+            not self.policy.enabled
+            or self.policy.timeout_seconds <= 0
+            or execution_deadline.get() is not None
+        ):
+            return super().execute(
+                tool, arguments, context, on_success=on_success, authorize=authorize
+            )
         timeout = self.policy.timeout_seconds
-        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aegis-sandbox")
-        future = pool.submit(self._execute_guarded, tool, arguments, context)
+        if not _CAPACITY.acquire(blocking=False):
+            self._record(
+                event=SANDBOX_BLOCKED_EVENT,
+                kind="capacity",
+                reason="工具执行队列已满。",
+                tool=tool,
+                arguments=arguments,
+                context=context,
+            )
+            raise SandboxViolation("工具执行队列已满，请查询原任务后重试。")
+        deadline = time.monotonic() + timeout
+        future = _WORKERS.submit(
+            copy_context().run,
+            self._execute_guarded,
+            tool,
+            arguments,
+            context,
+            on_success,
+            authorize,
+            deadline,
+        )
+        future.add_done_callback(lambda _future: _CAPACITY.release())
         try:
             return future.result(timeout=timeout)
         except FutureTimeoutError as exc:
-            self._release_guards(force=True)
+            future.cancel()  # A queued call must never start after its caller timed out.
             reason = (
                 f"工具 {tool.metadata.name} 执行超过沙箱超时上限 {timeout:g} 秒，"
-                "已中止并写入审计。"
+                "已禁止后续数据库提交；结果需核查，不能自动重试。"
             )
             try:
                 audited = self._record(
@@ -404,6 +423,7 @@ class SandboxedToolExecutor(ToolExecutor):
             violation.sandbox_kind = "timeout"
             violation.sandbox_event = SANDBOX_TIMEOUT_EVENT
             violation.sandbox_audited = audited
+            violation.outcome_unknown = True
             raise violation from exc
         except SandboxViolation as exc:
             if not getattr(exc, "sandbox_audited", False):
@@ -420,19 +440,26 @@ class SandboxedToolExecutor(ToolExecutor):
                     exc.sandbox_audited = True
                     exc.add_note(f"沙箱审计写入失败：{audit_exc}")
             raise
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
 
     def _execute_guarded(
         self,
         tool: BaseTool,
         arguments: dict[str, Any],
         context: ExecutionContext,
+        on_success: Callable[[dict[str, Any]], None] | None = None,
+        authorize: Callable[[], None] | None = None,
+        deadline: float | None = None,
     ) -> dict[str, Any]:
+        token = execution_deadline.set(
+            deadline if deadline is not None else time.monotonic() + self.policy.timeout_seconds
+        )
         try:
-            return super().execute(tool, arguments, context)
+            return super().execute(
+                tool, arguments, context, on_success=on_success, authorize=authorize
+            )
         finally:
             self._release_guards()
+            execution_deadline.reset(token)
 
     def _release_guards(self, *, force: bool = False) -> None:
         for guard in self.guards:
@@ -443,6 +470,8 @@ class SandboxedToolExecutor(ToolExecutor):
             release = getattr(guard, "release_thread", None)
             if callable(release):
                 release()
+                while getattr(getattr(guard, "_entered", None), "depth", 0):
+                    release()
 
     def _record(
         self,

@@ -46,7 +46,7 @@ export const statusDescriptions: Record<string, string> = {
   failed: '执行过程中失败，失败原因已写入审计链，系统不会自动重试。',
   unknown: '执行结果不确定：副作用可能已经发生。请勿重复提交，需要人工对账或回滚。',
   reconciled: 'UNKNOWN 状态已由人工对账处理，结论已写入审计链。',
-  rolled_back: 'UNKNOWN 状态已由人工回滚，相关变更已撤销并记录到审计链。',
+  rolled_back: '补偿链已完成；请结合逐步补偿记录核对资金与业务状态。',
   paused: '执行在步骤之间暂停；已执行步骤不会重复执行，可恢复剩余节点或人工回退。',
   pending: '动作尚未开始执行，步骤日志为空；完成人工确认后才会产生执行记录。',
   executing: '动作正在执行中，步骤日志会随节点推进持续更新。',
@@ -236,16 +236,18 @@ function firstString(records: UnknownRecord[], keys: string[], fallback = ''): s
   return fallback;
 }
 
-function firstNumber(records: UnknownRecord[], keys: string[], fallback = 0): number {
+function firstNumber(records: UnknownRecord[], keys: string[]): number {
   const value = findValue(records, keys);
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') throw new Error('金融数据缺少有效数值');
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  if (!Number.isFinite(parsed)) throw new Error('金融数据包含非法数值');
+  return parsed;
 }
 
 function optionalNumber(records: UnknownRecord[], keys: string[]): number | null {
   const value = findValue(records, keys);
   if (value === undefined || value === null || value === '') return null;
-  const parsed = typeof value === 'number' ? value : Number(value);
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -265,9 +267,10 @@ function firstBoolean(records: UnknownRecord[], keys: string[], fallback = false
   return fallback;
 }
 
-function mapAccount(value: unknown, index: number): BankingAccount {
+function mapAccount(value: unknown): BankingAccount {
   const records = flattenRecords(value);
-  const id = firstString(records, ['account_id', 'id', 'account_no', 'number'], `ACC-${index + 1}`);
+  const id = firstString(records, ['account_id', 'id', 'account_no', 'number']);
+  if (!id) throw new Error('账户标识缺失，无法展示余额');
   const type = firstString(records, ['account_type', 'type', 'kind'], '活期账户');
   return {
     id,
@@ -287,15 +290,16 @@ function mapAccount(value: unknown, index: number): BankingAccount {
   };
 }
 
-function mapCard(value: unknown, index: number): BankingCard {
+function mapCard(value: unknown): BankingCard {
   const records = flattenRecords(value);
-  const id = firstString(records, ['card_id', 'id', 'card_no'], `CARD-${index + 1}`);
+  const id = firstString(records, ['card_id', 'id', 'card_no']);
+  if (!id) throw new Error('卡片标识缺失，无法展示卡片');
   return {
     id,
     accountId: firstString(records, ['account_id', 'linked_account_id', 'primary_account_id']),
     name: firstString(records, ['card_name', 'name', 'title', 'card_type', 'type'], '银行卡'),
     maskedNumber: firstString(records, ['masked_number', 'masked_card', 'card_number_masked', 'last4'], id),
-    status: firstString(records, ['status', 'card_status'], '正常'),
+    status: firstString(records, ['status', 'card_status'], '未知'),
     creditLimitCny: optionalNumber(records, ['credit_limit_cny', 'credit_limit', 'limit_cny', 'limit']),
     availableLimitCny: optionalNumber(records, [
       'available_limit_cny',
@@ -307,10 +311,12 @@ function mapCard(value: unknown, index: number): BankingCard {
   };
 }
 
-function mapSubscription(value: unknown, index: number): Subscription {
+function mapSubscription(value: unknown): Subscription {
   const records = flattenRecords(value);
   const merchant = firstString(records, ['merchant', 'merchant_name', 'name', 'title'], '未知订阅');
-  const status = firstString(records, ['status', 'subscription_status'], '正常');
+  const status = firstString(records, ['status', 'subscription_status'], '未知');
+  const subscriptionId = firstString(records, ['subscription_id', 'id', 'merchant_id']);
+  if (!subscriptionId) throw new Error('订阅标识缺失');
   const riskFlag = firstString(records, ['risk_flag', 'abnormal_reason'], '');
   const abnormalFlag =
     firstBoolean(
@@ -319,7 +325,7 @@ function mapSubscription(value: unknown, index: number): Subscription {
       /异常|风险|异常订阅|suspicious|abnormal/i.test(status),
     ) || Boolean(riskFlag);
   return {
-    id: firstString(records, ['subscription_id', 'id', 'merchant_id'], `SUB-${index + 1}`),
+    id: subscriptionId,
     merchant,
     amountCny: firstNumber(records, ['amount_cny', 'amount', 'monthly_amount_cny', 'monthly_cost_cny', 'price_cny', 'price']),
     cycle: firstString(records, ['billing_cycle', 'cycle', 'frequency', 'period'], '每月'),
@@ -424,20 +430,21 @@ function addUnique(target: string[], values: unknown): void {
   }
 }
 
-export function riskLevelOfRisk(risk?: RiskAssessment | null, fallback: RiskLevel = 'green'): RiskLevel {
-  return risk?.level ?? risk?.risk_level ?? fallback;
+export function riskLevelOfRisk(risk?: RiskAssessment | null, fallback: RiskLevel = 'red'): RiskLevel {
+  const level = risk?.level ?? risk?.risk_level;
+  return level === 'green' || level === 'yellow' || level === 'red' ? level : fallback;
 }
 
 export function runRiskLevel(run: RunResponse): RiskLevel {
-  return run.risk_level ?? riskLevelOfRisk(run.risk);
+  return riskLevelOfRisk({ level: run.risk_level ?? run.risk?.level ?? run.risk?.risk_level });
 }
 
 export function stepRiskLevel(stepRisk: RiskLevel | undefined, run: RunResponse): RiskLevel {
-  return stepRisk ?? runRiskLevel(run);
+  return riskLevelOfRisk({ level: stepRisk }, runRiskLevel(run));
 }
 
 export function resultRiskLevel(result: ToolResult, run: RunResponse): RiskLevel {
-  return result.risk_level ?? riskLevelOfRisk(result.risk, runRiskLevel(run));
+  return riskLevelOfRisk({ level: result.risk_level ?? result.risk?.level ?? result.risk?.risk_level }, runRiskLevel(run));
 }
 
 export function collectRiskReasons(run: RunResponse): string[] {
@@ -795,7 +802,7 @@ export function receiptHeadline(run: RunResponse): string {
   if (run.status === 'rejected') return '操作已拒绝，未执行任何工具';
   if (run.status === 'failed') return '执行失败，未产生资金变动';
   if (run.status === 'unknown') return '结果未知：需要人工对账';
-  if (run.status === 'rolled_back') return '已回滚，相关变更已撤销';
+  if (run.status === 'rolled_back') return '补偿链已完成，请核对逐步结果';
   if (run.status === 'rollback_blocked') return '回滚被阻止：存在不可撤销步骤';
   if (run.status === 'paused') return '执行已暂停，剩余步骤未执行';
   if (run.status === 'awaiting_confirmation') return '等待你确认后才会执行';

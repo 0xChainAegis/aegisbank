@@ -144,7 +144,7 @@ RISK_POLICY_RULES: dict[str, MfaPolicyRule] = {
     "green": MfaPolicyRule(reason="绿色操作只读或低风险，不触发二次身份校验。"),
     "yellow": MfaPolicyRule(reason="黄色操作只需一次明确确认，不触发二次身份校验。"),
     "red": MfaPolicyRule(
-        providers=("otp",),
+        providers=("otp", "biometric"),
         default_provider="otp",
         required=True,
         reason="普通红色操作默认使用演示 OTP 完成二次身份校验。",
@@ -218,7 +218,7 @@ class MfaPolicy:
             "tool_name": (tool_name or "").strip() or None,
             "risk_level": normalized_risk,
             "source": source,
-            "required": bool(allowed) and rule.required,
+            "required": rule.required,
             "providers": allowed,
             "default_provider": default,
             "reason": reason,

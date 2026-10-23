@@ -7,6 +7,7 @@ import { paginate } from '../viewModel';
 import { CompensationBadge, LoadingState, PageAlerts, RiskBadge } from './ui';
 
 interface Props {
+  writesBlocked: boolean;
   role: AegisRole;
   tools: ToolMetadata[];
   loading: boolean;
@@ -20,6 +21,7 @@ interface Props {
 const PAGE_SIZE = 6;
 
 export default function PermissionsPage({
+  writesBlocked,
   role,
   tools,
   loading,
@@ -31,7 +33,7 @@ export default function PermissionsPage({
 }: Props) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
-  const canManage = canManagePermissions(role);
+  const canManage = !writesBlocked && canManagePermissions(role);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();

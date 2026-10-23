@@ -34,6 +34,7 @@ import {
 import { ResourceState, StatusPill, ToneChip } from './ui';
 
 interface Props {
+  writesBlocked: boolean;
   role: AegisRole;
   mfa: MfaProvidersResponse | null;
   mfaLoading: boolean;
@@ -52,6 +53,7 @@ function newMessageId(): string {
 }
 
 export default function CapabilitiesPage({
+  writesBlocked,
   role,
   mfa,
   mfaLoading,
@@ -107,8 +109,8 @@ export default function CapabilitiesPage({
     void loadHelp();
   }, [loadHelp, loadSandbox]);
 
-  const sandboxAllowed = canRunSandboxDemo(role);
-  const imAllowed = canSendImMessage(role);
+  const sandboxAllowed = !writesBlocked && canRunSandboxDemo(role);
+  const imAllowed = !writesBlocked && canSendImMessage(role);
   const providerCards = useMemo(() => mfa?.providers ?? [], [mfa]);
 
   async function runDemo(kind: SandboxDemoKind) {

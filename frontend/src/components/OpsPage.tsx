@@ -9,6 +9,7 @@ import type { BreakerStatus } from '../types';
 import BreakerPanel from './BreakerPanel';
 
 interface Props {
+  writesBlocked: boolean;
   role: AegisRole;
   breakerStatus: BreakerStatus | null;
   breakerLoading: boolean;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function OpsPage({
+  writesBlocked,
   role,
   breakerStatus,
   breakerLoading,
@@ -77,6 +79,7 @@ export default function OpsPage({
 
       <div className="card breaker-card">
         <BreakerPanel
+          writesBlocked={writesBlocked}
           role={role}
           status={breakerStatus}
           statusLoading={breakerLoading}

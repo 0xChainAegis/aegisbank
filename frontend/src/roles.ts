@@ -1,9 +1,7 @@
 /**
  * Stage 2A demo roles.
  *
- * The matrix mirrors `backend/aegisbank_api/trust/authz.py`: it is only used to
- * decide what the console may offer, never to authorise an API call. The API is
- * still the single source of truth, and every request carries `X-Aegis-Role`.
+ * Capabilities come from /authz/me. Unknown or failed policy loads fail closed.
  */
 
 export type AegisRole = 'user' | 'operator' | 'auditor';
@@ -43,11 +41,15 @@ export const CAPABILITY_LABELS: Record<AegisCapability, string> = {
   'trust:inspect': '查看信任状态与任务对账',
 };
 
-export const ROLE_CAPABILITIES: Record<AegisRole, readonly AegisCapability[]> = {
-  user: ['audit:read', 'permission:manage', 'tool:execute', 'trust:inspect'],
-  operator: ['audit:read', 'ops:manage', 'permission:manage', 'trust:inspect'],
-  auditor: ['audit:read', 'trust:inspect'],
-};
+const capabilities = new Map<AegisRole, readonly AegisCapability[]>();
+
+export function setRoleCapabilities(role: AegisRole, values: readonly AegisCapability[]): void {
+  capabilities.set(role, [...values]);
+}
+
+export function resetRoleCapabilities(role: AegisRole): void {
+  capabilities.delete(role);
+}
 
 export const ROLE_STORAGE_KEY = 'aegisbank.role';
 
@@ -60,11 +62,11 @@ export function roleFromStorage(value: string | null | undefined): AegisRole {
 }
 
 export function roleCan(role: AegisRole, capability: AegisCapability): boolean {
-  return ROLE_CAPABILITIES[role].includes(capability);
+  return capabilities.get(role)?.includes(capability) ?? false;
 }
 
 export function roleCapabilities(role: AegisRole): AegisCapability[] {
-  return [...ROLE_CAPABILITIES[role]];
+  return [...(capabilities.get(role) ?? [])];
 }
 
 export function canExecuteTools(role: AegisRole): boolean {
@@ -76,7 +78,7 @@ export function canManagePermissions(role: AegisRole): boolean {
 }
 
 export function canUnlockBreaker(role: AegisRole): boolean {
-  return role === 'operator' && roleCan(role, 'ops:manage');
+  return roleCan(role, 'ops:manage');
 }
 
 export function canReadAudit(role: AegisRole): boolean {
@@ -85,37 +87,40 @@ export function canReadAudit(role: AegisRole): boolean {
 
 /** The auditor is the explicit read-only console role. */
 export function isReadOnlyRole(role: AegisRole): boolean {
-  return role === 'auditor';
+  return !['tool:execute', 'permission:manage', 'ops:manage'].some(
+    (capability) => roleCan(role, capability as AegisCapability),
+  );
 }
 
 /** Sandbox demos run tools through the executor, so they are not audit-only. */
 export function canRunSandboxDemo(role: AegisRole): boolean {
-  return role !== 'auditor';
+  return roleCan(role, 'tool:execute') || roleCan(role, 'ops:manage');
 }
 
 /** The IM adapter always executes as the customer role. */
 export function canSendImMessage(role: AegisRole): boolean {
-  return role === 'user';
+  return roleCan(role, 'tool:execute');
 }
 
 export function roleTaskBlockReason(role: AegisRole): string {
+  if (canExecuteTools(role)) return '';
   if (role === 'operator') {
     return '当前角色为运维操作员（operator）：不具备 tool:execute，可查看信任状态与处理熔断，但银行工具执行仅限 user 角色。';
   }
   if (role === 'auditor') {
     return '当前角色为审计员（auditor）：只读审计视角，不能发起任务、确认执行或修改工具授权。';
   }
-  return '';
+  return '尚未取得后端 tool:execute 能力，任务提交已暂停。';
 }
 
 export function roleActionBlockReason(role: AegisRole, action = '该写操作'): string {
-  if (role === 'user') return '';
+  if (canExecuteTools(role)) return '';
   return `当前角色 ${role} 不具备 tool:execute，${action}会被后端以 403 拒绝。`;
 }
 
 export function rolePermissionBlockReason(role: AegisRole): string {
-  if (role === 'auditor') {
-    return '审计员只有 audit:read / trust:inspect，权限开关已按只读视角禁用。';
+  if (!canManagePermissions(role)) {
+    return '后端未授予 permission:manage，权限开关已禁用。';
   }
   return '';
 }

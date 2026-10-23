@@ -1,5 +1,7 @@
 # AegisBank 参赛交付包（阶段 3）
 
+
+> 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](../docs/REMEDIATION-PLAN-2026-10-23.md)。
 > 赛题：人工智能赛道 · 银行 AI 智能体
 > 版本：阶段 3 交付版　基线：`main` @ `75df12b`
 > 仓库：<https://github.com/LQZ5885/aegisbank>（Public / MIT）
@@ -38,7 +40,7 @@ bash scripts/seed-demo.sh
 #    （scripts/dev.sh 默认使用 backend/data/aegisbank.db，看不到 3000 元虚拟卡）
 cd backend
 AEGIS_DATABASE_PATH=/home/lqz5885/aegisbank/dev/aegisbank/backend/data/dogfood.db \
-  uv run uvicorn aegisbank_api.main:app --host 0.0.0.0 --port 8000
+  uv run uvicorn aegisbank_api.main:app --host 127.0.0.1 --port 8000
 
 # 3) 另开一个终端启动前端
 cd /home/lqz5885/aegisbank/dev/aegisbank/frontend && pnpm dev
@@ -54,10 +56,10 @@ cd /home/lqz5885/aegisbank/dev/aegisbank/frontend && pnpm dev
 
 | 指标 | 数值 | 验证方式 |
 |---|---|---|
-| 后端测试 | **144 passed**（15 个测试文件） | `cd backend && uv run pytest -p no:warnings` |
-| 前端测试 | **38 passed**（5 个文件） | `cd frontend && pnpm test` |
+| 后端测试 | **187 passed**（16 个测试文件） | `cd backend && uv run pytest -p no:warnings` |
+| 前端测试 | **53 passed**（7 个文件） | `cd frontend && pnpm test` |
 | 六场景端到端回归 | **29/29 PASS** | `cd backend && uv run python ../scripts/scenario-check.py` |
-| 工具 / 接口 | **48 个工具 / 49 个 HTTP 接口** | `GET /api/tools`、`GET /api/planner/info`、`/docs` |
+| 工具 / 接口 | **50 个工具 / 49 个 HTTP 接口** | `GET /api/tools`、`GET /api/planner/info`、`/docs` |
 | 审计链 | `{"valid": true, "checked": N}` | `GET /api/audit/verify` |
 | 门禁 | encoding / lint / build / test / security **五阶段 PASS** | `gate.ps1 -Repo <repo>` |
 
@@ -99,5 +101,5 @@ deliverables/
 - 无真实登录/身份认证；`X-Aegis-Role` 为演示请求头；OTP 与生物识别为演示实现。
 - 工具沙箱为进程内守卫（超时/网络/体积/白名单），不是 OS 级隔离。
 - SQLite 单机；幂等键与 nonce 无 TTL；熔断计数为系统级。
-- 六场景为「典型能力完整覆盖」，不等于生产业务完整性；多轮上下文尚未实现。
+- 六场景为「典型能力完整覆盖」，不等于生产业务完整性；已支持限时单次澄清续问；通用指代消解仍未实现。
 - 阶段 2.5 人工体验测试已推迟；界面截图与演示视频需在 2.5 / 录制阶段更新。

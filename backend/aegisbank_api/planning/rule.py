@@ -36,6 +36,30 @@ class RuleBasedPlanner:
         self.scenario_rules = collect_intent_rules()
 
     def plan(self, request: PlanningRequest) -> ExecutionPlan:
+        if re.search(
+            r"不要|别(?:给|转|改|调|挂失|取消)|不(?:要|必|用)|暂不|取消这次|don't|do not",
+            request.instruction,
+            re.I,
+        ):
+            return self._clarification(
+                "已识别否定或取消意图，不生成写操作；请明确需要查询或执行的任务。", "negated_intent"
+            )
+        if len(re.findall(r"转账|汇款|给.{1,12}?转|向.{1,20}?转", request.instruction)) > 1:
+            return self._clarification(
+                "识别到多笔转账，请分别明确每笔收款人和金额后发起。", "multiple_transfers"
+            )
+        write_kinds = [
+            r"转账|汇款|给.{1,12}?转",
+            r"挂失|解挂",
+            r"额度|限额",
+            r"申购|购买理财|赎回",
+            r"重置密码|修改密码",
+            r"取消订阅",
+        ]
+        if sum(bool(re.search(pattern, request.instruction)) for pattern in write_kinds) > 1:
+            return self._clarification(
+                "指令含多个不同写操作，请逐项明确后分别发起。", "multiple_writes"
+            )
         if request.tool_name:
             return self._explicit_tool_plan(request)
         return self._infer_plan(request)
@@ -90,12 +114,18 @@ class RuleBasedPlanner:
         if any(word in text for word in ("解挂", "解除挂失", "unlock")):
             return self._single_plan("unlock_card", "unlock_card", {"card_id": card_id})
         if any(word in text for word in ("交易限额", "单日限额", "transaction limit")):
+            if not amounts:
+                return self._clarification(
+                    "请明确目标单日交易限额，不会代填金额。", "set_transaction_limit"
+                )
             return self._single_plan(
                 "set_transaction_limit",
                 "set_transaction_limit",
                 {"card_id": card_id, "daily_limit_cny": amounts[0] if amounts else 2000.0},
             )
         if any(word in text for word in ("额度", "limit")):
+            if not amounts:
+                return self._clarification("请明确目标额度，不会代填金额。", "adjust_card_limit")
             return self._single_plan(
                 "adjust_card_limit",
                 "adjust_card_limit",
@@ -116,7 +146,13 @@ class RuleBasedPlanner:
             return self._cancel_subscription_plan(request, text)
         if any(word in text for word in ("订阅", "subscription")):
             return self._single_plan("list_subscriptions", "list_subscriptions", {})
-        if any(word in text for word in ("账单", "余额", "bill", "statement")):
+        if any(word in text for word in ("余额", "balance")):
+            return self._single_plan(
+                "query_balance",
+                "query_balance",
+                {"account_id": accounts[0] if accounts else "ACC-1001"},
+            )
+        if any(word in text for word in ("账单", "bill", "statement")):
             return self._bill_plan(request, accounts)
         return self._clarification(
             "暂时无法识别该指令。可尝试：分析账单、转账、调整卡片额度/限额/还款日、挂失/解挂或取消订阅。",
@@ -129,9 +165,11 @@ class RuleBasedPlanner:
 
     @staticmethod
     def _is_cross_scenario_subscription_flow(text: str) -> bool:
-        return ("账单" in text or "bill" in text) and (
-            "订阅" in text or "subscription" in text
-        ) and any(word in text for word in ("取消", "关闭", "cancel"))
+        return (
+            ("账单" in text or "bill" in text)
+            and ("订阅" in text or "subscription" in text)
+            and any(word in text for word in ("取消", "关闭", "cancel"))
+        )
 
     def _bill_and_cancel_subscription_plan(
         self, request: PlanningRequest, accounts: list[str]
@@ -141,9 +179,7 @@ class RuleBasedPlanner:
             intent="bill_analysis_and_subscription_cleanup",
             planner=self.name,
             confidence=0.9,
-            assumptions=[]
-            if accounts
-            else ["未指定账户，默认分析演示账户 ACC-1001。"],
+            assumptions=[] if accounts else ["未指定账户，默认分析演示账户 ACC-1001。"],
             steps=[
                 PlanStep(
                     id="step-1",
@@ -202,9 +238,7 @@ class RuleBasedPlanner:
             description="查询并分析指定账户的本月账单。",
         )
 
-    def _is_subscription_cancel_request(
-        self, request: PlanningRequest, text: str
-    ) -> bool:
+    def _is_subscription_cancel_request(self, request: PlanningRequest, text: str) -> bool:
         if not any(word in text for word in _CANCEL_WORDS):
             return False
         if any(word in text for word in _SUBSCRIPTION_WORDS):
@@ -220,9 +254,7 @@ class RuleBasedPlanner:
         except Exception:  # noqa: BLE001 - repository is a local mock adapter
             return False
 
-    def _cancel_subscription_plan(
-        self, request: PlanningRequest, text: str
-    ) -> ExecutionPlan:
+    def _cancel_subscription_plan(self, request: PlanningRequest, text: str) -> ExecutionPlan:
         explicit = re.search(r"SUB-\d{3,}", request.instruction, re.IGNORECASE)
         if explicit:
             return self._single_plan(
@@ -252,9 +284,7 @@ class RuleBasedPlanner:
                 description=f"取消订阅：{sub.merchant}（{sub.subscription_id}）",
             )
         if len(matched) > 1:
-            names = "、".join(
-                f"{sub.merchant}（{sub.subscription_id}）" for sub in matched
-            )
+            names = "、".join(f"{sub.merchant}（{sub.subscription_id}）" for sub in matched)
             return self._clarification(
                 f"匹配到多个订阅：{names}，请补充要取消哪一个的订阅编号。",
                 "cancel_subscription",
@@ -268,11 +298,9 @@ class RuleBasedPlanner:
                 "cancel_subscription",
                 {"subscription_id": suspicious.subscription_id},
                 assumptions=[
-                    f"按异常标记定位到 {suspicious.merchant}"
-                    f"（{suspicious.subscription_id}）。"
+                    f"按异常标记定位到 {suspicious.merchant}（{suspicious.subscription_id}）。"
                 ],
-                description=f"取消异常订阅：{suspicious.merchant}"
-                f"（{suspicious.subscription_id}）",
+                description=f"取消异常订阅：{suspicious.merchant}（{suspicious.subscription_id}）",
             )
 
         if subscriptions:

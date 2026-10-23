@@ -26,7 +26,10 @@ CENT = Decimal("0.01")
 
 
 def to_cents(value: float | str | Decimal) -> int:
-    amount = Decimal(str(value)).quantize(CENT, rounding=ROUND_HALF_UP)
+    amount = Decimal(str(value))
+    if not amount.is_finite():
+        raise ValueError("金额必须为有限数。")
+    amount = amount.quantize(CENT, rounding=ROUND_HALF_UP)
     return int(amount * 100)
 
 
@@ -115,12 +118,26 @@ class BankingRepository:
             )
             cards = [
                 (
-                    "CARD-8821", "demo-user", "ACC-1001", "**** 8821",
-                    "active", 3000000, 2175000, 8, 1000000,
+                    "CARD-8821",
+                    "demo-user",
+                    "ACC-1001",
+                    "**** 8821",
+                    "active",
+                    3000000,
+                    2175000,
+                    8,
+                    1000000,
                 ),
                 (
-                    "CARD-9902", "demo-user", "ACC-1001", "**** 9902",
-                    "active", 1500000, 1500000, 20, 500000,
+                    "CARD-9902",
+                    "demo-user",
+                    "ACC-1001",
+                    "**** 9902",
+                    "active",
+                    1500000,
+                    1500000,
+                    20,
+                    500000,
                 ),
             ]
             conn.executemany(
@@ -164,17 +181,34 @@ class BankingRepository:
 
             subscriptions = [
                 (
-                    "SUB-3001", "demo-user", "云端影音", 4500, "monthly",
-                    (today + timedelta(days=9)).isoformat(), "active", None,
+                    "SUB-3001",
+                    "demo-user",
+                    "云端影音",
+                    4500,
+                    "monthly",
+                    (today + timedelta(days=9)).isoformat(),
+                    "active",
+                    None,
                 ),
                 (
-                    "SUB-3002", "demo-user", "AI 工具订阅", 19900, "monthly",
-                    (today + timedelta(days=6)).isoformat(), "active",
+                    "SUB-3002",
+                    "demo-user",
+                    "AI 工具订阅",
+                    19900,
+                    "monthly",
+                    (today + timedelta(days=6)).isoformat(),
+                    "active",
                     "本月扣费较上月上涨 120%",
                 ),
                 (
-                    "SUB-3003", "demo-user", "健身房月卡", 29900, "monthly",
-                    (today + timedelta(days=14)).isoformat(), "active", None,
+                    "SUB-3003",
+                    "demo-user",
+                    "健身房月卡",
+                    29900,
+                    "monthly",
+                    (today + timedelta(days=14)).isoformat(),
+                    "active",
+                    None,
                 ),
             ]
             conn.executemany(
@@ -368,6 +402,8 @@ class BankingRepository:
         from_account = str(arguments["from_account"])
         to_account = str(arguments["to_account"])
         amount_cents = to_cents(float(arguments["amount_cny"]))
+        if amount_cents <= 0:
+            raise ValueError("转账金额必须至少为 0.01 元。")
         if from_account == to_account:
             raise ValueError("转出账户与转入账户不能相同")
         source = self.account(user_id, from_account)
@@ -378,11 +414,14 @@ class BankingRepository:
         transaction_id = f"TX-{uuid4().hex[:12].upper()}"
         now = datetime.now(UTC).isoformat(timespec="seconds")
         with self.db.transaction() as conn:
-            conn.execute(
+            updated = conn.execute(
                 "UPDATE bank_accounts SET balance_cents = balance_cents - ?, "
-                "available_cents = available_cents - ? WHERE user_id = ? AND account_id = ?",
-                (amount_cents, amount_cents, user_id, from_account),
-            )
+                "available_cents = available_cents - ? WHERE user_id = ? AND account_id = ? "
+                "AND available_cents >= ? AND balance_cents >= ?",
+                (amount_cents, amount_cents, user_id, from_account, amount_cents, amount_cents),
+            ).rowcount
+            if updated != 1:
+                raise ValueError("转出账户可用余额不足，已拒绝并发扣款。")
             target = conn.execute(
                 "SELECT account_id FROM bank_accounts WHERE user_id = ? AND account_id = ?",
                 (user_id, to_account),
@@ -448,10 +487,18 @@ class BankingRepository:
             raise ValueError("信用额度必须大于 0")
         limit_cents = to_cents(new_limit_cny)
         with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT credit_limit_cents, available_limit_cents FROM bank_cards "
+                "WHERE user_id = ? AND card_id = ?",
+                (user_id, card_id),
+            ).fetchone()
+            used_cents = max(0, int(row["credit_limit_cents"]) - int(row["available_limit_cents"]))
+            if limit_cents < used_cents:
+                raise ValueError("目标信用额度低于已用额度，不能直接调整。")
             conn.execute(
                 "UPDATE bank_cards SET credit_limit_cents = ?, available_limit_cents = ? "
                 "WHERE user_id = ? AND card_id = ?",
-                (limit_cents, limit_cents, user_id, card_id),
+                (limit_cents, limit_cents - used_cents, user_id, card_id),
             )
         return {
             "card_id": card_id,

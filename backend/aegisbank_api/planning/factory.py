@@ -60,6 +60,7 @@ def build_planner(
         credential=settings.llm_api_key,
         model=settings.llm_model,
         timeout_seconds=settings.llm_timeout_seconds,
+        repository=repository,
     )
     return FallbackPlanner(llm, rule) if mode == "auto" else llm
 

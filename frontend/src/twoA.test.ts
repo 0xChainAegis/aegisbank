@@ -5,6 +5,8 @@ import {
   canSendImMessage,
   canUnlockBreaker,
   roleCan,
+  setRoleCapabilities,
+  resetRoleCapabilities,
   roleFromStorage,
   roleTaskBlockReason,
 } from './roles';
@@ -84,6 +86,11 @@ function breaker(overrides: Partial<BreakerStatus> = {}): BreakerStatus {
 
 describe('stage 2A role capability helpers', () => {
   it('mirrors the backend role matrix and explains blocked tasks', () => {
+    resetRoleCapabilities('user');
+    expect(roleCan('user', 'tool:execute')).toBe(false);
+    setRoleCapabilities('user', ['tool:execute', 'permission:manage', 'audit:read', 'trust:inspect']);
+    setRoleCapabilities('operator', ['ops:manage', 'audit:read', 'trust:inspect', 'permission:manage']);
+    setRoleCapabilities('auditor', ['audit:read', 'trust:inspect']);
     expect(roleCan('user', 'tool:execute')).toBe(true);
     expect(roleCan('operator', 'tool:execute')).toBe(false);
     expect(roleCan('auditor', 'audit:read')).toBe(true);

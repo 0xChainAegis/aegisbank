@@ -254,9 +254,7 @@ def test_time_fast_forward_marks_gift_orders_ordered(tmp_path):
     with make_client(tmp_path) as client:
         available_before = account(client)["available_cny"]
         balance_before = account(client)["balance_cny"]
-        _, executed, orders = confirm_birthday(
-            client, "帮我准备下个月妈妈的生日，预算 1000 元"
-        )
+        _, executed, orders = confirm_birthday(client, "帮我准备下个月妈妈的生日，预算 1000 元")
         goal = executed["results"][1]["data"]
         due_at = orders[0]["due_at"]
 
@@ -268,9 +266,7 @@ def test_time_fast_forward_marks_gift_orders_ordered(tmp_path):
         inventory = client.get("/api/automation/orders").json()["orders"]
         assert len(inventory) == 2
         assert all(order["status"] == "ordered" for order in inventory)
-        assert {
-            item["order_id"] for item in inventory
-        } == {order["order_id"] for order in orders}
+        assert {item["order_id"] for item in inventory} == {order["order_id"] for order in orders}
 
         goals = client.get("/api/automation/goals").json()["goals"]
         stored_goal = next(item for item in goals if item["goal_id"] == goal["goal_id"])
@@ -281,9 +277,7 @@ def test_time_fast_forward_marks_gift_orders_ordered(tmp_path):
         assert account(client)["balance_cny"] == balance_before - 199.0 - 159.0
         assert account(client)["available_cny"] == available_before - 1000.0
 
-        gift_tasks = [
-            task for task in list_tasks(client)["tasks"] if task["kind"] == "gift"
-        ]
+        gift_tasks = [task for task in list_tasks(client)["tasks"] if task["kind"] == "gift"]
         assert len(gift_tasks) == 2
         assert all(task["status"] == "done" for task in gift_tasks)
 
@@ -295,9 +289,7 @@ def test_time_fast_forward_marks_gift_orders_ordered(tmp_path):
             and (entry["result"] or {}).get("kind") == "gift"
         ]
         assert len(gift_audits) == 2
-        assert all(
-            entry["result"]["trigger_source"] == "scheduled" for entry in gift_audits
-        )
+        assert all(entry["result"]["trigger_source"] == "scheduled" for entry in gift_audits)
 
 
 # ---------------------------------------------------------------------------
@@ -305,13 +297,13 @@ def test_time_fast_forward_marks_gift_orders_ordered(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_scheduled_transfer_over_5000_is_red_and_requires_otp(tmp_path):
+def test_scheduled_transfer_over_1000_is_red_and_requires_otp(tmp_path):
     with make_client(tmp_path) as client:
         body = run_agent(client, "明天给张三转 6000")
         assert body["status"] == "awaiting_confirmation"
         assert body["risk_level"] == "red"
         assert body["confirmation"]["requires_reauth"] is True
-        assert any("5000" in reason for reason in body["risk"]["reasons"])
+        assert any("1000" in reason for reason in body["risk"]["reasons"])
         step = body["plan"]["steps"][0]
         assert step["tool_name"] == "schedule_transfer"
         assert step["arguments"]["amount_cny"] == 6000.0
@@ -412,9 +404,7 @@ def test_unlock_budget_funds_compensates_and_cancels_pending_gifts(tmp_path):
     with make_client(tmp_path) as client:
         available_before = account(client)["available_cny"]
         balance_before = account(client)["balance_cny"]
-        _, executed, orders = confirm_birthday(
-            client, "帮我准备下个月妈妈的生日，预算 1000 元"
-        )
+        _, executed, orders = confirm_birthday(client, "帮我准备下个月妈妈的生日，预算 1000 元")
         goal_id = executed["results"][1]["data"]["goal_id"]
         assert account(client)["available_cny"] == available_before - 1000.0
 

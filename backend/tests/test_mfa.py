@@ -108,7 +108,7 @@ def test_policy_endpoint_maps_risk_levels_and_sensitive_tools(tmp_path: Path) ->
         assert levels["green"]["providers"] == []
         assert levels["green"]["required"] is False
         assert levels["yellow"]["providers"] == []
-        assert levels["red"]["providers"] == ["otp"]
+        assert levels["red"]["providers"] == ["otp", "biometric"]
         assert levels["red"]["default_provider"] == "otp"
         assert levels["red"]["required"] is True
 
@@ -295,7 +295,7 @@ def test_mfa_service_provider_protocol_and_policy_api() -> None:
     service = MfaService([OtpProvider(DEMO_OTP), SimulatedBiometricProvider(DEMO_BIOMETRIC_TOKEN)])
     assert service.registered_names() == ["biometric", "otp"]
     assert service.providers_for("report_card_lost", "red") == ["biometric", "otp"]
-    assert service.providers_for("transfer", "red") == ["otp"]
+    assert service.providers_for("transfer", "red") == ["otp", "biometric"]
     assert service.providers_for("query_bill", "green") == []
 
     result = service.verify(DEMO_BIOMETRIC_TOKEN, user_id="demo-user", provider="biometric")

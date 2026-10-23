@@ -35,15 +35,74 @@ def scan_injection(instruction: str, arguments: dict[str, Any] | None = None) ->
     return detect_injection(scan_text(instruction, arguments))
 
 
+DEMO_PREGRANTED_TOOLS = frozenset(
+    (
+        "add_contact",
+        "adjust_card_limit",
+        "adjust_repayment_date",
+        "apply_virtual_card",
+        "assess_wealth_risk",
+        "bill_report",
+        "cancel_scheduled_task",
+        "cancel_subscription",
+        "cancel_virtual_card_application",
+        "demo_charge_fee",
+        "demo_fail_step",
+        "demo_irreversible_marker",
+        "demo_reserve_funds",
+        "detect_bill_anomalies",
+        "identify_subscription_charges",
+        "issue_virtual_card",
+        "list_contacts",
+        "list_renewal_reminders",
+        "list_scheduled_tasks",
+        "list_subscriptions",
+        "list_wealth_products",
+        "lock_budget_funds",
+        "purchase_wealth",
+        "query_bill",
+        "query_contact_birthday",
+        "query_wealth_holdings",
+        "reactivate_subscription",
+        "redeem_wealth",
+        "report_card_lost",
+        "reset_card_password",
+        "restore_card_limit",
+        "restore_repayment_date",
+        "restore_transaction_limit",
+        "restore_wealth_risk",
+        "reverse_demo_charge",
+        "reverse_demo_reserve",
+        "reverse_purchase_wealth",
+        "reverse_transfer",
+        "run_due_tasks",
+        "schedule_cake_order",
+        "schedule_flower_order",
+        "schedule_transfer",
+        "set_transaction_limit",
+        "transfer",
+        "transfer_to_contact",
+        "unlock_budget_funds",
+        "unlock_card",
+        "unlock_transaction_limit",
+    )
+)
+
+
+DEMO_PREGRANTED_TOOLS = DEMO_PREGRANTED_TOOLS | {"execute_gift_order", "query_balance"}
+
+
 class PermissionStore:
     def __init__(self, db: Database) -> None:
         self.db = db
 
     def seed(self, user_id: str, registry: ToolRegistry) -> None:
-        self.db.seed_permissions(user_id, registry.names())
+        if user_id == "demo-user":
+            self.db.seed_permissions(user_id, sorted(set(registry.names()) & DEMO_PREGRANTED_TOOLS))
 
     def ensure(self, user_id: str, registry: ToolRegistry) -> None:
-        self.seed(user_id, registry)
+        # Reading permissions never grants new capabilities.
+        return None
 
     def is_granted(self, user_id: str, tool_name: str, registry: ToolRegistry) -> bool:
         self.ensure(user_id, registry)
@@ -55,8 +114,7 @@ class PermissionStore:
     def list(self, user_id: str, registry: ToolRegistry) -> list[dict[str, Any]]:
         self.ensure(user_id, registry)
         grants = {
-            row["tool_name"]: bool(row["granted"])
-            for row in self.db.list_permissions(user_id)
+            row["tool_name"]: bool(row["granted"]) for row in self.db.list_permissions(user_id)
         }
         result: list[dict[str, Any]] = []
         for tool in registry.list():
@@ -82,7 +140,11 @@ class PermissionGateway:
         instruction: str,
         arguments: dict[str, Any],
         role: str = "user",
+        purpose: str = "execution",
     ) -> GatewayDecision:
+        manifest = self.registry.get(tool_name).metadata
+        if manifest.internal_only and purpose not in manifest.allowed_purposes:
+            return GatewayDecision(outcome="deny", reason="该工具仅供已记录动作的内部补偿使用。")
         if scan_injection(instruction, arguments):
             return GatewayDecision(
                 outcome="deny",

@@ -32,7 +32,7 @@ describe('describeError (UX-12 / UX-19)', () => {
   it('closes the dialog for terminal 422 / 400 errors', () => {
     const failed = describeError(apiError(422, '工具执行失败：余额不足'), 'confirmation');
     expect(failed.action).toBe('refresh');
-    expect(failed.message).toContain('操作未执行');
+    expect(failed.message).toContain('核对步骤记录');
 
     const duplicate = describeError(apiError(400, '确认请求已处理：expired'), 'confirmation');
     expect(duplicate.action).toBe('refresh');
@@ -46,7 +46,7 @@ describe('describeError (UX-12 / UX-19)', () => {
 
     const offline = describeError({ status: 0, message: '无法连接后端服务' }, 'run');
     expect(offline.action).toBe('retry');
-    expect(offline.message).toContain('无法连接');
+    expect(offline.message).toContain('执行结果尚未确认');
   });
 
   it('classifies terminal vs recoverable confirmation errors', () => {
@@ -55,5 +55,14 @@ describe('describeError (UX-12 / UX-19)', () => {
     expect(isTerminalConfirmationError(apiError(422, 'failed'))).toBe(true);
     expect(isTerminalConfirmationError(apiError(403, 'otp'))).toBe(false);
     expect(isTerminalConfirmationError(apiError(503, 'not ready'))).toBe(false);
+  });
+});
+
+describe('in-progress conflicts are recoverable', () => {
+  it.each(['ACTION_IN_PROGRESS', 'IDEMPOTENCY_IN_PROGRESS'])('keeps the original operation for %s', (code) => {
+    const error = apiError(409, 'processing', code);
+    expect(describeError(error, 'confirmation').action).toBe('retry');
+    expect(isTerminalConfirmationError(error)).toBe(false);
+    expect(isConfirmationExpiredError(error)).toBe(false);
   });
 });

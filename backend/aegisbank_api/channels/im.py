@@ -1,4 +1,4 @@
-﻿"""IM channel adapter: a thin, governed entry point for external messages.
+"""IM channel adapter: a thin, governed entry point for external messages.
 
 The adapter never plans, authorizes or executes a tool on its own. It parses an
 explicit confirmation command or forwards free-form text to the existing
@@ -17,8 +17,8 @@ Every inbound message is audited as ``im_message_executed`` (with the resulting
 status) or ``im_message_rejected`` (with the error reason). When the caller
 supplies ``message_id`` the first :class:`ImReply` is cached in ``im_messages``
 and replayed verbatim, so an IM platform retrying a delivery never triggers a
-second financial action. Idempotency is keyed on ``message_id`` only: to retry
-a failed confirmation, send a new message id.
+second financial action. Idempotency is scoped by channel, sender and message ID,
+with a content hash. To retry a failed confirmation, send a new message ID.
 """
 
 from __future__ import annotations
@@ -31,8 +31,9 @@ from typing import Any, Literal
 from ..db import utc_now
 from ..scheduler import ExecutionFailedError, IntentError, ReauthError
 from ..services import CoreServices
-from ..trust.action_envelope import EnvelopeError
+from ..trust.action_envelope import EnvelopeError, canonical_hash
 from ..trust.evidence import evidence_payload, policy_decision_evidence
+from ..trust.idempotency import IdempotencyKeyReused
 
 DEMO_USER = "demo-user"
 CHANNELS: tuple[str, ...] = ("im", "cli", "webhook")
@@ -47,6 +48,11 @@ CONFIRM_PATTERN = re.compile(
 )
 
 IM_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS im_actions (
+    action_id TEXT PRIMARY KEY,
+    channel TEXT NOT NULL,
+    sender_id TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS im_messages (
     message_id TEXT PRIMARY KEY,
     channel TEXT NOT NULL,
@@ -78,13 +84,12 @@ class ImMessage:
     sender_id: str
     text: str
     message_id: str | None = None
+    role: str = "user"
 
     def __post_init__(self) -> None:
         channel = str(self.channel or "").strip().lower()
         if channel not in CHANNELS:
-            raise ValueError(
-                f"不支持的 IM 渠道：{self.channel}（可选：{' / '.join(CHANNELS)}）。"
-            )
+            raise ValueError(f"不支持的 IM 渠道：{self.channel}（可选：{' / '.join(CHANNELS)}）。")
         sender_id = str(self.sender_id or "").strip()
         if not sender_id:
             raise ValueError("sender_id 不能为空。")
@@ -147,8 +152,26 @@ class ImChannel:
             raise RuntimeError("IM 适配器尚未绑定 CoreServices。")
         if not isinstance(message, ImMessage):
             raise TypeError("message 必须是 ImMessage。")
+        bound.authz.require(message.role, "tool:execute")
+        with bound.db.action_lock(
+            "im:"
+            + self._cache_key(
+                message.channel,
+                message.sender_id,
+                message.message_id or canonical_hash(message.text),
+            )
+        ):
+            return self._handle_locked(bound, message)
+
+    def _handle_locked(self, bound: CoreServices, message: ImMessage) -> ImReply:
         if message.message_id:
-            cached = self.cached_reply(bound, message.message_id)
+            cached = self.cached_reply(
+                bound,
+                message.message_id,
+                channel=message.channel,
+                sender_id=message.sender_id,
+                text=message.text,
+            )
             if cached is not None:
                 return cached
         match = CONFIRM_PATTERN.match(message.text)
@@ -165,17 +188,31 @@ class ImChannel:
             self._store_reply(bound, message, reply)
         return reply
 
-    def cached_reply(self, services: CoreServices, message_id: str) -> ImReply | None:
+    @staticmethod
+    def _cache_key(channel: str, sender_id: str, message_id: str) -> str:
+        return canonical_hash([channel, sender_id, message_id])
+
+    def cached_reply(
+        self,
+        services: CoreServices,
+        message_id: str,
+        *,
+        channel: str = "im",
+        sender_id: str = DEMO_USER,
+        text: str | None = None,
+    ) -> ImReply | None:
         if not message_id:
             return None
         self._ensure_schema(services)
         with services.db.transaction() as conn:
             row = conn.execute(
-                "SELECT reply_json FROM im_messages WHERE message_id = ?",
-                (message_id,),
+                "SELECT reply_json, text FROM im_messages WHERE message_id = ?",
+                (self._cache_key(channel, sender_id, message_id),),
             ).fetchone()
         if row is None or not row["reply_json"]:
             return None
+        if text is not None and row["text"] != canonical_hash(text):
+            raise IdempotencyKeyReused("相同通道和发送者的 message_id 不能携带不同内容。")
         try:
             payload = json.loads(row["reply_json"])
         except ValueError:
@@ -188,7 +225,7 @@ class ImChannel:
             result = services.scheduler.run(
                 user_id=DEMO_USER,
                 instruction=message.text,
-                role="user",
+                role=message.role,
             )
         except (IntentError, ExecutionFailedError) as exc:
             return self._reject(services, message, exc, stage="run")
@@ -202,19 +239,32 @@ class ImChannel:
         action_id: str,
         otp: str | None,
     ) -> ImReply:
+        with services.db.transaction() as conn:
+            owner = conn.execute(
+                "SELECT channel, sender_id FROM im_actions WHERE action_id = ?", (action_id,)
+            ).fetchone()
+        if owner is None or (owner["channel"], owner["sender_id"]) != (
+            message.channel,
+            message.sender_id,
+        ):
+            return self._reject(
+                services,
+                message,
+                IntentError("确认动作不属于该通道发送者。"),
+                stage="confirm",
+                action_id=action_id,
+            )
         try:
             result = services.scheduler.confirm(
                 user_id=DEMO_USER,
                 action_id=action_id,
                 approved=True,
                 reauth_token=otp,
-                role="user",
+                role=message.role,
                 mfa_provider=None,
             )
         except (ReauthError, IntentError, ExecutionFailedError, EnvelopeError) as exc:
-            return self._reject(
-                services, message, exc, stage="confirm", action_id=action_id
-            )
+            return self._reject(services, message, exc, stage="confirm", action_id=action_id)
         return self._accept(services, message, result)
 
     def _accept(
@@ -223,6 +273,13 @@ class ImChannel:
         status = str(result.get("status") or "unknown")
         raw_confirmation = result.get("confirmation")
         confirmation = raw_confirmation if isinstance(raw_confirmation, dict) else None
+        if confirmation and confirmation.get("id"):
+            with services.db.transaction() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO im_actions (action_id, channel, sender_id) "
+                    "VALUES (?, ?, ?)",
+                    (confirmation["id"], message.channel, message.sender_id),
+                )
         reply = ImReply(
             text=self._render_text(
                 status,
@@ -296,9 +353,7 @@ class ImChannel:
         return reply
 
     # ---------- rendering ----------
-    def _render_text(
-        self, status: str, result: dict[str, Any], *, demo_otp: str
-    ) -> str:
+    def _render_text(self, status: str, result: dict[str, Any], *, demo_otp: str) -> str:
         reason = str(result.get("reason") or "").strip()
         if status == "completed":
             lines = ["✅ 已完成。"]
@@ -316,12 +371,8 @@ class ImChannel:
             if reason:
                 lines.append(f"原因：{reason}")
             if requires_reauth:
-                lines.append(
-                    f"请在有效期内回复：确认 {action_id} 验证码 <6 位动态验证码>"
-                )
-                lines.append(
-                    f"本地演示验证码：{demo_otp}（生产环境须接入银行真实 MFA）。"
-                )
+                lines.append(f"请在有效期内回复：确认 {action_id} 验证码 <6 位动态验证码>")
+                lines.append(f"本地演示验证码：{demo_otp}（生产环境须接入银行真实 MFA）。")
             else:
                 lines.append(f"请在有效期内回复：确认 {action_id}")
             return "\n".join(lines)
@@ -376,26 +427,30 @@ class ImChannel:
         services.require_audit().record(
             event=event,
             user_id=DEMO_USER,
-            instruction=message.text,
+            instruction=self._redact(message.text),
             dag_path=f"im:{message.channel}",
             tool_name="im_channel",
             arguments={
                 "channel": message.channel,
                 "sender_id": message.sender_id,
                 "message_id": message.message_id,
-                "text": message.text,
+                "text": self._redact(message.text),
             },
             result=result,
             confirmation_state=_CONFIRMATION_STATES.get(status, status),
             risk_level=risk_level,
             evidence=evidence_payload(
-                policy_decision_evidence(
-                    True, "IM 渠道消息复用统一 Planner / 权限网关 / 审计链"
-                )
+                policy_decision_evidence(True, "IM 渠道消息复用统一 Planner / 权限网关 / 审计链")
             ),
         )
 
     # ---------- idempotency cache ----------
+    @staticmethod
+    def _redact(text: str) -> str:
+        if CONFIRM_PATTERN.match(text):
+            return re.sub(r"\b\d{6}\b", "[REDACTED]", text)
+        return text
+
     def _ensure_schema(self, services: CoreServices) -> None:
         path = str(services.db.path)
         if self._schema_path == path:
@@ -404,9 +459,7 @@ class ImChannel:
             conn.executescript(IM_SCHEMA_SQL)
         self._schema_path = path
 
-    def _store_reply(
-        self, services: CoreServices, message: ImMessage, reply: ImReply
-    ) -> None:
+    def _store_reply(self, services: CoreServices, message: ImMessage, reply: ImReply) -> None:
         if not message.message_id:
             return
         self._ensure_schema(services)
@@ -418,10 +471,10 @@ class ImChannel:
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    message.message_id,
+                    self._cache_key(message.channel, message.sender_id, message.message_id),
                     message.channel,
                     message.sender_id,
-                    message.text,
+                    canonical_hash(message.text),
                     json.dumps(reply.as_dict(), ensure_ascii=False, sort_keys=True),
                     utc_now(),
                 ),

@@ -11,7 +11,7 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..banking.repository import to_cents, to_cny
@@ -1225,64 +1225,89 @@ def _route_context(user_id: str, dag_path: str) -> ExecutionContext:
 
 def router(services: CoreServices) -> APIRouter:
     api = APIRouter(tags=["bills"])
-    report_tool = BillReportTool(services)
-    anomaly_tool = DetectBillAnomaliesTool(services)
-    charges_tool = IdentifySubscriptionChargesTool(services)
-    reminder_tool = ListRenewalRemindersTool(services)
+
+    def read_query(request: Request, tool_name: str, arguments: dict[str, Any], user_id: str):
+        request.app.state.readiness.require_ready()
+        role = services.authz.normalize(
+            request.headers.get("X-Aegis-Role"), default=services.settings.authz_default_role
+        )
+        response = services.scheduler.run(
+            user_id=user_id,
+            instruction="账单场景只读查询",
+            tool_name=tool_name,
+            arguments=arguments,
+            role=role,
+        )
+        if response.get("status") != "completed":
+            code = 403 if response.get("status") == "blocked" else 422
+            raise HTTPException(status_code=code, detail=response.get("reason") or "查询失败。")
+        return response["results"][0]["data"]
 
     @api.get("/api/bills/report")
     def bill_report_route(
+        request: Request,
         account_id: str = Query(default=DEFAULT_ACCOUNT, max_length=32),
         period: str = Query(default="month", max_length=16),
         month: str | None = Query(default=None, max_length=7),
         user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
         try:
-            result = report_tool.execute(
+            result = read_query(
+                request,
+                "bill_report",
                 {"account_id": account_id, "period": period, "month": month},
-                _route_context(user_id, "api:bills/report"),
+                user_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return result.data
+        return result
 
     @api.get("/api/bills/anomalies")
     def bill_anomalies_route(
+        request: Request,
         account_id: str = Query(default=DEFAULT_ACCOUNT, max_length=32),
         period: str = Query(default="month", max_length=16),
         month: str | None = Query(default=None, max_length=7),
         user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
         try:
-            result = anomaly_tool.execute(
+            result = read_query(
+                request,
+                "detect_bill_anomalies",
                 {"account_id": account_id, "period": period, "month": month},
-                _route_context(user_id, "api:bills/anomalies"),
+                user_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return result.data
+        return result
 
     @api.get("/api/subscriptions/charges")
     def subscription_charges_route(
+        request: Request,
         account_id: str | None = Query(default=None, max_length=32),
         user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
-        result = charges_tool.execute(
+        result = read_query(
+            request,
+            "identify_subscription_charges",
             {"account_id": account_id},
-            _route_context(user_id, "api:subscriptions/charges"),
+            user_id,
         )
-        return result.data
+        return result
 
     @api.get("/api/subscriptions/reminders")
     def renewal_reminders_route(
+        request: Request,
         cycle: str | None = Query(default=None, max_length=16),
         days_ahead: int = Query(default=30, ge=0, le=365),
         user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
-        result = reminder_tool.execute(
+        result = read_query(
+            request,
+            "list_renewal_reminders",
             {"cycle": cycle, "days_ahead": days_ahead},
-            _route_context(user_id, "api:subscriptions/reminders"),
+            user_id,
         )
-        return result.data
+        return result
 
     return api

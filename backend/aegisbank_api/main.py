@@ -6,8 +6,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from .audit import AuditService
 from .banking.repository import BankingRepository
@@ -45,6 +47,7 @@ from .services import CoreServices
 from .tools.finance import build_registry
 from .trust.action_envelope import EnvelopeError
 from .trust.authz import AuthzError, AuthzService
+from .trust.clarification import ClarificationError, ClarificationStore
 from .trust.idempotency import (
     IdempotencyError,
     IdempotencyOutcome,
@@ -73,7 +76,7 @@ def create_app(
     # Stage 2A runtime capabilities (multi-role, MFA, guarded execution).
     authz = AuthzService()
     mfa = MfaService([OtpProvider(config.demo_otp)], default_provider=config.mfa_default_provider)
-    executor = ToolExecutor()
+    executor = ToolExecutor(db=db)
     compensation = CompensationRegistry()
     services.authz = authz
     services.mfa = mfa
@@ -130,6 +133,8 @@ def create_app(
         overrides=readiness_overrides,
     )
     idempotency = IdempotencyStore(db)
+    clarifications = ClarificationStore(db)
+    services.extras["readiness"] = readiness
 
     def ensure_ready() -> None:
         try:
@@ -165,9 +170,7 @@ def create_app(
         if key:
             idempotency.release(scope=scope, key=key)
 
-    def complete_idempotent(
-        key: str | None, *, scope: str, response: dict[str, Any]
-    ) -> None:
+    def complete_idempotent(key: str | None, *, scope: str, response: dict[str, Any]) -> None:
         if key:
             idempotency.complete(scope=scope, key=key, response=response)
 
@@ -197,6 +200,54 @@ def create_app(
     app.state.executor = executor
     app.state.compensation = compensation
     app.state.extension_modules = extension_modules
+
+    @app.exception_handler(EnvelopeError)
+    async def envelope_error(_request: Request, exc: EnvelopeError):
+        return JSONResponse(
+            status_code=409, content={"detail": {"code": exc.code, "message": str(exc)}}
+        )
+
+    @app.exception_handler(AuthzError)
+    async def authz_error(_request: Request, exc: AuthzError):
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+    @app.exception_handler(NotReadyError)
+    async def not_ready_error(_request: Request, exc: NotReadyError):
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.exception_handler(IdempotencyError)
+    async def idempotency_error(_request: Request, exc: IdempotencyError):
+        return JSONResponse(
+            status_code=409, content={"detail": {"code": exc.code, "message": str(exc)}}
+        )
+
+    @app.middleware("http")
+    async def protect_mutations(request: Request, call_next):
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            try:
+                await run_in_threadpool(readiness.require_ready)
+                role = authz.normalize(
+                    request.headers.get(ROLE_HEADER), default=config.authz_default_role
+                )
+                if request.url.path.endswith("/run-due") or "/channels/im/" in request.url.path:
+                    authz.require(role, "tool:execute")
+                if request.url.path.endswith("/sandbox/demo/run") and not (
+                    authz.allowed(role, "tool:execute") or authz.allowed(role, "ops:manage")
+                ):
+                    authz.require(role, "tool:execute")
+                chunks = []
+                size = 0
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > 128_000:
+                        return JSONResponse(status_code=413, content={"detail": "请求体超出上限。"})
+                    chunks.append(chunk)
+                request._body = b"".join(chunks)
+            except NotReadyError as exc:
+                return JSONResponse(status_code=503, content={"detail": str(exc)})
+            except AuthzError as exc:
+                return JSONResponse(status_code=403, content={"detail": str(exc)})
+        return await call_next(request)
 
     @app.get(f"{config.api_prefix}/health")
     def health() -> dict[str, Any]:
@@ -291,19 +342,37 @@ def create_app(
         request_hash = IdempotencyStore.request_hash(
             {"endpoint": "agent.run", "body": body.model_dump(), "role": role}
         )
-        outcome = begin_idempotent(
-            idempotency_key, scope=scope, request_hash=request_hash
-        )
+        outcome = begin_idempotent(idempotency_key, scope=scope, request_hash=request_hash)
         if outcome is not None and outcome.state == "replay":
             return outcome.response or {}
         try:
+            instruction = body.instruction
+            if body.clarification_run_id:
+                require_capability(role, "tool:execute")
+                if body.tool_name or body.arguments:
+                    raise ClarificationError("补充上下文时请仅提供补充文本。")
+                instruction = clarifications.consume(
+                    body.clarification_run_id,
+                    user_id=body.user_id,
+                    role=role,
+                    answer=body.instruction,
+                )
             result = scheduler.run(
                 user_id=body.user_id,
-                instruction=body.instruction,
+                instruction=instruction,
                 tool_name=body.tool_name,
                 arguments=body.arguments,
                 role=role,
             )
+        except ClarificationError as exc:
+            release_idempotent(idempotency_key, scope=scope)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "CLARIFICATION_UNAVAILABLE",
+                    "message": str(exc),
+                },
+            ) from exc
         except IntentError as exc:
             release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -323,6 +392,7 @@ def create_app(
         ensure_ready()
         role = resolve_role(x_aegis_role)
         scope = "confirmation"
+        require_capability(role, "tool:execute")
         request_hash = IdempotencyStore.request_hash(
             {
                 "endpoint": "confirmation",
@@ -332,9 +402,7 @@ def create_app(
                 "role": role,
             }
         )
-        outcome = begin_idempotent(
-            idempotency_key, scope=scope, request_hash=request_hash
-        )
+        outcome = begin_idempotent(idempotency_key, scope=scope, request_hash=request_hash)
         if outcome is not None and outcome.state == "replay":
             return outcome.response or {}
         try:
@@ -408,7 +476,7 @@ def create_app(
         x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
     ) -> dict[str, Any]:
         role = resolve_role(x_aegis_role)
-        require_capability(role, "trust:inspect")
+        require_capability(role, "ops:manage")
         try:
             return scheduler.reconcile(
                 action_id=action_id,
@@ -422,10 +490,11 @@ def create_app(
     @app.get(f"{config.api_prefix}/audit")
     def list_audit(
         limit: int = Query(default=50, ge=1, le=200),
+        run_id: str | None = Query(default=None, max_length=128),
         x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
     ) -> dict[str, Any]:
         require_capability(resolve_role(x_aegis_role), "audit:read")
-        entries = audit.list(limit=limit)
+        entries = audit.list(limit=limit, run_id=run_id)
         return {"entries": entries, "count": len(entries)}
 
     @app.get(f"{config.api_prefix}/audit/verify")

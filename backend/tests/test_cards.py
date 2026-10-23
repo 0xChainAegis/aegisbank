@@ -44,9 +44,7 @@ def test_apply_virtual_card_is_two_step_dag_and_issues_real_card(tmp_path):
         ]
         assert steps[0]["arguments"]["requested_limit_cny"] == 3000.0
         assert steps[1]["depends_on"] == ["step-1"]
-        assert steps[1]["arguments"]["application_id"] == (
-            "${steps.step-1.data.application_id}"
-        )
+        assert steps[1]["arguments"]["application_id"] == ("${steps.step-1.data.application_id}")
 
         confirmed = confirm(client, body["confirmation"]["id"], approved=True)
         assert confirmed.status_code == 200, confirmed.text
@@ -106,9 +104,7 @@ def test_reset_card_password_red_with_otp_and_audit_has_no_plaintext(tmp_path):
         assert "password" not in {key for key in data if key == "password"}
 
         entries = client.get("/api/audit").json()["entries"]
-        reset_entries = [
-            item for item in entries if item["tool_name"] == "reset_card_password"
-        ]
+        reset_entries = [item for item in entries if item["tool_name"] == "reset_card_password"]
         assert reset_entries
         assert {item["event"] for item in reset_entries} >= {
             "confirmation_requested",
@@ -121,7 +117,7 @@ def test_reset_card_password_red_with_otp_and_audit_has_no_plaintext(tmp_path):
         assert client.get("/api/audit/verify").json()["valid"] is True
 
 
-def test_unlock_transaction_limit_is_yellow_and_restores_default(tmp_path):
+def test_unlock_transaction_limit_is_red_and_restores_default(tmp_path):
     with make_client(tmp_path) as client:
         setup = run_agent(
             client,
@@ -136,12 +132,14 @@ def test_unlock_transaction_limit_is_yellow_and_restores_default(tmp_path):
 
         body = run_agent(client, instruction="解锁交易限额")
         assert body["status"] == "awaiting_confirmation"
-        assert body["risk_level"] == "yellow"
-        assert body["confirmation"]["requires_reauth"] is False
+        assert body["risk_level"] == "red"
+        assert body["confirmation"]["requires_reauth"] is True
         assert body["plan"]["steps"][0]["tool_name"] == "unlock_transaction_limit"
         assert body["plan"]["steps"][0]["arguments"]["card_id"] == "CARD-8821"
 
-        confirmed = confirm(client, body["confirmation"]["id"], approved=True)
+        confirmed = confirm(
+            client, body["confirmation"]["id"], approved=True, reauth_token="246810"
+        )
         assert confirmed.status_code == 200, confirmed.text
         result = confirmed.json()
         assert result["status"] == "completed"
@@ -189,9 +187,7 @@ def test_issue_virtual_card_rejects_invalid_application_id(tmp_path):
 
 def test_revoked_permission_blocks_virtual_card_application(tmp_path):
     with make_client(tmp_path) as client:
-        update = client.put(
-            "/api/permissions/apply_virtual_card", json={"granted": False}
-        )
+        update = client.put("/api/permissions/apply_virtual_card", json={"granted": False})
         assert update.status_code == 200
 
         body = run_agent(client, instruction="申请虚拟卡")
@@ -211,9 +207,7 @@ def test_cards_applications_route_returns_simulated_facts(tmp_path):
         assert body["count"] == len(body["applications"])
         assert body["count"] >= 1
 
-        seeded = next(
-            item for item in body["applications"] if item["application_id"] == "APP-8001"
-        )
+        seeded = next(item for item in body["applications"] if item["application_id"] == "APP-8001")
         assert seeded["kind"] == "virtual"
         assert seeded["status"] == "issued"
         assert seeded["card_id"] == "CARD-8821"

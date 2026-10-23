@@ -53,7 +53,7 @@ export default function AuditPage({
     const keyword = query.trim().toLowerCase();
     if (!keyword) return audit;
     return audit.filter((entry) =>
-      [entry.instruction, entry.tool_name, entry.event, entry.dag_path, entry.entry_hash]
+      [entry.run_id, entry.instruction, entry.tool_name, entry.event, entry.dag_path, entry.entry_hash]
         .join(' ')
         .toLowerCase()
         .includes(keyword),

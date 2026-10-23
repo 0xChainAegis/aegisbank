@@ -34,7 +34,7 @@ export function isHighRisk(risk: RiskLevel): boolean {
 }
 
 export function formatCny(value: unknown): string {
-  const amount = Number(value);
+  const amount = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
   if (!Number.isFinite(amount)) return '—';
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',

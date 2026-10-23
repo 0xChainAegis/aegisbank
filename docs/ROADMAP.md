@@ -1,5 +1,7 @@
 # AegisBank 产品路线图
 
+
+> v1.5 安全复审：已修复记录见 [REMEDIATION-PLAN-2026-10-23.md](REMEDIATION-PLAN-2026-10-23.md)。既往阶段记录保留当时快照，当前状态以本轮验收为准。已支持 10 分钟、绑定用户与角色、单次消费的澄清续问；通用指代与长会话仍待完善。
 > 总规划与阶段详细设计见 [MASTER-PLAN.md](MASTER-PLAN.md)。
 > 最近更新：2026-10-23（阶段 2.5 第一轮完成：36 项 UX 缺陷报告与批 1/2/3 前端修复已合入 `25027d8`；阶段 3 交付材料已产出，视频待人工录制）。
 
@@ -18,12 +20,12 @@
 
 | 指标 | 数值 | 来源 |
 |---|---|---|
-| 后端测试 | **144 项** pytest 全部通过（15 个测试文件；2A 新增 51 条 + 回归 8 条） | `cd backend && uv run pytest -p no:warnings` |
+| 后端测试 | **187 项** pytest 全部通过（16 个测试文件；2A 新增 51 条 + 回归 8 条） | `cd backend && uv run pytest -p no:warnings` |
 | 其中信任层 | **17 条** | `backend/tests/test_trust.py` |
 | 其中 2A | **51 条**（authz 9 / breaker 7 / compensation 10 / im 7 / mfa 10 / sandbox 8） | `backend/tests/test_{authz,breaker,compensation,im_channel,mfa,sandbox}.py` |
-| 前端测试 | **38 项** Vitest 全部通过（5 个测试文件；阶段 2.5 新增 16 条） | `frontend/src/**/*.test.ts` |
-| 银行工具 | **48 个**（核心 9 + 场景 25 + 2A 扩展 14；compensable=15） | `GET /api/tools` |
-| 补偿规格 | **27 条**（15 可补偿 + 12 不可逆） | `GET /api/compensation/specs` |
+| 前端测试 | **53 项** Vitest 全部通过（7 个测试文件；阶段 2.5 新增 16 条） | `frontend/src/**/*.test.ts` |
+| 银行工具 | **50 个**（核心 10 + 场景 26 + 2A 扩展 14；compensable=15） | `GET /api/tools` |
+| 补偿规格 | **28 条**（15 可补偿 + 13 不可逆） | `GET /api/compensation/specs` |
 | HTTP 接口 | **49 个**（2A 新增 20 个） | `create_app().openapi()` paths |
 | 六场景覆盖 | **6/6** | [MASTER-PLAN.md](MASTER-PLAN.md) §4.6 |
 
@@ -149,3 +151,12 @@
 | 部署说明 | ✅ 完成 | `deliverables/06-部署说明.md` |
 | 测试用例与复现 | ✅ 完成 | `deliverables/07-测试与复现.md` |
 | 最终截图与演示数据 | ⏳ 界面已按阶段 2.5 修复，截图待第三轮统一更新 | 截图目录 / `scripts/seed-demo.sh` |
+
+
+## 2026-10-23 安全复审修复批次
+
+本轮在 Linux 主线工作分支完成代码修复：补偿内部化、动作并发占有、账本/成功审计/journal 原子性、累计风险与定时授权、确认归属与能力、MFA 熔断、IM 命名空间、提交截止、金额/卡片/预算/持仓不变量、输出契约、前端幂等恢复与 fail closed、限时单次澄清续问。新增后端 43 项安全回归，前端新增接口及 React/jsdom 测试；总计后端 187 / 前端 53，六场景 29 项。
+
+当前清单为 50 个工具（核心 10 / 场景 26 / 扩展 14）、28 条补偿规格（15 可补偿 / 13 不可逆）、49 个 HTTP 操作。已升级 Vitest 与 certifi，依赖扫描结果见 [修复记录](REMEDIATION-PLAN-2026-10-23.md)。本批次的提交与发布记录以 Git 历史为准。
+
+比赛仍需完成：≤5 分钟演示视频、实际答辩时长核验和截图更新；订阅纯查询的黄/绿口径仍需组委会解释。生产化与待验证风险单列，不以本轮回归代替真实认证、OS 隔离或生产安全验收。

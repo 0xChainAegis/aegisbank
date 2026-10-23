@@ -38,6 +38,8 @@ class ToolMetadata:
     output_schema: dict[str, Any] = field(default_factory=dict)
     compensable: bool = False
     compensation_tool: str | None = None
+    internal_only: bool = False
+    allowed_purposes: tuple[str, ...] = ("compensation",)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +52,7 @@ class ToolMetadata:
             "output_schema": self.output_schema,
             "compensable": self.compensable,
             "compensation_tool": self.compensation_tool,
+            "internal_only": self.internal_only,
         }
 
 
@@ -59,6 +62,9 @@ class ExecutionContext:
     instruction: str
     run_id: str
     dag_path: str
+    approved_risk: RiskLevel = RiskLevel.GREEN
+    reauth_verified: bool = False
+    purpose: str = "execution"
 
 
 @dataclass(frozen=True, slots=True)

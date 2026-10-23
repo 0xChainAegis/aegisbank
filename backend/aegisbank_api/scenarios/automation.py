@@ -8,7 +8,7 @@
   ``POST /api/automation/run-due`` 通过调度器调用 ``run_due_tasks`` 工具完成“时间快进”；
 - 到期执行前重新调用 ``gateway.evaluate`` 复检权限，审计 event 为
   ``scheduled_task_executed`` 且 result 内含 ``trigger_source="scheduled"``；
-- 同一任务先以条件 UPDATE 原子抢占（pending → done）再执行，重复调用不会重复扣款；
+- 任务在统一事务中完成领取、子工具执行与 done 提交，重复调用不会重复扣款；
 - 后台线程只在 ``settings.automation_enabled`` 为真时启动，测试默认关闭。
 """
 
@@ -28,6 +28,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..banking.repository import to_cents, to_cny
+from ..compensation import CompensationSpec
 from ..db import Database
 from ..domain import ExecutionContext, RiskLevel, ToolMetadata, ToolResult
 from ..planning.contracts import ExecutionPlan, PlanStep
@@ -35,6 +36,7 @@ from ..planning.intents import IntentContext, extract_amounts
 from ..registry import BaseTool
 from ..risk_rules import RiskContext, RiskGuess
 from ..services import CoreServices
+from ..trust.action_envelope import canonical_hash
 from ..trust.readiness import NotReadyError
 
 NAME = "automation"
@@ -67,6 +69,15 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_user
     ON scheduled_tasks(user_id, status, run_at);
+
+CREATE TABLE IF NOT EXISTS scheduled_authorizations (
+    task_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    source_action_id TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    risk_level TEXT NOT NULL,
+    mfa_verified INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS budget_goals (
     goal_id TEXT PRIMARY KEY,
@@ -178,9 +189,7 @@ def _safe_date(year: int, month: int, day: int) -> date:
 
 
 def _future_morning(moment: date, now: datetime) -> datetime:
-    target = datetime(
-        moment.year, moment.month, moment.day, DEFAULT_RUN_HOUR_UTC, tzinfo=UTC
-    )
+    target = datetime(moment.year, moment.month, moment.day, DEFAULT_RUN_HOUR_UTC, tzinfo=UTC)
     if target <= now:
         raise ValueError("执行时间必须晚于当前时间，请调整时间。")
     return target
@@ -224,9 +233,7 @@ def _next_birthday(birthday: date, today: date) -> date:
 
 
 def _at_morning_utc(moment: date) -> datetime:
-    return datetime(
-        moment.year, moment.month, moment.day, DEFAULT_RUN_HOUR_UTC, tzinfo=UTC
-    )
+    return datetime(moment.year, moment.month, moment.day, DEFAULT_RUN_HOUR_UTC, tzinfo=UTC)
 
 
 def _resolve_run_at(instruction: str, now: datetime) -> tuple[datetime, str]:
@@ -359,8 +366,7 @@ def _mentioned_contact(
         item
         for item in contacts
         if any(
-            token and str(token) in instruction
-            for token in (item.get("name"), item.get("alias"))
+            token and str(token) in instruction for token in (item.get("name"), item.get("alias"))
         )
     ]
     if not hits:
@@ -420,9 +426,7 @@ def _order_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-def _task_rows(
-    db: Database, user_id: str, status: str | None = None
-) -> list[dict[str, Any]]:
+def _task_rows(db: Database, user_id: str, status: str | None = None) -> list[dict[str, Any]]:
     sql = "SELECT * FROM scheduled_tasks WHERE user_id = ?"
     params: list[Any] = [user_id]
     if status and status != "all":
@@ -495,6 +499,26 @@ def seed(db: Database, user_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _store_task_authorization(
+    conn, task_id: str, payload: dict[str, Any], context: ExecutionContext
+) -> None:
+    if context.approved_risk is RiskLevel.GREEN:
+        raise PermissionError("创建定时写任务必须具有用户明确确认的授权。")
+    conn.execute(
+        "INSERT INTO scheduled_authorizations "
+        "(task_id,user_id,source_action_id,payload_hash,risk_level,mfa_verified) "
+        "VALUES (?,?,?,?,?,?)",
+        (
+            task_id,
+            context.user_id,
+            context.run_id,
+            canonical_hash(payload),
+            context.approved_risk.value,
+            int(context.reauth_verified),
+        ),
+    )
+
+
 class QueryContactBirthdayArgs(BaseModel):
     to_name: str | None = Field(default=None, max_length=32)
     to_phone: str | None = Field(default=None, max_length=11)
@@ -525,7 +549,7 @@ class UnlockBudgetFundsArgs(BaseModel):
 
 
 class GiftOrderArgs(BaseModel):
-    goal_id: str | None = Field(default=None, max_length=64)
+    goal_id: str = Field(min_length=3, max_length=64)
     birthday: str | None = Field(default=None, max_length=64)
     date: str | None = Field(default=None, max_length=64)
     note: str = Field(default="", max_length=120)
@@ -612,16 +636,12 @@ class QueryContactBirthdayTool(BaseTool):
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
         args = QueryContactBirthdayArgs.model_validate(arguments)
         token = args.to_name or args.to_phone or ""
-        contact, error = _resolve_contact(
-            self.services.db, context.user_id, token
-        )
+        contact, error = _resolve_contact(self.services.db, context.user_id, token)
         if error is not None or contact is None:
             raise ValueError(error or "未找到联系人")
         birthday_text = str(contact.get("birthday") or "").strip()
         if not birthday_text:
-            raise ValueError(
-                f"联系人 {contact.get('name')} 未登记生日，请先在联系人簿补充生日。"
-            )
+            raise ValueError(f"联系人 {contact.get('name')} 未登记生日，请先在联系人簿补充生日。")
         birthday = _parse_date(birthday_text)
         today = datetime.now(UTC).date()
         next_birthday = _next_birthday(birthday, today)
@@ -712,8 +732,7 @@ class LockBudgetFundsTool(BaseTool):
         return ToolResult(
             tool_name=self.metadata.name,
             message=(
-                f"已锁定 {to_cny(amount_cents):.2f} 元预算资金（演示数据），"
-                f"目标编号 {goal_id}。"
+                f"已锁定 {to_cny(amount_cents):.2f} 元预算资金（演示数据），目标编号 {goal_id}。"
             ),
             data={
                 "goal_id": goal_id,
@@ -842,9 +861,7 @@ class _GiftOrderTool(BaseTool):
         if birthday_text is None and goal is not None:
             birthday_text = goal.get("deadline")
         if not birthday_text:
-            raise ValueError(
-                "缺少生日日期：请提供 birthday/date，或使用带 deadline 的预算目标。"
-            )
+            raise ValueError("缺少生日日期：请提供 birthday/date，或使用带 deadline 的预算目标。")
         birthday = _parse_date(str(birthday_text))
         due_at = birthday - timedelta(days=GIFT_LEAD_DAYS)
         amount_cents = to_cents(self.gift_amount_cny)
@@ -860,6 +877,13 @@ class _GiftOrderTool(BaseTool):
             "note": args.note,
         }
         with self.services.db.transaction() as conn:
+            reserved = conn.execute(
+                "SELECT COALESCE(SUM(amount_cents), 0) FROM gift_orders "
+                "WHERE goal_id = ? AND user_id = ? AND status = 'scheduled'",
+                (args.goal_id, context.user_id),
+            ).fetchone()[0]
+            if goal is None or int(reserved) + amount_cents > int(goal["locked_cents"]):
+                raise ValueError("礼物预约总额超过该目标剩余锁定预算，已拒绝。")
             conn.execute(
                 """
                 INSERT INTO gift_orders
@@ -882,6 +906,7 @@ class _GiftOrderTool(BaseTool):
                 payload=payload,
                 run_at=due_at.isoformat(),
             )
+            _store_task_authorization(conn, task_id, payload, context)
         label = "鲜花" if self.gift_kind == "flowers" else "蛋糕"
         return ToolResult(
             tool_name=self.metadata.name,
@@ -953,7 +978,7 @@ class ScheduleTransferTool(BaseTool):
         title="定时转账",
         description=(
             "创建一次性/每月/每年的定时转账任务；创建时不扣款，到期执行时复检权限后"
-            "完成模拟转账。单笔超过 5000 元会升级为红色强验证。"
+            "完成模拟转账。单笔超过 1000 元会升级为红色强验证，到期重新校验日累计。"
         ),
         risk_level=RiskLevel.YELLOW,
         permission="transfer:execute",
@@ -975,9 +1000,7 @@ class ScheduleTransferTool(BaseTool):
         to_account = args.to_account
         to_name = args.to_name
         if to_account is None:
-            contact, error = _resolve_contact(
-                self.services.db, context.user_id, to_name or ""
-            )
+            contact, error = _resolve_contact(self.services.db, context.user_id, to_name or "")
             if error is not None or contact is None:
                 raise ValueError(error or "未找到收款联系人")
             to_account = str(contact["account_id"])
@@ -1001,6 +1024,7 @@ class ScheduleTransferTool(BaseTool):
                 run_at=run_at_text,
                 recurrence=args.recurrence,
             )
+            _store_task_authorization(conn, task_id, payload, context)
         return ToolResult(
             tool_name=self.metadata.name,
             message=(
@@ -1080,6 +1104,13 @@ class CancelScheduledTaskTool(BaseTool):
                 "WHERE task_id = ? AND user_id = ? AND status = 'pending'",
                 (args.task_id, context.user_id),
             )
+            payload = json.loads(row["payload_json"])
+            if row["kind"] == "gift":
+                conn.execute(
+                    "UPDATE gift_orders SET status = 'cancelled' "
+                    "WHERE order_id = ? AND user_id = ? AND status = 'scheduled'",
+                    (payload["order_id"], context.user_id),
+                )
         return ToolResult(
             tool_name=self.metadata.name,
             message=f"已取消定时任务 {args.task_id}（演示数据）。",
@@ -1091,6 +1122,46 @@ class CancelScheduledTaskTool(BaseTool):
                 "simulated": SIMULATED,
             },
         )
+
+
+class ExecuteGiftArgs(BaseModel):
+    task_id: str = Field(min_length=3, max_length=64)
+
+
+class ExecuteGiftOrderTool(BaseTool):
+    metadata = ToolMetadata(
+        name="execute_gift_order",
+        title="执行已授权礼物订单",
+        description="内部到期消费节点。",
+        risk_level=RiskLevel.YELLOW,
+        permission="automation:manage",
+        internal_only=True,
+        allowed_purposes=("scheduled",),
+        input_schema=ExecuteGiftArgs.model_json_schema(),
+    )
+    arguments_model = ExecuteGiftArgs
+
+    def __init__(self, services: CoreServices) -> None:
+        self.services = services
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        if context.purpose != "scheduled":
+            raise PermissionError("只允许受已确认任务授权约束的到期执行。")
+        args = ExecuteGiftArgs.model_validate(arguments)
+        with self.services.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT * FROM scheduled_tasks WHERE task_id = ? AND user_id = ? "
+                "AND kind = 'gift' AND status = 'pending'",
+                (args.task_id, context.user_id),
+            ).fetchone()
+        if row is None:
+            raise ValueError("礼物到期任务不存在或已处理。")
+        task = dict(row)
+        payload = json.loads(task["payload_json"])
+        data = _execute_gift_task(
+            self.services, user_id=context.user_id, task=task, payload=payload
+        )
+        return ToolResult(self.metadata.name, "已完成受预算约束的模拟礼物消费。", data)
 
 
 class RunDueTasksTool(BaseTool):
@@ -1130,14 +1201,14 @@ class RunDueTasksTool(BaseTool):
 
 
 def _claim_task(db: Database, task_id: str, now_iso: str) -> bool:
-    """Atomically move pending → done so concurrent runners execute at most once."""
+    """The surrounding execution transaction owns the task until commit."""
     with db.transaction() as conn:
-        cursor = conn.execute(
-            "UPDATE scheduled_tasks SET status = 'done', last_run_at = ? "
-            "WHERE task_id = ? AND status = 'pending'",
-            (now_iso, task_id),
+        return (
+            conn.execute(
+                "SELECT 1 FROM scheduled_tasks WHERE task_id = ? AND status = 'pending'", (task_id,)
+            ).fetchone()
+            is not None
         )
-        return int(cursor.rowcount) == 1
 
 
 def _finish_task(
@@ -1246,15 +1317,19 @@ def _execute_transfer_task(
         arguments=payload,
         instruction=f"定时转账到期执行 {task_id}",
     )
-    transfer = services.repository.transfer(
-        user_id,
-        {
+    transfer = _execute_scheduled_tool(
+        services,
+        task=task,
+        payload=payload,
+        user_id=user_id,
+        tool_name="transfer",
+        arguments={
             "from_account": str(payload.get("from_account") or SELF_ACCOUNT),
             "to_account": str(payload["to_account"]),
             "amount_cny": float(payload["amount_cny"]),
             "note": f"定时转账 {task_id}：{payload.get('note') or ''}"[:120],
         },
-    )
+    )["data"]
     return {
         "task_id": task_id,
         "kind": "transfer",
@@ -1298,6 +1373,18 @@ def _execute_gift_task(
             amount_cents = int(order["amount_cents"])
         elif order_status == "scheduled":
             amount_cents = int(order["amount_cents"])
+            if not goal_id:
+                raise ValueError("旧礼物任务缺少预算授权，请取消并重新创建。")
+            goal = conn.execute(
+                "SELECT locked_cents, status FROM budget_goals WHERE goal_id = ? AND user_id = ?",
+                (goal_id, user_id),
+            ).fetchone()
+            if (
+                goal is None
+                or goal["status"] != "active"
+                or int(goal["locked_cents"]) < amount_cents
+            ):
+                raise ValueError("礼物消费超过目标的剩余锁定预算。")
             account = conn.execute(
                 "SELECT balance_cents FROM bank_accounts WHERE user_id = ? AND account_id = ?",
                 (user_id, SELF_ACCOUNT),
@@ -1309,10 +1396,26 @@ def _execute_gift_task(
                     f"账户余额不足：礼物 {to_cny(amount_cents):.2f} 元，"
                     f"当前余额 {to_cny(int(account['balance_cents'])):.2f} 元。"
                 )
-            conn.execute(
+            deducted = conn.execute(
                 "UPDATE bank_accounts SET balance_cents = balance_cents - ? "
-                "WHERE user_id = ? AND account_id = ?",
-                (amount_cents, user_id, SELF_ACCOUNT),
+                "WHERE user_id = ? AND account_id = ? AND balance_cents - available_cents >= ?",
+                (amount_cents, user_id, SELF_ACCOUNT, amount_cents),
+            ).rowcount
+            if deducted != 1:
+                raise ValueError("锁定资金与账户余额不一致，拒绝礼物扣款。")
+            conn.execute(
+                "INSERT INTO bank_transactions "
+                "(transaction_id,user_id,account_id,card_id,merchant,category,"
+                "amount_cents,occurred_at,status,note) VALUES (?,?,?,NULL,?,'gift',?,?,'posted',?)",
+                (
+                    f"TX-{order_id}",
+                    user_id,
+                    SELF_ACCOUNT,
+                    str(payload.get("gift_kind") or "gift"),
+                    -amount_cents,
+                    _iso_now(),
+                    f"模拟礼物订单 {order_id}",
+                ),
             )
             conn.execute(
                 "UPDATE gift_orders SET status = 'ordered' "
@@ -1340,9 +1443,77 @@ def _execute_gift_task(
     }
 
 
-def _next_occurrence(
-    run_at: datetime, recurrence: str, now: datetime
-) -> datetime | None:
+def _execute_scheduled_tool(
+    services: CoreServices,
+    *,
+    task: dict[str, Any],
+    payload: dict[str, Any],
+    user_id: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    with services.db.transaction() as conn:
+        mandate = conn.execute(
+            "SELECT * FROM scheduled_authorizations WHERE task_id = ? AND user_id = ?",
+            (task["task_id"], user_id),
+        ).fetchone()
+    if mandate is None or mandate["payload_hash"] != canonical_hash(payload):
+        raise PermissionError("任务缺少匹配的确认授权，拒绝执行；旧任务请取消后重新创建。")
+    source = services.db.get_pending(mandate["source_action_id"])
+    if source is None or source["user_id"] != user_id or source["state"] != "COMPLETED":
+        raise PermissionError("来源计划未完成或已撤销，拒绝执行定时任务。")
+    tool = services.require_registry().get(tool_name)
+    arguments = tool.validate_arguments(arguments)
+    assessment = services.scheduler.risk_engine.assess(
+        user_id=user_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        base_risk=tool.metadata.risk_level,
+        instruction=f"到期任务 {task['task_id']}",
+    )
+    decision = services.require_gateway().evaluate(
+        user_id=user_id,
+        tool_name=tool_name,
+        risk_level=assessment.level,
+        permission=tool.metadata.permission,
+        instruction=f"到期任务 {task['task_id']}",
+        arguments=arguments,
+        role="user",
+        purpose="scheduled",
+    )
+    if decision.denied or (decision.requires_reauth and not mandate["mfa_verified"]):
+        raise PermissionError("定时任务执行前的权限或强验证复检未通过。")
+    if assessment.level is RiskLevel.RED and mandate["risk_level"] != "red":
+        raise PermissionError("到期风险高于最初确认，请重新确认后再执行。")
+    context = ExecutionContext(
+        user_id=user_id,
+        instruction=f"执行已确认定时任务 {task['task_id']}",
+        run_id=mandate["source_action_id"],
+        dag_path=f"scheduled:{task['task_id']}:{tool_name}",
+        approved_risk=RiskLevel(mandate["risk_level"]),
+        reauth_verified=bool(mandate["mfa_verified"]),
+        purpose="scheduled",
+    )
+
+    def persist(result):
+        services.require_audit().record(
+            event="scheduled_tool_executed",
+            run_id=context.run_id,
+            step_id=task["task_id"],
+            user_id=user_id,
+            instruction=context.instruction,
+            dag_path=context.dag_path,
+            tool_name=tool_name,
+            arguments=arguments,
+            result={"task_id": task["task_id"], "risk": assessment.as_dict(), "result": result},
+            confirmation_state="scheduled_authorization",
+            risk_level=assessment.level.value,
+        )
+
+    return services.scheduler.executor.execute(tool, arguments, context, on_success=persist)
+
+
+def _next_occurrence(run_at: datetime, recurrence: str, now: datetime) -> datetime | None:
     if recurrence == "monthly":
         next_run = run_at
         for _ in range(240):
@@ -1351,9 +1522,7 @@ def _next_occurrence(
             if month > 12:
                 year, month = year + 1, 1
             last = calendar.monthrange(year, month)[1]
-            next_run = next_run.replace(
-                year=year, month=month, day=min(run_at.day, last)
-            )
+            next_run = next_run.replace(year=year, month=month, day=min(run_at.day, last))
             if next_run > now:
                 return next_run
         return None
@@ -1383,13 +1552,16 @@ def _execute_one_task(
     risk_level = _task_risk_level(services, payload)
     try:
         if kind == "transfer":
-            result = _execute_transfer_task(
-                services, user_id=user_id, task=task, payload=payload
-            )
+            result = _execute_transfer_task(services, user_id=user_id, task=task, payload=payload)
         elif kind == "gift":
-            result = _execute_gift_task(
-                services, user_id=user_id, task=task, payload=payload
-            )
+            result = _execute_scheduled_tool(
+                services,
+                task=task,
+                payload=payload,
+                user_id=user_id,
+                tool_name="execute_gift_order",
+                arguments={"task_id": task_id},
+            )["data"]
         else:
             raise ValueError(f"未知的定时任务类型：{kind}")
     except Exception as exc:  # noqa: BLE001 - failures are audited, never retried
@@ -1426,9 +1598,7 @@ def _execute_one_task(
         "trigger_source": "scheduled",
     }
     recurrence = str(task.get("recurrence") or "none")
-    next_run = _next_occurrence(
-        _parse_iso_datetime(str(task["run_at"])), recurrence, now
-    )
+    next_run = _next_occurrence(_parse_iso_datetime(str(task["run_at"])), recurrence, now)
     if kind == "transfer" and next_run is not None:
         _finish_task(
             services.db,
@@ -1458,29 +1628,21 @@ def _execute_one_task(
     return {"ok": True, **success}
 
 
-def _execute_due_tasks(
-    services: CoreServices, user_id: str, now: datetime
-) -> dict[str, Any]:
+def _execute_due_tasks(services: CoreServices, user_id: str, now: datetime) -> dict[str, Any]:
     with services.db.transaction() as conn:
         rows = conn.execute(
             "SELECT * FROM scheduled_tasks WHERE user_id = ? AND status = 'pending' "
             "ORDER BY run_at ASC, task_id ASC",
             (user_id,),
         ).fetchall()
-    due = [
-        dict(row)
-        for row in rows
-        if _parse_iso_datetime(str(row["run_at"])) <= now
-    ]
+    due = [dict(row) for row in rows if _parse_iso_datetime(str(row["run_at"])) <= now][:20]
     executed: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
     now_iso = now.isoformat(timespec="seconds")
     for task in due:
         if not _claim_task(services.db, str(task["task_id"]), now_iso):
             continue
-        outcome = _execute_one_task(
-            services, user_id=user_id, task=task, now=now
-        )
+        outcome = _execute_one_task(services, user_id=user_id, task=task, now=now)
         if outcome.pop("ok"):
             executed.append(outcome)
         else:
@@ -1501,6 +1663,21 @@ def run_due(
     user_id: str = DEFAULT_USER,
 ) -> dict[str, Any]:
     """Execute all due tasks for a user (shared by the tool and the background thread)."""
+    readiness = services.extras.get("readiness")
+    if readiness is not None:
+        readiness.require_ready()
+    if services.scheduler.breaker.is_open():
+        raise PermissionError("熔断已打开，定时写任务暂停执行。")
+    if not services.db.in_transaction:
+        response = services.scheduler.run(
+            user_id=user_id,
+            instruction="执行本人已确认的到期任务",
+            tool_name="run_due_tasks",
+            arguments={"now": now.isoformat() if isinstance(now, datetime) else now} if now else {},
+        )
+        if response.get("status") != "completed":
+            raise PermissionError(response.get("reason") or "到期任务未通过统一执行链。")
+        return response["results"][0]["data"]
     if now is None:
         now_dt = datetime.now(UTC)
     elif isinstance(now, str):
@@ -1524,12 +1701,12 @@ class ScheduleTransferRisk:
         if ctx.tool_name != "schedule_transfer":
             return None
         amount = float(ctx.arguments.get("amount_cny") or 0)
-        if amount > HIGH_TRANSFER_THRESHOLD_CNY:
+        if amount > 1000:
             return RiskGuess(
                 level=RiskLevel.RED,
                 score=85,
                 reasons=[
-                    f"定时转账单笔 {amount:.2f} 元超过 5000 元高风险阈值。",
+                    f"定时转账单笔 {amount:.2f} 元超过 1000 元强验证阈值。",
                     "大额资金将在未来自动转出，需要红色强验证和明确确认。",
                 ],
             )
@@ -1647,9 +1824,7 @@ class BirthdayPlanIntent:
             return None
         if ctx.repository is None:
             return None
-        contact, error = _mentioned_contact(
-            ctx.repository.db, ctx.request.user_id, instruction
-        )
+        contact, error = _mentioned_contact(ctx.repository.db, ctx.request.user_id, instruction)
         if error is not None or contact is None:
             return _clarification(error or "未找到生日对象", "birthday_plan")
         budget = _budget_amount_from(instruction)
@@ -1657,6 +1832,10 @@ class BirthdayPlanIntent:
             return _clarification(
                 "请补充生日预算，例如：帮我准备下个月妈妈的生日，预算 1000 元。",
                 "birthday_plan",
+            )
+        if budget < FLOWER_AMOUNT_CNY + CAKE_AMOUNT_CNY:
+            return _clarification(
+                "当前鲜花与蛋糕总价 358 元，超过所给预算；请提高预算或分别安排。", "birthday_plan"
             )
         if budget > MAX_TRANSFER_CNY:
             return _clarification(
@@ -1762,14 +1941,11 @@ class ScheduledTransferIntent:
                 name_match = _NAME_TRANSFER_PATTERN.search(instruction)
                 if name_match is None:
                     return _clarification(
-                        "请补充收款人（联系人姓名/别名/手机号或 ACC 账户），"
-                        "我不会猜测收款人。",
+                        "请补充收款人（联系人姓名/别名/手机号或 ACC 账户），我不会猜测收款人。",
                         "scheduled_transfer",
                     )
                 token = name_match.group(1).strip()
-            contact, error = _resolve_contact(
-                ctx.repository.db, ctx.request.user_id, token
-            )
+            contact, error = _resolve_contact(ctx.repository.db, ctx.request.user_id, token)
             if error is not None or contact is None:
                 return _clarification(error or "未找到收款人", "scheduled_transfer")
             to_name = str(contact.get("name"))
@@ -1928,6 +2104,14 @@ class TaskQueryIntent:
 
 
 def tools(services: CoreServices) -> list[BaseTool]:
+    services.compensation.register(
+        CompensationSpec(
+            "execute_gift_order",
+            "",
+            "已完成礼物订单不可自动退回，需人工核实。",
+            irreversible=True,
+        )
+    )
     return [
         QueryContactBirthdayTool(services),
         LockBudgetFundsTool(services),
@@ -1938,6 +2122,7 @@ def tools(services: CoreServices) -> list[BaseTool]:
         ListScheduledTasksTool(services),
         CancelScheduledTaskTool(services),
         RunDueTasksTool(services),
+        ExecuteGiftOrderTool(services),
     ]
 
 
@@ -1996,8 +2181,7 @@ def router(services: CoreServices) -> APIRouter:
     ) -> dict[str, Any]:
         with services.db.transaction() as conn:
             rows = conn.execute(
-                "SELECT * FROM gift_orders WHERE user_id = ? "
-                "ORDER BY due_at ASC, order_id ASC",
+                "SELECT * FROM gift_orders WHERE user_id = ? ORDER BY due_at ASC, order_id ASC",
                 (user_id,),
             ).fetchall()
         orders = [_order_row_to_dict(row) for row in rows]
@@ -2026,6 +2210,10 @@ def router(services: CoreServices) -> APIRouter:
                 instruction="时间快进：执行到期的定时任务",
                 tool_name="run_due_tasks",
                 arguments=arguments,
+                role=services.authz.normalize(
+                    request.headers.get("X-Aegis-Role"),
+                    default=services.settings.authz_default_role,
+                ),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -2074,9 +2262,7 @@ def start_background(services: CoreServices) -> None:
             except Exception:  # noqa: BLE001 - a background loop must survive
                 continue
 
-    _background_thread = threading.Thread(
-        target=_loop, name="aegisbank-automation", daemon=True
-    )
+    _background_thread = threading.Thread(target=_loop, name="aegisbank-automation", daemon=True)
     _background_thread.start()
 
 

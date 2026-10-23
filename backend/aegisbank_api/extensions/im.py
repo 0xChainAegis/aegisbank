@@ -1,4 +1,4 @@
-﻿"""IM channel extension (stage 2A).
+"""IM channel extension (stage 2A).
 
 Discoverable through the core extension contract: the module owns the
 ``im_messages`` schema, wires the :class:`~aegisbank_api.channels.im.ImChannel`
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from ..channels.im import (
@@ -104,10 +104,7 @@ def router(services: CoreServices) -> APIRouter:
                 "channel": "im | cli | webhook（默认 im）",
                 "sender_id": "外部发送者标识，写入审计（演示环境不绑用户身份）",
                 "text": f"消息正文，1-{MAX_TEXT_LENGTH} 字",
-                "message_id": (
-                    "可选幂等键；同一 message_id 重复提交返回首次回执，"
-                    "不会二次执行"
-                ),
+                "message_id": ("可选幂等键；同一 message_id 重复提交返回首次回执，不会二次执行"),
             },
             "confirmation_syntax": [
                 "确认 <action_id> <6 位验证码>",
@@ -116,8 +113,7 @@ def router(services: CoreServices) -> APIRouter:
             "demo_otp": demo_otp,
             "audit_events": ["im_message_executed", "im_message_rejected"],
             "idempotency": (
-                "message_id 命中缓存时直接回放首次回执；"
-                "重试失败确认请使用新的 message_id。"
+                "message_id 命中缓存时直接回放首次回执；重试失败确认请使用新的 message_id。"
             ),
             "policy": (
                 "IM 只是入口：Planner、动态风险、统一权限网关、MFA 与审计链"
@@ -160,16 +156,18 @@ def router(services: CoreServices) -> APIRouter:
                     },
                 },
             ],
-            "note": (
-                "演示 OTP 仅用于本地开发；生产环境必须接入银行真实 MFA，"
-                "不得复用该验证码。"
-            ),
+            "note": ("演示 OTP 仅用于本地开发；生产环境必须接入银行真实 MFA，不得复用该验证码。"),
         }
 
     @api.post("/message")
-    def post_message(body: ImMessageRequest) -> dict[str, Any]:
+    def post_message(
+        body: ImMessageRequest,
+        request: Request,
+        x_aegis_role: str | None = Header(default=None, alias="X-Aegis-Role"),
+    ) -> dict[str, Any]:
+        current_readiness = getattr(request.app.state, "readiness", readiness)
         try:
-            readiness.require_ready()
+            current_readiness.require_ready()
         except NotReadyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         try:
@@ -178,13 +176,23 @@ def router(services: CoreServices) -> APIRouter:
                 sender_id=body.sender_id,
                 text=body.text,
                 message_id=body.message_id,
+                role=services.authz.normalize(
+                    x_aegis_role, default=services.settings.authz_default_role
+                ),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         adapter = _adapter(services)
         replayed = bool(
             message.message_id
-            and adapter.cached_reply(services, message.message_id or "") is not None
+            and adapter.cached_reply(
+                services,
+                message.message_id or "",
+                channel=message.channel,
+                sender_id=message.sender_id,
+                text=message.text,
+            )
+            is not None
         )
         reply = adapter.handle(services, message)
         return {

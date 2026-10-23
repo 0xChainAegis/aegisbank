@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { formatCny } from '../risk';
 import type { AegisRole } from '../roles';
-import { canExecuteTools, roleTaskBlockReason } from '../roles';
+import { roleCan, canExecuteTools, roleTaskBlockReason } from '../roles';
 import type {
   ActionJournal,
   AgentRunInput,
@@ -255,6 +255,8 @@ export default function TaskConsolePage({
   const wasBusyRef = useRef(false);
   const lastQuickInstructionRef = useRef('');
   const [quickNotice, setQuickNotice] = useState('');
+  const [followUp, setFollowUp] = useState(false);
+  useEffect(() => { setFollowUp(false); }, [lastRun?.run_id]);
 
   // 提交完成后把回执滚进视口（UX-06）：否则用户会以为「点了没反应」。
   useEffect(() => {
@@ -272,10 +274,12 @@ export default function TaskConsolePage({
     event.preventDefault();
     const value = instruction.trim();
     if (!value || busy || taskBlocked) return;
-    onExecute({ instruction: value });
+    onExecute({ instruction: value, ...(followUp && lastRun?.status === 'needs_clarification'
+      ? { clarification_run_id: lastRun.run_id } : {}) });
   }
 
   function trigger(action: ScenarioAction) {
+    setFollowUp(false);
     if (busy || taskBlocked) return;
     const current = instruction.trim();
     // 内置演示指令（快捷动作/演示路径填入过）视为"已知来源"，返回页面后再点仍可一键执行；
@@ -403,6 +407,16 @@ export default function TaskConsolePage({
             <span aria-hidden="true">↗</span>
           </button>
         </form>
+
+        {lastRun?.status === 'needs_clarification' && (
+          <div className="alert alert-info" role="status">
+            <span>{followUp ? '当前输入将补充上一条任务（10 分钟内有效，提交后重新核对全部风险）。' : '上一条任务需要补充信息。'}</span>
+            <button type="button" className="ghost-button small-button" disabled={busy || taskBlocked}
+              onClick={() => { setFollowUp(!followUp); setInstruction(''); document.getElementById('instruction')?.focus(); }}>
+              {followUp ? '改为新任务' : '补充上一条任务信息'}
+            </button>
+          </div>
+        )}
 
         {busy && (
           <div className="progress-line" role="status" aria-live="polite">
@@ -534,14 +548,14 @@ export default function TaskConsolePage({
                 <button
                   className="ghost-button small-button"
                   onClick={() => onReconcile('reconciled')}
-                  disabled={reconciling || writesBlocked}
+                  disabled={reconciling || writesBlocked || !roleCan(role, 'ops:manage')}
                 >
                   {reconciling ? '处理中…' : '人工对账为已解决'}
                 </button>
                 <button
                   className="ghost-button small-button"
                   onClick={() => onReconcile('rolled_back')}
-                  disabled={reconciling || writesBlocked}
+                  disabled={reconciling || writesBlocked || !canExecute}
                 >
                   申请人工回滚
                 </button>

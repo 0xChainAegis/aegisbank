@@ -93,9 +93,7 @@ def _next_virtual_card_id(conn: sqlite3.Connection) -> str:
     used = {str(row["card_id"]) for row in conn.execute("SELECT card_id FROM bank_cards")}
     used |= {
         str(row["card_id"])
-        for row in conn.execute(
-            "SELECT card_id FROM card_applications WHERE card_id IS NOT NULL"
-        )
+        for row in conn.execute("SELECT card_id FROM card_applications WHERE card_id IS NOT NULL")
     }
     for number in range(VIRTUAL_CARD_NUMBER_START, VIRTUAL_CARD_NUMBER_END + 1):
         candidate = f"CARD-{number}"
@@ -176,9 +174,7 @@ class ApplyVirtualCardOutput(BaseModel):
 
 
 class IssueVirtualCardArgs(BaseModel):
-    application_id: str = Field(
-        min_length=3, max_length=64, description="申请编号，例如 APP-9001"
-    )
+    application_id: str = Field(min_length=3, max_length=64, description="申请编号，例如 APP-9001")
 
 
 class IssueVirtualCardOutput(BaseModel):
@@ -280,8 +276,7 @@ class IssueVirtualCardTool(BaseTool):
         name="issue_virtual_card",
         title="审核并发放虚拟卡",
         description=(
-            "审核 applying 状态的虚拟卡申请，生成卡号并写入卡片清单，"
-            "属于账户开立类黄色操作。"
+            "审核 applying 状态的虚拟卡申请，生成卡号并写入卡片清单，属于账户开立类黄色操作。"
         ),
         risk_level=RiskLevel.YELLOW,
         permission="card:manage",
@@ -371,8 +366,7 @@ class ResetCardPasswordTool(BaseTool):
         name="reset_card_password",
         title="重置卡片密码",
         description=(
-            "受理卡片密码重置：不接收、不保存明文密码，只记录安全事件时间，"
-            "属于红色强验证操作。"
+            "受理卡片密码重置：不接收、不保存明文密码，只记录安全事件时间，属于红色强验证操作。"
         ),
         risk_level=RiskLevel.RED,
         permission="card:security",
@@ -525,13 +519,13 @@ class UnlockTransactionLimitRisk:
         if ctx.tool_name != "unlock_transaction_limit":
             return None
         requested = ctx.arguments.get("daily_limit_cny")
-        if requested is not None and float(requested) > HIGH_LIMIT_THRESHOLD_CNY:
+        requested = DEFAULT_TRANSACTION_LIMIT_CNY if requested is None else requested
+        if float(requested) > HIGH_LIMIT_THRESHOLD_CNY:
             return RiskGuess(
                 level=RiskLevel.RED,
                 score=90,
                 reasons=[
-                    f"将交易限额恢复到 {float(requested):.2f} 元，"
-                    "超过 5000 元高风险阈值。",
+                    f"将交易限额恢复到 {float(requested):.2f} 元，超过 5000 元高风险阈值。",
                     "需要红色强验证和明确确认。",
                 ],
             )
@@ -569,8 +563,7 @@ class ApplyVirtualCardIntent:
                 confidence=0.4,
                 needs_clarification=True,
                 clarification=(
-                    f"单张虚拟卡申请额度不能超过 {MAX_REQUESTED_LIMIT_CNY:.0f} 元，"
-                    "请调整后重试。"
+                    f"单张虚拟卡申请额度不能超过 {MAX_REQUESTED_LIMIT_CNY:.0f} 元，请调整后重试。"
                 ),
             )
         assumptions = (

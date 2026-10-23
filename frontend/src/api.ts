@@ -1,4 +1,4 @@
-import type { AegisRole } from './roles';
+import type { AegisCapability, AegisRole } from './roles';
 import type {
   ActionJournal,
   AgentRunInput,
@@ -105,14 +105,16 @@ export interface RequestOptions extends RequestInit {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { idempotencyKey, timeoutMs = 30_000, headers, ...init } = options;
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
-  let response: Response;
+  const { idempotencyKey, timeoutMs = 30_000, headers, signal, ...init } = options;
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort();
+  signal?.addEventListener('abort', forwardAbort, { once: true });
+  if (signal?.aborted) controller.abort();
+  const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(`${API_BASE}${path}`, {
       ...init,
-      signal: init.signal ?? controller?.signal,
+      signal: controller.signal,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -121,29 +123,27 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         ...(headers ?? {}),
       },
     });
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new ApiError('请求超时，请稍后重试。', 0);
+    const payload: unknown = await response.json();
+    if (!response.ok) {
+      const detail = payload && typeof payload === 'object' && 'detail' in payload
+        ? (payload as { detail: unknown }).detail : null;
+      const code = detail && typeof detail === 'object' && 'code' in detail &&
+        typeof detail.code === 'string' ? detail.code : undefined;
+      throw new ApiError(detailMessage(detail) ?? `请求失败（HTTP ${response.status}）`, response.status, code);
     }
-    throw new ApiError('无法连接后端服务，请确认 AegisBank API 已启动。', 0);
+    return payload as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (controller.signal.aborted) throw new ApiError('请求超时或已取消，执行结果需查询原请求。', 0);
+    throw new ApiError('连接或响应数据异常，请查询原请求状态。', 0);
   } finally {
-    if (timer !== null) window.clearTimeout(timer);
+    globalThis.clearTimeout(timer);
+    signal?.removeEventListener('abort', forwardAbort);
   }
+}
 
-  const payload: unknown = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail =
-      payload !== null && typeof payload === 'object' && 'detail' in payload
-        ? (payload as { detail: unknown }).detail
-        : null;
-    const message = detailMessage(detail) ?? `请求失败（HTTP ${response.status}）`;
-    const code =
-      detail && typeof detail === 'object' && 'code' in detail && typeof detail.code === 'string'
-        ? detail.code
-        : undefined;
-    throw new ApiError(message, response.status, code);
-  }
-  return payload as T;
+export async function fetchAuthzMe(): Promise<{ role: AegisRole; capabilities: AegisCapability[] }> {
+  return request('/authz/me');
 }
 
 export async function fetchTools(userId = 'demo-user'): Promise<ToolMetadata[]> {
@@ -182,24 +182,13 @@ export async function fetchReadiness(): Promise<ReadinessSnapshot> {
 }
 
 export async function fetchTrustAction(actionId: string): Promise<TrustActionDetail> {
-  const payload = await request<Partial<TrustActionDetail>>(
+  const payload = await request<TrustActionDetail>(
     `/trust/actions/${encodeURIComponent(actionId)}?user_id=demo-user`,
   );
-  return {
-    action_id: payload.action_id ?? actionId,
-    user_id: payload.user_id ?? 'demo-user',
-    status: payload.status ?? 'unknown',
-    state: payload.state ?? 'UNKNOWN',
-    risk_level: payload.risk_level ?? 'green',
-    requires_reauth: payload.requires_reauth === true,
-    created_at: payload.created_at ?? '',
-    expires_at: payload.expires_at ?? '',
-    resolved_at: payload.resolved_at ?? null,
-    history: payload.history ?? [],
-    envelopes: payload.envelopes ?? [],
-    evidence: payload.evidence ?? [],
-    evidence_list: payload.evidence_list ?? [],
-  };
+  if (payload.action_id !== actionId || !payload.plan || !payload.state) {
+    throw new ApiError('动作详情不完整，已停止恢复确认。', 0);
+  }
+  return payload;
 }
 
 export async function previewPlan(input: AgentRunInput): Promise<ExecutionPlan> {
@@ -252,8 +241,8 @@ export async function reconcileAction(
   );
 }
 
-export async function fetchAudit(limit = 100): Promise<AuditResponse> {
-  return request<AuditResponse>(`/audit?limit=${encodeURIComponent(limit)}`);
+export async function fetchAudit(limit = 100, runId?: string): Promise<AuditResponse> {
+  return request<AuditResponse>(`/audit?limit=${encodeURIComponent(limit)}${runId ? `&run_id=${encodeURIComponent(runId)}` : ""}`);
 }
 
 export async function verifyAudit(): Promise<AuditVerification> {

@@ -139,6 +139,9 @@ export interface TrustActionTransition {
 }
 
 export interface TrustActionDetail {
+  instruction: string;
+  plan: ExecutionPlan;
+  result: RunResponse | null;
   action_id: string;
   user_id: string;
   status: string;
@@ -167,6 +170,8 @@ export interface ReadinessSnapshot {
 }
 
 export interface AuditEntry {
+  step_id?: string | null;
+  run_id?: string | null;
   id: number;
   created_at: string;
   event: string;
@@ -194,6 +199,7 @@ export interface AuditVerification {
 }
 
 export interface AgentRunInput {
+  clarification_run_id?: string;
   instruction: string;
   tool_name?: string;
   arguments?: Record<string, unknown>;

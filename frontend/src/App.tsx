@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createIdempotencyKey,
   fetchAudit,
+  fetchAuthzMe,
+  rollbackAction,
   fetchBankingOverview,
   fetchBreakerStatus,
   fetchMfaProviders,
@@ -34,6 +36,11 @@ import {
   ROLE_STORAGE_KEY,
   roleFromStorage,
   roleTaskBlockReason,
+  canExecuteTools,
+  canManagePermissions,
+  roleCan,
+  resetRoleCapabilities,
+  setRoleCapabilities,
 } from './roles';
 import { defaultMfaProvider, describeMfaFailure } from './twoA';
 import type {
@@ -50,7 +57,10 @@ import type {
 } from './types';
 import { describeError } from './errors';
 import {
-  clearPendingSnapshot,
+  clearSubmission,
+  loadSubmission,
+  saveSubmission,
+  removePendingSnapshot,
   formatRemaining,
   isSnapshotExpired,
   loadPendingSnapshot,
@@ -133,14 +143,16 @@ export default function App() {
   const [restoredPending, setRestoredPending] = useState<PendingSnapshot | null>(null);
   const [reconciling, setReconciling] = useState(false);
   const [auditFilter, setAuditFilter] = useState('');
-  const [lastRunInstruction, setLastRunInstruction] = useState('');
-  const runKeyRef = useRef<string | null>(null);
-  const confirmKeyRef = useRef<{ actionId: string; key: string } | null>(null);
+  const submissionRef = useRef(loadSubmission());
+  const [unresolvedSubmission, setUnresolvedSubmission] = useState(loadSubmission);
+  const [policyReady, setPolicyReady] = useState(false);
+  const [policyError, setPolicyError] = useState('');
+  const confirmKeyRef = useRef<{ actionId: string; fingerprint: string; key: string } | null>(null);
 
   const grantedCount = useMemo(() => tools.filter((tool) => tool.granted).length, [tools]);
 
-  const writesBlocked = Boolean(readinessError) || readiness?.status !== 'ready';
-  const blockReason = readinessError
+  const writesBlocked = !policyReady || Boolean(readinessError) || readiness?.status !== 'ready';
+  const blockReason = !policyReady ? policyError || '正在获取后端权限策略' : readinessError
     ? readinessError
     : readinessBlockers(readiness).join('；') || '系统尚未就绪';
 
@@ -179,7 +191,7 @@ export default function App() {
     setAuditError('');
     try {
       const [entriesResult, verificationResult] = await Promise.allSettled([
-        fetchAudit(100),
+        fetchAudit(200, auditFilter || undefined),
         verifyAudit(),
       ]);
       if (entriesResult.status === 'rejected') throw entriesResult.reason;
@@ -198,7 +210,7 @@ export default function App() {
     } finally {
       setAuditLoading(false);
     }
-  }, []);
+  }, [auditFilter]);
 
   const loadReadiness = useCallback(async (showLoading = false) => {
     if (showLoading) setReadinessLoading(true);
@@ -251,7 +263,7 @@ export default function App() {
     const snapshot = loadPendingSnapshot();
     if (!snapshot) return;
     if (isSnapshotExpired(snapshot)) {
-      clearPendingSnapshot();
+      removePendingSnapshot(snapshot.pending.confirmation!.id);
       setNotice('之前有一笔待确认操作已过期，已自动清理。');
       return;
     }
@@ -282,6 +294,22 @@ export default function App() {
     }
   }, [role]);
 
+  useEffect(() => {
+    let active = true;
+    setPolicyReady(false);
+    setPolicyError('');
+    resetRoleCapabilities(role);
+    void fetchAuthzMe().then((policy) => {
+      if (!active) return;
+      if (policy.role !== role || !Array.isArray(policy.capabilities)) throw new Error('角色策略响应不匹配');
+      setRoleCapabilities(role, policy.capabilities);
+      setPolicyReady(true);
+    }).catch((error) => {
+      if (active) setPolicyError(messageOf(error, '无法获取后端权限策略'));
+    });
+    return () => { active = false; };
+  }, [role]);
+
   function navigate(next: Page) {
     setRoute(next);
     setActionError('');
@@ -290,10 +318,12 @@ export default function App() {
 
   function switchRole(next: AegisRole) {
     if (next === role) return;
-    if (pending) {
+    if (pending || busy || unresolvedSubmission) {
       setNotice('请先确认或拒绝当前待操作，再切换角色。');
       return;
     }
+    setPolicyReady(false);
+    resetRoleCapabilities(next);
     setApiRole(next);
     setRole(next);
     setActionError('');
@@ -339,26 +369,48 @@ export default function App() {
     void refreshAll();
   }
 
-  function continueRestoredPending() {
-    if (!restoredPending) return;
-    setPending(restoredPending.pending);
-    setLastRun(restoredPending.pending);
-    setLastActionId(restoredPending.pending.confirmation?.id ?? null);
-    setInstruction(restoredPending.instruction);
-    setRestoredPending(null);
-    navigate('console');
-    setNotice('已恢复待确认操作，请核对风险原因后确认或拒绝。');
+  async function continueRestoredPending() {
+    if (!restoredPending || busy || writesBlocked || !canExecuteTools(role)) return;
+    const actionId = restoredPending.pending.confirmation!.id;
+    setBusy(true);
+    setActionError('');
+    try {
+      const canonical = await fetchTrustAction(actionId);
+      if (!['AWAITING_CONFIRMATION', 'AWAITING_REAUTH'].includes(canonical.state)) {
+        removePendingSnapshot(actionId);
+        setRestoredPending(loadPendingSnapshot());
+        setLastRun(canonical.result);
+        setNotice(`该动作当前状态：${canonical.state}，未再次执行。`);
+        return;
+      }
+      const restored: RunResponse = {
+        status: 'awaiting_confirmation', run_id: actionId,
+        reason: '已从服务端重新核对计划与风险', plan: canonical.plan,
+        risk_level: canonical.risk_level,
+        confirmation: { id: actionId, requires_reauth: canonical.requires_reauth,
+          expires_at: canonical.expires_at },
+      };
+      setPending(restored);
+      setLastRun(restored);
+      setLastActionId(actionId);
+      setInstruction(canonical.instruction);
+      setRestoredPending(null);
+      setMfaToken('');
+      navigate('console');
+    } catch (error) {
+      setActionError(describeError(error).message);
+    } finally { setBusy(false); }
   }
 
   function discardRestoredPending() {
-    clearPendingSnapshot();
-    setRestoredPending(null);
-    setNotice('已放弃恢复该待确认操作；后端动作会在有效期内自动过期。');
-    void refreshAll();
+    if (!restoredPending) return;
+    removePendingSnapshot(restoredPending.pending.confirmation!.id);
+    setRestoredPending(loadPendingSnapshot());
+    setNotice('已移除该恢复提示；后端动作仍按原有效期管理。');
   }
 
   function laterConfirmation() {
-    if (!pending?.confirmation) return;
+    if (!pending?.confirmation || busy) return;
     const snapshot: PendingSnapshot = {
       pending,
       instruction,
@@ -372,20 +424,19 @@ export default function App() {
   }
 
   async function handleReconcile(outcome: 'reconciled' | 'rolled_back') {
-    if (!lastActionId || reconciling) return;
+    if (!lastActionId || reconciling || writesBlocked ||
+        (outcome === 'reconciled' ? !roleCan(role, 'ops:manage') : !canExecuteTools(role))) return;
     setReconciling(true);
     setActionError('');
     try {
-      await reconcileAction(
-        lastActionId,
-        outcome,
-        outcome === 'reconciled' ? '用户在控制台人工对账' : '用户在控制台申请人工回滚',
-      );
-      setNotice(
-        outcome === 'reconciled'
-          ? '已对账，结论已写入审计哈希链。'
-          : '已提交人工回滚，结论已写入审计哈希链。',
-      );
+      if (outcome === 'reconciled') {
+        await reconcileAction(lastActionId, outcome, '运维已核查 Mock Bank Core 与步骤记录');
+        setNotice('已记录对账结论，此操作不代表资金已冲正。');
+      } else {
+        const result = await rollbackAction(lastActionId);
+        setLastRun(result as RunResponse);
+        setNotice('已调用补偿链，请查看逐步补偿结果。');
+      }
       setTrustAction(await fetchTrustAction(lastActionId));
       await refreshAll();
     } catch (error) {
@@ -396,6 +447,17 @@ export default function App() {
   }
 
   async function execute(input: AgentRunInput) {
+    if (busy || writesBlocked || !canExecuteTools(role)) return;
+    const previous = submissionRef.current;
+    if (previous && (previous.role !== role || JSON.stringify(previous.input) !== JSON.stringify(input))) {
+      setActionError('上次提交结果尚未确认，请先查询原请求结果再修改内容。');
+      return;
+    }
+    const submission = previous ?? { key: createIdempotencyKey(), input, role };
+    try { saveSubmission(submission); }
+    catch (error) { setActionError(messageOf(error, '无法保存请求凭据，已停止提交')); return; }
+    submissionRef.current = submission;
+    setUnresolvedSubmission(submission);
     setBusy(true);
     setActionError('');
     setNotice('');
@@ -404,14 +466,14 @@ export default function App() {
     // 新一轮提交不再展示上一轮回执（UX-09）；失败也不会伪装成上一次的结果。
     setLastRun(null);
     setLastActionId(null);
-    const idempotencyKey = runKeyRef.current ?? createIdempotencyKey();
-    runKeyRef.current = idempotencyKey;
+    const idempotencyKey = submission.key;
     try {
       const result = await runAgent(input, { idempotencyKey });
-      runKeyRef.current = null;
+      submissionRef.current = null;
+      setUnresolvedSubmission(null);
+      clearSubmission();
       setLastRun(result);
-      setLastActionId(result.confirmation?.id ?? null);
-      setLastRunInstruction(input.instruction);
+      setLastActionId(result.confirmation?.id ?? result.run_id ?? null);
       if (result.status === 'awaiting_confirmation' && result.confirmation) {
         setMfaToken('');
         setMfaProvider(defaultMfaProvider(mfaProviders?.providers ?? [], 'otp'));
@@ -425,13 +487,17 @@ export default function App() {
       } else {
         setPending(null);
         setMfaToken('');
-        clearPendingSnapshot();
+        setRestoredPending(loadPendingSnapshot());
         setNotice(result.reason);
       }
       await refreshAll();
     } catch (error) {
       const explanation = describeError(error, 'run');
-      if (explanation.action !== 'retry') runKeyRef.current = null;
+      if (explanation.action !== 'retry') {
+        submissionRef.current = null;
+        setUnresolvedSubmission(null);
+        clearSubmission();
+      }
       setActionError(explanation.message);
     } finally {
       setBusy(false);
@@ -439,15 +505,16 @@ export default function App() {
   }
 
   async function decide(approved: boolean, providerOverride?: string) {
-    if (!pending?.confirmation) return;
+    if (!pending?.confirmation || busy || writesBlocked || !canExecuteTools(role)) return;
     const actionId = pending.confirmation.id;
     const needsMfa = pending.confirmation.requires_reauth || pending.risk_level === 'red';
     const provider = providerOverride ?? mfaProvider;
+    const fingerprint = JSON.stringify([approved, needsMfa ? mfaToken : null, needsMfa ? provider : null]);
     const idempotencyKey =
-      confirmKeyRef.current?.actionId === actionId
+      confirmKeyRef.current?.actionId === actionId && confirmKeyRef.current.fingerprint === fingerprint
         ? confirmKeyRef.current.key
         : createIdempotencyKey();
-    confirmKeyRef.current = { actionId, key: idempotencyKey };
+    confirmKeyRef.current = { actionId, fingerprint, key: idempotencyKey };
     setBusy(true);
     setActionError('');
     try {
@@ -459,9 +526,8 @@ export default function App() {
         { idempotencyKey },
       );
       confirmKeyRef.current = null;
-      runKeyRef.current = null;
-      clearPendingSnapshot();
-      setRestoredPending(null);
+      removePendingSnapshot(actionId);
+      setRestoredPending(loadPendingSnapshot());
       setLastRun(result);
       setLastActionId(actionId);
       setPending(null);
@@ -482,8 +548,8 @@ export default function App() {
       } else {
         // 终态错误（409 / 400 / 422）：关闭弹窗，不再让用户对着永远失败的重试按钮。
         confirmKeyRef.current = null;
-        clearPendingSnapshot();
-        setRestoredPending(null);
+        removePendingSnapshot(actionId);
+        setRestoredPending(loadPendingSnapshot());
         setPending(null);
         setMfaToken('');
         setLastRun(null);
@@ -515,6 +581,7 @@ export default function App() {
   }
 
   async function togglePermission(tool: ToolMetadata) {
+    if (writesBlocked || busyTool || !canManagePermissions(role)) return;
     setBusyTool(tool.name);
     setActionError('');
     setNotice('');
@@ -549,6 +616,7 @@ export default function App() {
                 key={item}
                 className={role === item ? 'active' : ''}
                 onClick={() => switchRole(item)}
+                disabled={busy || Boolean(pending) || Boolean(unresolvedSubmission)}
                 aria-pressed={role === item}
                 title={`${ROLE_LABELS[item]}：所有请求自动携带 X-Aegis-Role: ${item}`}
               >
@@ -601,6 +669,19 @@ export default function App() {
         onRetry={() => void loadBreaker(true)}
       />
 
+      {policyError && (
+        <div className="restore-banner" role="alert">
+          <span>权限策略加载失败：{policyError}，写操作已暂停。</span>
+          <button className="ghost-button small-button" onClick={() => window.location.reload()}>重新加载权限策略</button>
+        </div>
+      )}
+      {unresolvedSubmission && (
+        <div className="restore-banner" role="status">
+          <span>有一笔提交尚未核实结果：{unresolvedSubmission.input.instruction}</span>
+          <button className="primary-button small-button" disabled={busy || writesBlocked || unresolvedSubmission.role !== role}
+            onClick={() => void execute(unresolvedSubmission.input)}>查询原请求结果</button>
+        </div>
+      )}
       {restoredPending && (
         <div className="restore-banner" role="status">
           <div className="restore-copy">
@@ -618,7 +699,7 @@ export default function App() {
             <button className="ghost-button small-button" onClick={discardRestoredPending}>
               放弃恢复
             </button>
-            <button className="primary-button small-button" onClick={continueRestoredPending}>
+            <button className="primary-button small-button" onClick={() => void continueRestoredPending()} disabled={busy || writesBlocked || !canExecuteTools(role)}>
               继续处理
             </button>
           </div>
@@ -674,8 +755,8 @@ export default function App() {
 
           {page === 'scenarios' && (
             <ScenariosPage
-              writesBlocked={writesBlocked || role !== 'user'}
-              blockReason={role !== 'user' ? roleTaskBlockReason(role) : blockReason}
+              writesBlocked={writesBlocked || !canExecuteTools(role)}
+              blockReason={!canExecuteTools(role) ? roleTaskBlockReason(role) : blockReason}
               onDataChanged={() => void refreshAll()}
             />
           )}
@@ -702,7 +783,7 @@ export default function App() {
               onRefresh={() => void loadTools(true)}
               onRecoveryChanged={handleRecoveryChanged}
               onNavigateAudit={() => {
-                setAuditFilter(lastRunInstruction);
+                setAuditFilter(lastActionId ?? lastRun?.run_id ?? '');
                 navigate('audit');
               }}
               onReconcile={(outcome) => void handleReconcile(outcome)}
@@ -712,6 +793,7 @@ export default function App() {
 
           {page === 'permissions' && (
             <PermissionsPage
+              writesBlocked={writesBlocked}
               role={role}
               tools={tools}
               loading={toolsLoading}
@@ -725,6 +807,7 @@ export default function App() {
 
           {page === 'capabilities' && (
             <CapabilitiesPage
+              writesBlocked={writesBlocked}
               role={role}
               mfa={mfaProviders}
               mfaLoading={mfaProvidersLoading}
@@ -735,6 +818,7 @@ export default function App() {
 
           {page === 'ops' && (
             <OpsPage
+              writesBlocked={writesBlocked}
               role={role}
               breakerStatus={breakerStatus}
               breakerLoading={breakerLoading}
@@ -780,8 +864,8 @@ export default function App() {
           onDecision={(approved, provider) => void decide(approved, provider)}
           onClose={laterConfirmation}
           error={actionError}
-          writesBlocked={writesBlocked}
-          blockReason={blockReason}
+          writesBlocked={writesBlocked || !canExecuteTools(role)}
+          blockReason={!canExecuteTools(role) ? roleTaskBlockReason(role) : blockReason}
         />
       )}
     </div>

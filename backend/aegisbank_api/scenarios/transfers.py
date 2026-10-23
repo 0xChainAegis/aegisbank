@@ -198,9 +198,7 @@ def _contact_from_row(row: sqlite3.Row) -> Contact:
     )
 
 
-def contact_rows(
-    db: Database, user_id: str, *, include_inactive: bool = False
-) -> list[Contact]:
+def contact_rows(db: Database, user_id: str, *, include_inactive: bool = False) -> list[Contact]:
     """Read contacts for one user; facts always come from SQLite."""
     sql = "SELECT * FROM contacts WHERE user_id = ?"
     if not include_inactive:
@@ -413,7 +411,7 @@ class AddContactTool(BaseTool):
 class TransferToContactArgs(BaseModel):
     to_name: str | None = Field(default=None, max_length=32)
     to_phone: str | None = Field(default=None, max_length=11)
-    amount_cny: float = Field(default=0.0, gt=0, le=50_000)
+    amount_cny: float = Field(gt=0, le=50_000)
     note: str = Field(default="AegisBank 联系人转账", max_length=120)
 
     @field_validator("to_phone")
@@ -629,15 +627,15 @@ class AASplitIntent:
                 unresolved.append(token)
             elif len(hits) > 1:
                 return _clarification(
-                    f"AA 参与者「{token}」匹配到多个联系人，请改用手机号或别名，"
-                    "我不会猜测收款人。",
+                    f"AA 参与者「{token}」匹配到多个联系人，请改用手机号或别名，我不会猜测收款人。",
                     "transfer_aa_split",
                 )
             else:
                 contacts.append(hits[0])
         if unresolved:
             return _clarification(
-                "联系人簿中未找到 AA 参与者：" + "、".join(unresolved)
+                "联系人簿中未找到 AA 参与者："
+                + "、".join(unresolved)
                 + "。请先添加联系人，我不会猜测收款人。",
                 "transfer_aa_split",
             )
@@ -768,8 +766,7 @@ class ContactTransferIntent:
         if len(hits) > 1:
             names = "、".join(item.name for item in hits)
             return _clarification(
-                f"「{label}」匹配到多个联系人（{names}），请提供手机号或别名，"
-                "我不会猜测收款人。",
+                f"「{label}」匹配到多个联系人（{names}），请提供手机号或别名，我不会猜测收款人。",
                 "transfer_to_contact",
             )
         contact = hits[0]

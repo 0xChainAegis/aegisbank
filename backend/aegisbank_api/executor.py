@@ -8,8 +8,11 @@ individual tool nodes.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import nullcontext
 from typing import Any, Protocol
 
+from .db import Database
 from .domain import (
     ExecutionContext,
     ToolMetadata,  # noqa: F401 - re-exported for guard authors
@@ -48,8 +51,11 @@ class ExecutionGuard(Protocol):
 class ToolExecutor:
     """Run tool nodes under an ordered guard chain."""
 
-    def __init__(self, guards: list[ExecutionGuard] | None = None) -> None:
+    def __init__(
+        self, guards: list[ExecutionGuard] | None = None, *, db: Database | None = None
+    ) -> None:
         self.guards: list[ExecutionGuard] = list(guards or [])
+        self.db = db
 
     def add_guard(self, guard: ExecutionGuard) -> None:
         self.guards.append(guard)
@@ -65,16 +71,32 @@ class ToolExecutor:
         tool: BaseTool,
         arguments: dict[str, Any],
         context: ExecutionContext,
+        *,
+        on_success: Callable[[dict[str, Any]], None] | None = None,
+        authorize: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
-        active = tuple(self.guards)
-        for guard in active:
-            guard.before_execute(tool=tool, arguments=arguments, context=context)
-        result = tool.execute(arguments, context)
-        for guard in reversed(active):
-            guard.after_execute(
-                tool=tool,
-                arguments=arguments,
-                context=context,
-                result=result,
-            )
-        return result.as_dict()
+        with self.db.transaction() if self.db is not None else nullcontext():
+            if (
+                tool.metadata.internal_only
+                and context.purpose not in tool.metadata.allowed_purposes
+            ):
+                raise PermissionError("内部工具不允许从该执行目的调用。")
+            if authorize is not None:
+                authorize()
+            arguments = tool.validate_arguments(arguments)
+            active = tuple(self.guards)
+            for guard in active:
+                guard.before_execute(tool=tool, arguments=arguments, context=context)
+            result = tool.execute(arguments, context)
+            tool.validate_result(result)
+            for guard in reversed(active):
+                guard.after_execute(
+                    tool=tool,
+                    arguments=arguments,
+                    context=context,
+                    result=result,
+                )
+            payload = result.as_dict()
+            if on_success is not None:
+                on_success(payload)
+            return payload

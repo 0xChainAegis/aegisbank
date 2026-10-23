@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { pauseAction, resumeAction, rollbackAction, fetchActionJournal } from '../api';
-import type { AegisRole } from '../roles';
+import { canExecuteTools, type AegisRole } from '../roles';
 import type { ActionJournal, RunResponse } from '../types';
 import {
   compensationStatusDescription,
@@ -70,10 +70,10 @@ export default function StepJournalPanel({
     [journal],
   );
 
-  const controlBlocked = writesBlocked || role !== 'user';
+  const controlBlocked = writesBlocked || !canExecuteTools(role);
   const controlReason = writesBlocked
     ? blockReason
-    : role !== 'user'
+    : !canExecuteTools(role)
       ? `当前角色 ${role} 不具备 tool:execute，暂停 / 恢复 / 回滚会被后端 403 拒绝。`
       : '';
 

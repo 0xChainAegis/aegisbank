@@ -11,14 +11,15 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from typing import Any
 from uuid import uuid4
 
-from .audit import AuditService
+from .audit import AuditService, audit_run_id
 from .compensation import CompensationRegistry
 from .db import Database
 from .domain import ExecutionContext, ExecutionStatus, PlanNode, RiskLevel
-from .executor import ToolExecutor
+from .executor import SandboxViolation, ToolExecutor
 from .gateway import PermissionGateway, scan_injection
 from .planning.compiler import CompiledPlan, PlanCompilationError, PlanCompiler
 from .planning.contracts import ExecutionPlan, Planner, PlanningRequest, PlanStep
@@ -81,6 +82,29 @@ class ExecutionPaused(RuntimeError):
         self.nodes = nodes
 
 
+def audit_scope(method):
+    @wraps(method)
+    def scoped(self, *args, **kwargs):
+        token = audit_run_id.set(kwargs.get("action_id"))
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            audit_run_id.reset(token)
+
+    return scoped
+
+
+def serialized_action(method):
+    """Confirm, resume and rollback share one cross-process action owner."""
+
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self.db.action_lock(str(kwargs["action_id"])):
+            return method(self, *args, **kwargs)
+
+    return locked
+
+
 class DagScheduler:
     def __init__(
         self,
@@ -114,9 +138,7 @@ class DagScheduler:
         # ``CompensationRegistry`` defines ``__len__``; an empty registry is
         # falsy, so never use ``or`` here or specs registered later by the
         # compensation extension would land on a different object.
-        self.compensation = (
-            compensation if compensation is not None else CompensationRegistry()
-        )
+        self.compensation = compensation if compensation is not None else CompensationRegistry()
         self.envelopes = EnvelopeService(db)
         self.breaker = CircuitBreaker(
             db,
@@ -145,6 +167,7 @@ class DagScheduler:
         self, nodes: list[PlanNode], user_id: str, instruction: str
     ) -> dict[str, RiskAssessment]:
         assessments: dict[str, RiskAssessment] = {}
+        projected_transfers = 0.0
         for node in nodes:
             tool = self.registry.get(node.tool_name)
             assessments[node.id] = self.risk_engine.assess(
@@ -154,6 +177,22 @@ class DagScheduler:
                 base_risk=tool.metadata.risk_level,
                 instruction=instruction,
             )
+            if node.tool_name in {"transfer", "transfer_to_contact"}:
+                projected_transfers += float(node.arguments.get("amount_cny") or 0)
+        if (
+            projected_transfers + self.risk_engine.repository.daily_transfer_total_cny(user_id)
+            > 1000
+        ):
+            for node in nodes:
+                if node.tool_name in {"transfer", "transfer_to_contact"}:
+                    previous = assessments[node.id]
+                    assessments[node.id] = RiskAssessment(
+                        level=RiskLevel.RED,
+                        score=max(previous.score, 80),
+                        reasons=[*previous.reasons, "整条计划累计转账将超过 1000 元，需要强验证。"],
+                        base_risk=previous.base_risk,
+                        requires_reauth=True,
+                    )
         return assessments
 
     @staticmethod
@@ -221,9 +260,7 @@ class DagScheduler:
             policy_decision_evidence(True, "请求已通过统一权限网关"),
         )
         if confirmation_state == "approved":
-            items = evidence_payload(
-                approval_evidence(True, "用户明确批准并完成确认复检")
-            ) + items
+            items = evidence_payload(approval_evidence(True, "用户明确批准并完成确认复检")) + items
         return items
 
     @staticmethod
@@ -327,9 +364,7 @@ class DagScheduler:
         )
         plan = self._propose(request)
         if plan.needs_clarification:
-            evidence = evidence_payload(
-                policy_decision_evidence(True, "Planner 请求澄清")
-            )
+            evidence = evidence_payload(policy_decision_evidence(True, "Planner 请求澄清"))
             return {
                 "status": ExecutionStatus.NEEDS_CLARIFICATION.value,
                 "plan": plan.model_dump(),
@@ -352,9 +387,7 @@ class DagScheduler:
             "risk": {
                 "level": risk_level.value,
                 "reasons": [
-                    reason
-                    for assessment in assessments.values()
-                    for reason in assessment.reasons
+                    reason for assessment in assessments.values() for reason in assessment.reasons
                 ],
                 "requires_reauth": any(item.requires_reauth for item in assessments.values()),
             },
@@ -395,6 +428,7 @@ class DagScheduler:
         return self.compiler.compile(restored).as_dict()
 
     # ---------- run ----------
+    @audit_scope
     def run(
         self,
         *,
@@ -406,6 +440,7 @@ class DagScheduler:
     ) -> dict[str, Any]:
         arguments = arguments or {}
         run_id = uuid4().hex
+        audit_run_id.set(run_id)
 
         breaker = self.breaker.status()
         if breaker["open"]:
@@ -481,7 +516,7 @@ class DagScheduler:
                 instruction=instruction,
                 dag_path="planner",
                 tool_name="planner",
-                arguments={"tool_name": tool_name, "arguments": arguments},
+                arguments={"tool_name": tool_name, "arguments": arguments, "role": role},
                 result={"clarification": plan.clarification},
                 confirmation_state="clarification",
                 risk_level=RiskLevel.GREEN.value,
@@ -538,9 +573,7 @@ class DagScheduler:
         )
         if blocked:
             node, decision, assessment = blocked
-            evidence = evidence_payload(
-                policy_decision_evidence(True, decision.reason)
-            )
+            evidence = evidence_payload(policy_decision_evidence(True, decision.reason))
             audit_entry = self.audit.record(
                 event="gateway_blocked",
                 user_id=user_id,
@@ -581,11 +614,12 @@ class DagScheduler:
             _, decision, _ = pending
             requires_reauth = any(item.requires_reauth for item in assessments.values())
             action_id = f"cfm_{uuid4().hex}"
+            run_id = action_id
+            audit_run_id.set(action_id)
             created = datetime.now(UTC)
             expires = created + timedelta(seconds=self.confirmation_ttl_seconds)
             permissions = {
-                node.id: self.registry.get(node.tool_name).metadata.permission
-                for node in nodes
+                node.id: self.registry.get(node.tool_name).metadata.permission for node in nodes
             }
             envelopes = build_envelopes(
                 user_id=user_id,
@@ -601,9 +635,7 @@ class DagScheduler:
                     "id": action_id,
                     "user_id": user_id,
                     "instruction": instruction,
-                    "dag_json": json.dumps(
-                        [node.as_dict() for node in nodes], ensure_ascii=False
-                    ),
+                    "dag_json": json.dumps([node.as_dict() for node in nodes], ensure_ascii=False),
                     "plan_json": json.dumps(plan_payload, ensure_ascii=False),
                     "risk_level": risk_level.value,
                     "requires_reauth": int(requires_reauth),
@@ -719,9 +751,7 @@ class DagScheduler:
                 "evidence": evidence,
                 "evidence_list": evidence,
             }
-            self.journal.update_status(
-                run_id, "unknown", reason=reason, response=response
-            )
+            self.journal.update_status(run_id, "unknown", reason=reason, response=response)
             return response
         except Exception as exc:  # noqa: BLE001 - tool errors trigger compensation
             rollback = self._compensate(
@@ -743,9 +773,7 @@ class DagScheduler:
                     reason=reason,
                     risk=risk,
                 )
-                self.journal.update_status(
-                    run_id, "unknown", reason=reason, response=response
-                )
+                self.journal.update_status(run_id, "unknown", reason=reason, response=response)
                 return response
             if rollback["status"] in {"completed", "partial", "failed"}:
                 rolled_back = rollback["status"] == "completed"
@@ -769,9 +797,7 @@ class DagScheduler:
                     reason=reason,
                     risk=risk,
                 )
-                self.journal.update_status(
-                    run_id, status, reason=reason, response=response
-                )
+                self.journal.update_status(run_id, status, reason=reason, response=response)
                 return response
             evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
             response = {
@@ -810,9 +836,7 @@ class DagScheduler:
         return response
 
     # ---------- confirmation ----------
-    def _recompute_plan(
-        self, pending: dict[str, Any], nodes: list[PlanNode]
-    ) -> CompiledPlan:
+    def _recompute_plan(self, pending: dict[str, Any], nodes: list[PlanNode]) -> CompiledPlan:
         stored = json.loads(pending.get("plan_json") or "{}")
         if stored.get("steps"):
             plan = ExecutionPlan(
@@ -855,8 +879,12 @@ class DagScheduler:
     ) -> list[ActionEnvelope]:
         raw = json.loads(pending.get("envelopes_json") or "[]")
         envelopes = [ActionEnvelope.from_dict(item) for item in raw]
-        if not envelopes:
-            return []
+        if (
+            len(envelopes) != len(nodes)
+            or {item.step_id for item in envelopes} != {node.id for node in nodes}
+            or len({item.nonce for item in envelopes}) != len(envelopes)
+        ):
+            raise EnvelopeMismatch("ActionEnvelope 必须与计划步骤完整且一一对应。")
         node_by_id = {node.id: node for node in nodes}
         for envelope in envelopes:
             node = node_by_id.get(envelope.step_id)
@@ -873,12 +901,12 @@ class DagScheduler:
             )
         return envelopes
 
-    def _claim_envelopes(
-        self, envelopes: list[ActionEnvelope], *, action_id: str
-    ) -> None:
+    def _claim_envelopes(self, envelopes: list[ActionEnvelope], *, action_id: str) -> None:
         if envelopes:
             self.envelopes.claim_nonces(envelopes, action_id=action_id)
 
+    @audit_scope
+    @serialized_action
     def confirm(
         self,
         *,
@@ -892,11 +920,13 @@ class DagScheduler:
         pending = self.db.get_pending(action_id)
         if pending is None:
             raise IntentError("确认请求不存在。")
+        if pending["user_id"] != user_id:
+            raise IntentError("确认请求不属于当前用户。")
+        if self.gateway.authz is not None:
+            self.gateway.authz.require(role, "tool:execute")
         replay = self._stored_result(pending)
         if replay is not None:
             return replay
-        if pending["user_id"] != user_id:
-            raise IntentError("确认请求不属于当前用户。")
         if pending["status"] != "pending":
             raise IntentError(f"确认请求已处理：{pending['status']}。")
 
@@ -997,18 +1027,30 @@ class DagScheduler:
             return response
 
         if requires_reauth and machine.state is not ActionState.AWAITING_REAUTH:
-            machine.transition(
-                ActionState.AWAITING_REAUTH, reason="红色操作需要二次身份校验"
-            )
+            machine.transition(ActionState.AWAITING_REAUTH, reason="红色操作需要二次身份校验")
         mfa_result: MfaResult | None = None
         if requires_reauth:
             try:
+                allowed = set.intersection(
+                    *[
+                        set(
+                            self.mfa.providers_for(node.tool_name, assessments[node.id].level.value)
+                        )
+                        for node in nodes
+                        if assessments[node.id].requires_reauth
+                    ]
+                )
+                selected = mfa_provider or self.mfa.default_provider
+                self.mfa.resolve(selected)
+                if selected not in allowed:
+                    raise MfaError("该验证方式不在本次计划的 MFA 策略允许范围内。")
                 mfa_result = self.mfa.verify(
                     reauth_token,
                     user_id=user_id,
                     provider=mfa_provider,
                 )
             except MfaError as exc:
+                self.breaker.record_failure()
                 self.audit.record(
                     event="mfa_failed",
                     user_id=user_id,
@@ -1022,6 +1064,7 @@ class DagScheduler:
                 )
                 raise ReauthError(f"二次身份校验失败：{exc}") from exc
             if not mfa_result.ok:
+                self.breaker.record_failure()
                 self.audit.record(
                     event="mfa_failed",
                     user_id=user_id,
@@ -1119,13 +1162,17 @@ class DagScheduler:
             evidence=merge_evidence(approval_items, self._chain_evidence()),
         )
         machine.transition(ActionState.EXECUTING, reason="开始执行已确认动作")
+        plan_payload["authorization"] = {
+            "risk_level": current_risk.value,
+            "mfa_verified": bool(mfa_result and mfa_result.ok),
+            "user_id": user_id,
+            "expires_at": pending["expires_at"],
+        }
         results: list[dict[str, Any]] = []
         current_risk_payload = {
             "level": current_risk.value,
             "reasons": [
-                reason
-                for assessment in assessments.values()
-                for reason in assessment.reasons
+                reason for assessment in assessments.values() for reason in assessment.reasons
             ],
             "requires_reauth": requires_reauth,
         }
@@ -1195,9 +1242,7 @@ class DagScheduler:
             )
             executed = self._executed_results(action_id)
             if rollback["status"] == "blocked":
-                machine.transition(
-                    ActionState.UNKNOWN, reason="回滚被阻止：存在不可撤销步骤"
-                )
+                machine.transition(ActionState.UNKNOWN, reason="回滚被阻止：存在不可撤销步骤")
                 reason = f"执行失败：{exc}；回滚被阻止：存在不可撤销步骤，需人工对账。"
                 response = self._rollback_response(
                     action_id=action_id,
@@ -1254,9 +1299,7 @@ class DagScheduler:
                 risk_level=pending["risk_level"],
                 evidence=self._failure_evidence(exc),
             )
-            self.journal.update_status(
-                action_id, "failed", reason=f"执行失败：{exc}"
-            )
+            self.journal.update_status(action_id, "failed", reason=f"执行失败：{exc}")
             self.db.resolve_pending(action_id, "failed")
             raise ExecutionFailedError(f"确认后执行失败：{exc}") from exc
 
@@ -1273,9 +1316,7 @@ class DagScheduler:
             "risk": {
                 "level": current_risk.value,
                 "reasons": [
-                    reason
-                    for assessment in assessments.values()
-                    for reason in assessment.reasons
+                    reason for assessment in assessments.values() for reason in assessment.reasons
                 ],
                 "requires_reauth": requires_reauth,
             },
@@ -1353,11 +1394,15 @@ class DagScheduler:
                         pause=pause,
                         nodes=list(nodes),
                     )
+            authorization = (plan or {}).get("authorization") or {}
+            authorized_risk = RiskLevel(authorization.get("risk_level") or "green")
             context = ExecutionContext(
                 user_id=user_id,
                 instruction=instruction,
                 run_id=run_id,
                 dag_path=dag_path,
+                approved_risk=authorized_risk,
+                reauth_verified=authorization.get("mfa_verified") is True,
             )
             try:
                 resolved_args = self._resolve_arguments(node.arguments, results_by_id)
@@ -1382,8 +1427,89 @@ class DagScheduler:
                 base_risk=tool.metadata.risk_level,
                 instruction=instruction,
             )
+
+            risk_holder = {"assessment": assessment}
+
+            def authorize_node(
+                tool=tool,
+                node=node,
+                resolved_args=resolved_args,
+                authorized_risk=authorized_risk,
+                context=context,
+                authorization=authorization,
+                risk_holder=risk_holder,
+            ):
+                nonlocal assessment
+                assessment = self.risk_engine.assess(
+                    user_id=user_id,
+                    tool_name=tool.metadata.name,
+                    arguments=resolved_args,
+                    base_risk=tool.metadata.risk_level,
+                    instruction=instruction,
+                )
+                risk_holder["assessment"] = assessment
+                decision = self.gateway.evaluate(
+                    user_id=user_id,
+                    tool_name=node.tool_name,
+                    risk_level=assessment.level,
+                    permission=tool.metadata.permission,
+                    instruction=instruction,
+                    arguments=resolved_args,
+                    role=role,
+                )
+                if decision.denied:
+                    raise PermissionError(decision.reason)
+                if self.breaker.is_open():
+                    raise PermissionError("熔断已打开，执行前复检拒绝后续节点。")
+                if decision.outcome == "confirm":
+                    if authorized_risk is RiskLevel.GREEN or (
+                        assessment.requires_reauth and not context.reauth_verified
+                    ):
+                        raise EnvelopeMismatch("步骤风险超出已确认范围，禁止继续执行。")
+                    if datetime.now(UTC) > datetime.fromisoformat(authorization["expires_at"]):
+                        raise EnvelopeExpired("执行授权已过期，禁止继续执行。")
+
+            def persist_success(
+                payload,
+                node=node,
+                index=index,
+                resolved_args=resolved_args,
+                risk_holder=risk_holder,
+            ):
+                assessment = risk_holder["assessment"]
+                payload["risk"] = assessment.as_dict()
+                self.audit.record(
+                    event="tool_executed",
+                    step_id=node.id,
+                    user_id=user_id,
+                    instruction=instruction,
+                    dag_path=dag_path,
+                    tool_name=node.tool_name,
+                    arguments=resolved_args,
+                    result=payload,
+                    confirmation_state=confirmation_state,
+                    risk_level=assessment.level.value,
+                    evidence=self._execution_evidence(confirmation_state=confirmation_state),
+                )
+                if action_id:
+                    self.journal.record_execution(
+                        action_id,
+                        index=index + 1,
+                        results=[*results, payload],
+                        node=node,
+                        arguments=resolved_args,
+                        result=payload,
+                        risk_level=assessment.level.value,
+                    )
+
             try:
-                result = self.executor.execute(tool, resolved_args, context)
+                result = self.executor.execute(
+                    tool,
+                    resolved_args,
+                    context,
+                    on_success=persist_success,
+                    authorize=authorize_node,
+                )
             except ExecutionOutcomeUnknown as exc:
                 self.audit.record(
                     event="tool_outcome_unknown",
@@ -1402,6 +1528,8 @@ class DagScheduler:
                 )
                 raise
             except Exception as exc:  # noqa: BLE001 - tool errors become audited failures
+                if isinstance(exc, SandboxViolation) and getattr(exc, "outcome_unknown", False):
+                    raise ExecutionOutcomeUnknown(str(exc)) from exc
                 if count_failures:
                     self.breaker.record_failure()
                 self.audit.record(
@@ -1419,30 +1547,8 @@ class DagScheduler:
                 raise
             self.breaker.record_success()
             result["risk"] = assessment.as_dict()
-            self.audit.record(
-                event="tool_executed",
-                user_id=user_id,
-                instruction=instruction,
-                dag_path=dag_path,
-                tool_name=node.tool_name,
-                arguments=resolved_args,
-                result=result,
-                confirmation_state=confirmation_state,
-                risk_level=assessment.level.value,
-                evidence=self._execution_evidence(confirmation_state=confirmation_state),
-            )
             results_by_id[node.id] = result
             results.append(result)
-            if action_id:
-                self.journal.record_execution(
-                    action_id,
-                    index=index + 1,
-                    results=results,
-                    node=node,
-                    arguments=resolved_args,
-                    result=result,
-                    risk_level=assessment.level.value,
-                )
         return results
 
     # ---------- pause / resume / compensation ----------
@@ -1481,9 +1587,7 @@ class DagScheduler:
                 if tool.metadata.risk_level is RiskLevel.GREEN:
                     # Read-only steps need no compensation.
                     continue
-                blocked.append(
-                    {**base, "reason": "工具未登记补偿规格，无法确认其可逆性。"}
-                )
+                blocked.append({**base, "reason": "工具未登记补偿规格，无法确认其可逆性。"})
             elif spec.irreversible:
                 detail = spec.description or "该工具声明为不可逆操作。"
                 blocked.append({**base, "reason": f"不可撤销：{detail}"})
@@ -1533,9 +1637,7 @@ class DagScheduler:
                     status == ExecutionStatus.ROLLED_BACK.value,
                     reason,
                 ),
-                policy_decision_evidence(
-                    True, "补偿工具执行前已通过统一权限网关与动态风险复检"
-                ),
+                policy_decision_evidence(True, "补偿工具执行前已通过统一权限网关与动态风险复检"),
             ),
             self._chain_evidence(),
         )
@@ -1690,10 +1792,7 @@ class DagScheduler:
             }
         blocked, candidates = self._blocked_compensation_steps(entries)
         if blocked:
-            reason = (
-                "回滚被阻止：已执行步骤中存在不可撤销的操作，"
-                "自动补偿未执行，需人工对账处理。"
-            )
+            reason = "回滚被阻止：已执行步骤中存在不可撤销的操作，自动补偿未执行，需人工对账处理。"
             self.journal.update_status(action_id, "rollback_blocked", reason=reason)
             for step in blocked:
                 self.journal.append_entry(
@@ -1760,11 +1859,15 @@ class DagScheduler:
                 )
                 continue
             arguments = self._compensation_arguments(entry)
+            if compensation_tool.arguments_model is not None:
+                allowed = compensation_tool.arguments_model.model_fields
+                arguments = {key: value for key, value in arguments.items() if key in allowed}
             context = ExecutionContext(
                 user_id=user_id,
                 instruction=instruction,
                 run_id=action_id,
                 dag_path=f"compensate:{node_id}:{tool_name}->{compensation_tool_name}",
+                purpose="compensation",
             )
             assessment = self.risk_engine.assess(
                 user_id=user_id,
@@ -1781,6 +1884,7 @@ class DagScheduler:
                 instruction=instruction,
                 arguments=arguments,
                 role=role,
+                purpose="compensation",
             )
             if decision.denied or decision.requires_reauth:
                 error = (
@@ -1809,8 +1913,85 @@ class DagScheduler:
                     gateway_reason=decision.reason,
                 )
                 continue
+
+            def persist_compensation(
+                result,
+                node_id=node_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                assessment=assessment,
+                compensation_tool=compensation_tool,
+                decision=decision,
+            ):
+                self.journal.append_entry(
+                    action_id,
+                    node_id=node_id,
+                    tool_name=tool_name,
+                    phase="compensated",
+                    status="succeeded",
+                    arguments=arguments,
+                    result=result,
+                    risk_level=assessment.level.value,
+                )
+                self.audit.record(
+                    event="compensation_executed",
+                    step_id=node_id,
+                    user_id=user_id,
+                    instruction=instruction,
+                    dag_path=f"compensate:{node_id}:{tool_name}",
+                    tool_name=compensation_tool.metadata.name,
+                    arguments=arguments,
+                    result={
+                        "node_id": node_id,
+                        "compensated_tool": tool_name,
+                        "compensation_tool": compensation_tool.metadata.name,
+                        "gateway": {
+                            "outcome": decision.outcome,
+                            "reason": decision.reason,
+                        },
+                        "risk": assessment.as_dict(),
+                        "result": result,
+                    },
+                    confirmation_state="compensated",
+                    risk_level=assessment.level.value,
+                    evidence=evidence_payload(
+                        tool_result_evidence(
+                            True,
+                            f"{tool_name} 已由 {compensation_tool.metadata.name} 补偿",
+                        ),
+                        policy_decision_evidence(True, "补偿执行前经统一权限网关复检通过"),
+                    ),
+                )
+
+            def authorize_compensation(compensation_tool=compensation_tool, arguments=arguments):
+                current = self.risk_engine.assess(
+                    user_id=user_id,
+                    tool_name=compensation_tool.metadata.name,
+                    arguments=arguments,
+                    base_risk=compensation_tool.metadata.risk_level,
+                    instruction=instruction,
+                )
+                gate = self.gateway.evaluate(
+                    user_id=user_id,
+                    tool_name=compensation_tool.metadata.name,
+                    risk_level=current.level,
+                    permission=compensation_tool.metadata.permission,
+                    instruction=instruction,
+                    arguments=arguments,
+                    role=role,
+                    purpose="compensation",
+                )
+                if gate.denied:
+                    raise PermissionError(gate.reason)
+
             try:
-                result = self.executor.execute(compensation_tool, arguments, context)
+                result = self.executor.execute(
+                    compensation_tool,
+                    arguments,
+                    context,
+                    on_success=persist_compensation,
+                    authorize=authorize_compensation,
+                )
             except Exception as exc:  # noqa: BLE001 - compensation failures are recorded
                 error = f"{type(exc).__name__}: {exc}"
                 failed.append({**base, "error": error})
@@ -1832,52 +2013,10 @@ class DagScheduler:
                     "result": result,
                 }
             )
-            self.journal.append_entry(
-                action_id,
-                node_id=node_id,
-                tool_name=tool_name,
-                phase="compensated",
-                status="succeeded",
-                arguments=arguments,
-                result=result,
-                risk_level=assessment.level.value,
-            )
-            self.audit.record(
-                event="compensation_executed",
-                user_id=user_id,
-                instruction=instruction,
-                dag_path=f"compensate:{node_id}:{tool_name}",
-                tool_name=compensation_tool.metadata.name,
-                arguments=arguments,
-                result={
-                    "node_id": node_id,
-                    "compensated_tool": tool_name,
-                    "compensation_tool": compensation_tool.metadata.name,
-                    "gateway": {
-                        "outcome": decision.outcome,
-                        "reason": decision.reason,
-                    },
-                    "risk": assessment.as_dict(),
-                    "result": result,
-                },
-                confirmation_state="compensated",
-                risk_level=assessment.level.value,
-                evidence=evidence_payload(
-                    tool_result_evidence(
-                        True,
-                        f"{tool_name} 已由 {compensation_tool.metadata.name} 补偿",
-                    ),
-                    policy_decision_evidence(
-                        True, "补偿执行前经统一权限网关复检通过"
-                    ),
-                ),
-            )
-
         if failed:
             status = "partial" if compensated else "failed"
             reason = (
-                f"部分补偿失败：成功 {len(compensated)} 个、失败 {len(failed)} 个，"
-                "需人工对账处理。"
+                f"部分补偿失败：成功 {len(compensated)} 个、失败 {len(failed)} 个，需人工对账处理。"
                 if compensated
                 else "补偿全部失败，需人工对账处理。"
             )
@@ -1907,6 +2046,7 @@ class DagScheduler:
         except IllegalTransition:
             return
 
+    @audit_scope
     def run_dag(
         self,
         *,
@@ -1926,6 +2066,7 @@ class DagScheduler:
         if not nodes:
             raise IntentError("DAG 至少需要一个工具节点。")
         action_id = action_id or f"dag_{uuid4().hex}"
+        audit_run_id.set(action_id)
         assessments = self._assess_nodes(nodes, user_id, instruction)
         risk_level = self._max_assessed_risk(assessments)
         plan_payload: dict[str, Any] = {
@@ -1953,9 +2094,7 @@ class DagScheduler:
         risk = {
             "level": risk_level.value,
             "reasons": [
-                reason
-                for assessment in assessments.values()
-                for reason in assessment.reasons
+                reason for assessment in assessments.values() for reason in assessment.reasons
             ],
             "requires_reauth": any(
                 assessment.requires_reauth for assessment in assessments.values()
@@ -1986,9 +2125,7 @@ class DagScheduler:
                     },
                     confirmation_state="blocked",
                     risk_level=assessments[node.id].level.value,
-                    evidence=evidence_payload(
-                        policy_decision_evidence(True, decision.reason)
-                    ),
+                    evidence=evidence_payload(policy_decision_evidence(True, decision.reason)),
                 )
                 return {
                     "status": ExecutionStatus.BLOCKED.value,
@@ -1998,9 +2135,7 @@ class DagScheduler:
                     "reason": decision.reason,
                     "plan": plan_payload,
                     "audit_id": audit_entry["id"],
-                    "evidence": evidence_payload(
-                        policy_decision_evidence(True, decision.reason)
-                    ),
+                    "evidence": evidence_payload(policy_decision_evidence(True, decision.reason)),
                 }
             if not decision.allowed_now:
                 raise IntentError("演示 DAG 只允许包含无需人工确认的绿色节点。")
@@ -2074,9 +2209,7 @@ class DagScheduler:
                     reason=reason,
                     risk=risk,
                 )
-                self.journal.update_status(
-                    action_id, "unknown", reason=reason, response=response
-                )
+                self.journal.update_status(action_id, "unknown", reason=reason, response=response)
                 return response
             if rollback["status"] in {"completed", "partial", "failed"}:
                 rolled_back = rollback["status"] == "completed"
@@ -2100,9 +2233,7 @@ class DagScheduler:
                     reason=reason,
                     risk=risk,
                 )
-                self.journal.update_status(
-                    action_id, status, reason=reason, response=response
-                )
+                self.journal.update_status(action_id, status, reason=reason, response=response)
                 return response
             reason = f"工具执行失败：{exc}"
             evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
@@ -2147,13 +2278,17 @@ class DagScheduler:
         user_id: str | None = None,
     ) -> dict[str, Any]:
         record = self.journal.get(action_id)
-        if record is not None and user_id is not None and record["user_id"] != user_id:
+        pending = self.db.get_pending(action_id)
+        if record is None and pending is None:
+            raise IntentError("确认请求不存在。")
+        owner_record = record or pending
+        if user_id is not None and owner_record["user_id"] != user_id:
             raise IntentError("执行日志不属于当前用户。")
+        if record is not None and record["status"] not in {"executing", "paused", "running"}:
+            raise IntentError("当前动作状态不允许暂停。")
         pause = self.pause.pause(action_id, reason=reason)
         owner = user_id or (str(record["user_id"]) if record is not None else "demo-user")
-        instruction = (
-            str(record["instruction"]) if record is not None else "暂停指定动作"
-        )
+        instruction = str(record["instruction"]) if record is not None else "暂停指定动作"
         audit_entry = self.audit.record(
             event="action_paused",
             user_id=owner,
@@ -2164,9 +2299,7 @@ class DagScheduler:
             result={"pause": pause},
             confirmation_state="paused",
             risk_level="green",
-            evidence=evidence_payload(
-                policy_decision_evidence(True, "用户在步骤之间请求暂停")
-            ),
+            evidence=evidence_payload(policy_decision_evidence(True, "用户在步骤之间请求暂停")),
         )
         response: dict[str, Any] = {
             "status": "paused",
@@ -2182,9 +2315,7 @@ class DagScheduler:
             }
         return response
 
-    def _pending_journal_view(
-        self, action_id: str, pending: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _pending_journal_view(self, action_id: str, pending: dict[str, Any]) -> dict[str, Any]:
         nodes = json.loads(pending.get("dag_json") or "[]")
         plan = json.loads(pending.get("plan_json") or "{}")
         pause = self.pause.status(action_id)
@@ -2217,8 +2348,7 @@ class DagScheduler:
                 "method": "POST",
                 "next_index": 0,
                 "remaining_steps": [
-                    {"id": node.get("id"), "tool_name": node.get("tool_name")}
-                    for node in nodes
+                    {"id": node.get("id"), "tool_name": node.get("tool_name")} for node in nodes
                 ],
                 "guidance": "动作尚未执行；确认暂停原因后可恢复，或直接继续确认流程。",
             }
@@ -2256,8 +2386,7 @@ class DagScheduler:
             "compensations": [
                 entry
                 for entry in entries
-                if entry["phase"]
-                in {"compensated", "compensation_failed", "rollback_blocked"}
+                if entry["phase"] in {"compensated", "compensation_failed", "rollback_blocked"}
             ],
         }
         pending = self.db.get_pending(action_id)
@@ -2271,13 +2400,14 @@ class DagScheduler:
                 "method": "POST",
                 "next_index": next_index,
                 "remaining_steps": [
-                    {"id": node.get("id"), "tool_name": node.get("tool_name")}
-                    for node in remaining
+                    {"id": node.get("id"), "tool_name": node.get("tool_name")} for node in remaining
                 ],
                 "guidance": "确认暂停原因后调用恢复端点；已执行步骤不会重复执行。",
             }
         return response
 
+    @audit_scope
+    @serialized_action
     def resume_action(
         self,
         *,
@@ -2290,6 +2420,8 @@ class DagScheduler:
             pending = self.db.get_pending(action_id)
             if pending is None:
                 raise IntentError("执行日志不存在，无法恢复暂停的动作。")
+            if user_id is not None and pending["user_id"] != user_id:
+                raise IntentError("确认请求不属于当前用户。")
             pause = self.pause.resume(action_id)
             return {
                 "status": pending["status"],
@@ -2306,9 +2438,7 @@ class DagScheduler:
             stored = record.get("response")
             if isinstance(stored, dict):
                 return stored
-            raise IntentError(
-                f"动作当前状态为 {record['status']}，不在暂停状态，无法恢复。"
-            )
+            raise IntentError(f"动作当前状态为 {record['status']}，不在暂停状态，无法恢复。")
         nodes = [PlanNode.from_dict(item) for item in record["nodes"]]
         if not nodes:
             raise IntentError("执行日志缺少节点定义，无法恢复。")
@@ -2351,7 +2481,7 @@ class DagScheduler:
                 action_id=action_id,
                 plan=plan,
                 risk_level=risk_level,
-                role=str(record["role"] or role),
+                role=role,
                 start_index=start_index,
                 prior_results=prior,
             )
@@ -2393,9 +2523,7 @@ class DagScheduler:
                 "evidence": evidence,
                 "evidence_list": evidence,
             }
-            self.journal.update_status(
-                action_id, "unknown", reason=reason, response=response
-            )
+            self.journal.update_status(action_id, "unknown", reason=reason, response=response)
             if pending is not None:
                 self._finish(action_id, "unknown", response)
             return response
@@ -2408,9 +2536,7 @@ class DagScheduler:
             )
             executed = self._executed_results(action_id)
             if rollback["status"] == "blocked":
-                self._advance(
-                    machine, ActionState.UNKNOWN, "回滚被阻止：存在不可撤销步骤"
-                )
+                self._advance(machine, ActionState.UNKNOWN, "回滚被阻止：存在不可撤销步骤")
                 reason = f"执行失败：{exc}；回滚被阻止：存在不可撤销步骤，需人工对账。"
                 response = self._rollback_response(
                     action_id=action_id,
@@ -2422,9 +2548,7 @@ class DagScheduler:
                     reason=reason,
                     risk=risk,
                 )
-                self.journal.update_status(
-                    action_id, "unknown", reason=reason, response=response
-                )
+                self.journal.update_status(action_id, "unknown", reason=reason, response=response)
                 if pending is not None:
                     self._finish(action_id, "unknown", response)
                 return response
@@ -2455,9 +2579,7 @@ class DagScheduler:
                     reason=reason,
                     risk=risk,
                 )
-                self.journal.update_status(
-                    action_id, status, reason=reason, response=response
-                )
+                self.journal.update_status(action_id, status, reason=reason, response=response)
                 if pending is not None:
                     self._finish(action_id, status, response)
                 return response
@@ -2475,9 +2597,7 @@ class DagScheduler:
                 "evidence": evidence,
                 "evidence_list": evidence,
             }
-            self.journal.update_status(
-                action_id, "failed", reason=reason, response=response
-            )
+            self.journal.update_status(action_id, "failed", reason=reason, response=response)
             if pending is not None:
                 self._finish(action_id, "failed", response)
             return response
@@ -2505,6 +2625,8 @@ class DagScheduler:
             self._finish(action_id, "completed", response)
         return response
 
+    @audit_scope
+    @serialized_action
     def rollback_action(
         self,
         *,
@@ -2519,9 +2641,7 @@ class DagScheduler:
         if user_id is not None and record["user_id"] != user_id:
             raise IntentError("执行日志不属于当前用户。")
         stored = record.get("response")
-        if record["status"] in {"rolled_back", "rollback_blocked"} and isinstance(
-            stored, dict
-        ):
+        if record["status"] in {"rolled_back", "rollback_blocked"} and isinstance(stored, dict):
             return stored
         owner = str(record["user_id"])
         instruction = str(record["instruction"] or "")
@@ -2591,9 +2711,7 @@ class DagScheduler:
         if rollback["status"] in {"completed", "partial", "failed"}:
             rolled_back = rollback["status"] == "completed"
             status = (
-                ExecutionStatus.ROLLED_BACK.value
-                if rolled_back
-                else ExecutionStatus.UNKNOWN.value
+                ExecutionStatus.ROLLED_BACK.value if rolled_back else ExecutionStatus.UNKNOWN.value
             )
             if machine is not None:
                 self._advance(
@@ -2610,9 +2728,7 @@ class DagScheduler:
                 rollback=rollback,
                 status=status,
                 reason=(
-                    f"人工回退完成：{detail}"
-                    if rolled_back
-                    else f"人工回退未全部成功：{detail}"
+                    f"人工回退完成：{detail}" if rolled_back else f"人工回退未全部成功：{detail}"
                 ),
                 risk=risk,
             )
@@ -2649,9 +2765,7 @@ class DagScheduler:
             ActionEnvelope.from_dict(item).masked()
             for item in json.loads(pending.get("envelopes_json") or "[]")
         ]
-        evidence = evidence_payload(
-            hash_chain_evidence(True, "任务状态已写入审计链")
-        )
+        evidence = evidence_payload(hash_chain_evidence(True, "任务状态已写入审计链"))
         return {
             "action_id": action_id,
             "user_id": pending["user_id"],
@@ -2666,8 +2780,13 @@ class DagScheduler:
             "envelopes": envelopes,
             "evidence": evidence,
             "evidence_list": evidence,
+            "instruction": pending["instruction"],
+            "plan": json.loads(pending.get("plan_json") or "{}"),
+            "result": self._stored_result(pending),
         }
 
+    @audit_scope
+    @serialized_action
     def reconcile(
         self,
         *,
@@ -2676,6 +2795,10 @@ class DagScheduler:
         user_id: str,
         reason: str = "",
     ) -> dict[str, Any]:
+        if outcome != "reconciled":
+            raise IntentError("对账接口不能代替实际资金补偿，请使用动作回滚接口。")
+        if not reason.strip():
+            raise IntentError("人工对账必须填写核查依据。")
         pending = self.db.get_pending(action_id)
         if pending is None:
             raise IntentError("确认请求不存在。")
@@ -2688,21 +2811,19 @@ class DagScheduler:
             tool_name=nodes[0].tool_name,
             arguments=nodes[0].arguments,
         )
-        target = (
-            ActionState.RECONCILED
-            if outcome == "reconciled"
-            else ActionState.ROLLED_BACK
-        )
+        target = ActionState.RECONCILED if outcome == "reconciled" else ActionState.ROLLED_BACK
         try:
             machine.transition(target, reason=reason or "人工对账处理")
         except IllegalTransition as exc:
             raise IntentError(str(exc)) from exc
         self.db.resolve_pending(action_id, target.value.lower())
+        result = self._stored_result(pending) or {"run_id": action_id}
+        result.update(status="reconciled", reason="已记录人工对账结论；此操作不代表资金已冲正。")
+        result["reconciliation"] = {"reason": reason, "funds_reversed": False}
+        self._finish(action_id, "reconciled", result)
         self.audit.record(
             event=(
-                "action_reconciled"
-                if target is ActionState.RECONCILED
-                else "action_rolled_back"
+                "action_reconciled" if target is ActionState.RECONCILED else "action_rolled_back"
             ),
             user_id=user_id,
             instruction=pending["instruction"],

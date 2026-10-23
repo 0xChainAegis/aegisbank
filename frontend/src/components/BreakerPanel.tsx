@@ -18,6 +18,7 @@ import { formatDateTime, prettyEvidence } from '../viewModel';
 import { PageAlerts, ResourceState, ToneChip } from './ui';
 
 interface Props {
+  writesBlocked: boolean;
   role: AegisRole;
   status: BreakerStatus | null;
   statusLoading: boolean;
@@ -41,6 +42,7 @@ function eventCounts(events: BreakerEvent[]): Array<{ kind: string; count: numbe
 }
 
 export default function BreakerPanel({
+  writesBlocked,
   role,
   status,
   statusLoading,
@@ -94,7 +96,7 @@ export default function BreakerPanel({
   const maxCount = Math.max(1, ...graph.map((item) => item.count));
 
   async function unlock() {
-    if (unlockBusy || role === 'auditor') return;
+    if (unlockBusy || writesBlocked || !canUnlockBreaker(role)) return;
     setUnlockBusy(true);
     setUnlockError('');
     setUnlockNotice('');
@@ -112,12 +114,9 @@ export default function BreakerPanel({
     }
   }
 
-  const unlockHint =
-    role === 'operator'
-      ? 'operator 具备 ops:manage：解除熔断会写入 circuit_breaker_unlock 审计。'
-      : role === 'auditor'
-        ? '审计员只读：可查看熔断状态、策略与事件，但不能解除熔断。'
-        : '当前角色 user 不具备 ops:manage：点击解除会被后端 403 拒绝，错误原文会展示在下方。';
+  const unlockHint = writesBlocked ? '系统尚未就绪，写操作已暂停。' : canUnlockBreaker(role)
+    ? '后端授予 ops:manage，解除结果会写入审计链。'
+    : '后端未授予 ops:manage，解除操作已禁用。';
 
   return (
     <div className="breaker-panel">
@@ -204,10 +203,10 @@ export default function BreakerPanel({
         <button
           className="danger-button small-button"
           onClick={() => void unlock()}
-          disabled={unlockBusy || role === 'auditor'}
+          disabled={unlockBusy || writesBlocked || !canUnlockBreaker(role)}
           title={role === 'auditor' ? '审计员只读，不能解除熔断' : 'POST /api/trust/breaker/unlock'}
         >
-          {unlockBusy ? '解除中…' : canUnlockBreaker(role) ? '解除熔断' : '尝试解除（预期 403）'}
+          {unlockBusy ? '解除中…' : '解除熔断'}
         </button>
       </div>
 

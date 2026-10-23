@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+execution_deadline: ContextVar[float | None] = ContextVar("execution_deadline", default=None)
+
+
+class ExecutionDeadlineExceeded(RuntimeError):
+    """The guarded execution is no longer permitted to persist changes."""
+
+
+def check_execution_deadline() -> None:
+    deadline = execution_deadline.get()
+    if deadline is not None and time.monotonic() >= deadline:
+        raise ExecutionDeadlineExceeded("工具已超时，禁止继续写入或提交数据库。")
 
 
 def utc_now() -> str:
@@ -18,9 +34,10 @@ class Database:
     """Thread-safe SQLite access with explicit short-lived connections."""
 
     def __init__(self, path: str | Path) -> None:
-        self.path = Path(path)
+        self.path = Path(path).resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._local = threading.local()
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -31,7 +48,7 @@ class Database:
         return conn
 
     def _initialize(self) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS permissions (
@@ -93,6 +110,10 @@ class Database:
                     used_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS clarification_uses (
+                    run_id TEXT PRIMARY KEY
+                );
+
                 CREATE TABLE IF NOT EXISTS circuit_breaker (
                     name TEXT PRIMARY KEY,
                     failures INTEGER NOT NULL DEFAULT 0,
@@ -123,18 +144,72 @@ class Database:
 
     @contextmanager
     def transaction(self):
-        """Yield a short-lived connection with an explicit transaction boundary."""
-        with self._lock, self._connect() as conn:
+        """One reentrant unit of work, including domain writes, audit and journal.
+
+        Nested repository calls on the same worker use the outer connection.
+        BEGIN IMMEDIATE also serializes competing processes before reading balances.
+        """
+        check_execution_deadline()
+        existing = getattr(self._local, "connection", None)
+        if existing is not None:
+            sequence = getattr(self._local, "sequence", 0) + 1
+            self._local.sequence = sequence
+            name = f"unit_{sequence}"
+            existing.execute(f"SAVEPOINT {name}")
             try:
+                yield existing
+                check_execution_deadline()
+                existing.execute(f"RELEASE SAVEPOINT {name}")
+            except BaseException:
+                existing.execute(f"ROLLBACK TO SAVEPOINT {name}")
+                existing.execute(f"RELEASE SAVEPOINT {name}")
+                raise
+            return
+        with self._lock:
+            check_execution_deadline()
+            conn = self._connect()
+            self._local.connection = conn
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                check_execution_deadline()
                 yield conn
-            except Exception:
+                check_execution_deadline()
+                conn.commit()
+            except BaseException:
                 conn.rollback()
                 raise
+            finally:
+                self._local.connection = None
+                conn.close()
+
+    @property
+    def in_transaction(self) -> bool:
+        return getattr(self._local, "connection", None) is not None
+
+    @contextmanager
+    def action_lock(self, action_id: str):
+        """Cross-process action ownership; the OS releases it after a crash."""
+        directory = self.path.parent / ".action-locks"
+        directory.mkdir(exist_ok=True)
+        key = hashlib.sha256(action_id.encode()).hexdigest()
+        with (directory / key).open("a") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                from .trust.action_envelope import EnvelopeError
+
+                raise EnvelopeError(
+                    "该动作正在处理，请查询原动作，勿重新下单。", code="ACTION_IN_PROGRESS"
+                ) from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
     # ---------- permissions ----------
     def seed_permissions(self, user_id: str, tool_names: list[str]) -> None:
         now = utc_now()
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.executemany(
                 """
                 INSERT OR IGNORE INTO permissions (user_id, tool_name, granted, updated_at)
@@ -144,7 +219,7 @@ class Database:
             )
 
     def list_permissions(self, user_id: str) -> list[dict[str, Any]]:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             rows = conn.execute(
                 "SELECT tool_name, granted, updated_at FROM permissions "
                 "WHERE user_id = ? ORDER BY tool_name",
@@ -153,7 +228,7 @@ class Database:
         return [dict(row) for row in rows]
 
     def get_permission(self, user_id: str, tool_name: str) -> bool | None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             row = conn.execute(
                 "SELECT granted FROM permissions WHERE user_id = ? AND tool_name = ?",
                 (user_id, tool_name),
@@ -161,7 +236,7 @@ class Database:
         return None if row is None else bool(row["granted"])
 
     def set_permission(self, user_id: str, tool_name: str, granted: bool) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 """
                 INSERT INTO permissions (user_id, tool_name, granted, updated_at)
@@ -182,7 +257,7 @@ class Database:
             "result_json": "",
             **record,
         }
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 """
                 INSERT INTO pending_actions
@@ -197,35 +272,35 @@ class Database:
             )
 
     def get_pending(self, action_id: str) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             row = conn.execute(
                 "SELECT * FROM pending_actions WHERE id = ?", (action_id,)
             ).fetchone()
         return None if row is None else dict(row)
 
     def resolve_pending(self, action_id: str, status: str) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 "UPDATE pending_actions SET status = ?, resolved_at = ? WHERE id = ?",
                 (status, utc_now(), action_id),
             )
 
     def set_pending_state(self, action_id: str, state: str, history_json: str) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 "UPDATE pending_actions SET state = ?, state_history_json = ? WHERE id = ?",
                 (state, history_json, action_id),
             )
 
     def set_pending_envelopes(self, action_id: str, envelopes_json: str) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 "UPDATE pending_actions SET envelopes_json = ? WHERE id = ?",
                 (envelopes_json, action_id),
             )
 
     def set_pending_result(self, action_id: str, result_json: str) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 "UPDATE pending_actions SET result_json = ? WHERE id = ?",
                 (result_json, action_id),
@@ -233,7 +308,7 @@ class Database:
 
     # ---------- idempotency ----------
     def get_idempotency(self, scope: str, key: str) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             row = conn.execute(
                 "SELECT * FROM idempotency_keys WHERE scope = ? AND key = ?",
                 (scope, key),
@@ -242,7 +317,7 @@ class Database:
 
     def create_idempotency(self, *, scope: str, key: str, request_hash: str) -> None:
         now = utc_now()
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 """
                 INSERT INTO idempotency_keys
@@ -252,10 +327,8 @@ class Database:
                 (scope, key, request_hash, now, now),
             )
 
-    def complete_idempotency(
-        self, *, scope: str, key: str, response_json: str
-    ) -> None:
-        with self._lock, self._connect() as conn:
+    def complete_idempotency(self, *, scope: str, key: str, response_json: str) -> None:
+        with self.transaction() as conn:
             conn.execute(
                 """
                 UPDATE idempotency_keys
@@ -266,34 +339,27 @@ class Database:
             )
 
     def delete_idempotency(self, *, scope: str, key: str) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute(
-                "DELETE FROM idempotency_keys WHERE scope = ? AND key = ?", (scope, key)
-            )
+        with self.transaction() as conn:
+            conn.execute("DELETE FROM idempotency_keys WHERE scope = ? AND key = ?", (scope, key))
 
     # ---------- nonce one-time store ----------
     def nonce_used(self, nonce: str) -> bool:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                "SELECT 1 FROM used_nonces WHERE nonce = ?", (nonce,)
-            ).fetchone()
+        with self.transaction() as conn:
+            row = conn.execute("SELECT 1 FROM used_nonces WHERE nonce = ?", (nonce,)).fetchone()
         return row is not None
 
     def claim_nonce(self, nonce: str, action_id: str) -> bool:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             cursor = conn.execute(
-                "INSERT OR IGNORE INTO used_nonces (nonce, action_id, used_at) "
-                "VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO used_nonces (nonce, action_id, used_at) VALUES (?, ?, ?)",
                 (nonce, action_id, utc_now()),
             )
             return int(cursor.rowcount) == 1
 
     # ---------- circuit breaker ----------
     def get_circuit_breaker(self, name: str) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM circuit_breaker WHERE name = ?", (name,)
-            ).fetchone()
+        with self.transaction() as conn:
+            row = conn.execute("SELECT * FROM circuit_breaker WHERE name = ?", (name,)).fetchone()
         return None if row is None else dict(row)
 
     def save_circuit_breaker(
@@ -304,7 +370,7 @@ class Database:
         last_failure_at: str | None,
         opened_at: str | None,
     ) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 """
                 INSERT INTO circuit_breaker
@@ -320,7 +386,7 @@ class Database:
             )
 
     def reset_circuit_breaker(self, name: str) -> None:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             conn.execute(
                 """
                 INSERT INTO circuit_breaker
@@ -356,27 +422,34 @@ class Database:
             record["entry_hash"],
         )
         placeholders = ",".join("?" for _ in values)
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             cursor = conn.execute(
                 f"INSERT INTO audit_log ({columns}) VALUES ({placeholders})", values
             )
             return int(cursor.lastrowid)
 
     def last_audit_hash(self) -> str:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             row = conn.execute(
                 "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
             ).fetchone()
         return "" if row is None else str(row["entry_hash"])
 
-    def list_audit(self, limit: int = 100) -> list[dict[str, Any]]:
-        with self._lock, self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
-            ).fetchall()
+    def list_audit(self, limit: int = 100, run_id: str | None = None) -> list[dict[str, Any]]:
+        with self.transaction() as conn:
+            if run_id:
+                rows = conn.execute(
+                    "SELECT * FROM audit_log WHERE json_extract(result_json, '$.run_id') = ? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (run_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
+                ).fetchall()
         return [dict(row) for row in rows]
 
     def all_audit_ascending(self) -> list[dict[str, Any]]:
-        with self._lock, self._connect() as conn:
+        with self.transaction() as conn:
             rows = conn.execute("SELECT * FROM audit_log ORDER BY id ASC").fetchall()
         return [dict(row) for row in rows]

@@ -1,7 +1,9 @@
 # 架构说明
 
+
+> 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
 > 最近更新：2026-10-23（阶段 2A 六项硬要求落地后，基线 `bf36895`）。
-> 文中数字与实现一致：48 个工具、49 个 `/api` 接口、5 个场景模块 + 6 个 2A 扩展模块、后端 144 项 pytest（15 个测试文件）。
+> 文中数字与实现一致：50 个工具、49 个 `/api` 接口、5 个场景模块 + 6 个 2A 扩展模块、后端 187 项 pytest（16 个测试文件）。
 
 ## 1. 设计目标
 
@@ -157,7 +159,7 @@ AEGIS_LLM_TIMEOUT_SECONDS=20
 
 ### 5.1 Tool SDK
 
-`registry.py` 定义 `BaseTool` 与 `ToolRegistry`。每个工具声明 `name / title / description / risk_level / permission / input_schema / output_schema / arguments_model`，阶段 2A 增加 `compensable / compensation_tool`。当前注册 **48** 个工具：核心 9 + 五个场景模块 25 + 2A 扩展 14（8 个反向工具 + 6 个演示工具）。权限种子在装配时按注册表重新生成。
+`registry.py` 定义 `BaseTool` 与 `ToolRegistry`。每个工具声明 `name / title / description / risk_level / permission / input_schema / output_schema / arguments_model`，阶段 2A 增加 `compensable / compensation_tool`。当前注册 **50** 个工具：核心 10 + 五个场景模块 26 + 2A 扩展 14（8 个反向工具 + 6 个演示工具）。权限仅预置 demo-user 的显式工具白名单；新用户与新工具默认拒绝，GET 不隐式授予权限。
 
 ### 5.2 ToolExecutor / ExecutionGuard 执行链
 
@@ -175,7 +177,7 @@ DagScheduler._execute_nodes
 
 - `ExecutionGuard` 是协议：`name`、`before_execute`、`after_execute`；默认配置下 guard 是 `SandboxGuard`；
 - `ToolExecutor` 按注册顺序执行前置钩子、逆序执行后置钩子；任一前置钩子抛 `SandboxViolation` 即阻止工具执行；
-- `SandboxedToolExecutor` 在 guard 链外再包一层墙钟超时（`ThreadPoolExecutor` + `future.result(timeout)`）；超时后 force-release 网络阻断并写 `sandbox_timeout`；
+- `SandboxedToolExecutor` 在 guard 链外再包一层墙钟超时（`ThreadPoolExecutor` + `future.result(timeout)`）；超时后禁止新的数据库提交、保留该工作线程的网络限制并写 `sandbox_timeout`；不强杀 Python 线程；
 - 沙箱违规先写审计再抛错；scheduler 记录 `tool_failed` 与熔断失败计数，不会把违规伪装成业务成功；
 - 补偿工具同样经该执行器，不存在「回滚绕过沙箱」的旁路。
 
@@ -203,7 +205,7 @@ DagScheduler._execute_nodes
 | `readiness.py` | 就绪探针与写操作 fail-closed | `GET /api/health/ready`、`require_ready()` |
 | `circuit_breaker.py` | 三类规则熔断（连续失败 / 红色 / 注入），共享 open 状态 | `threshold/window/lock`、`breaker_events` |
 | `authz.py` | 角色能力矩阵 | `AuthzService.normalize/require/describe` |
-| `mfa.py` | MFA Provider 与提示性策略 | `MfaService.verify`、`OtpProvider`、`SimulatedBiometricProvider` |
+| `mfa.py` | MFA Provider 与强制策略 | `MfaService.verify`、`OtpProvider`、`SimulatedBiometricProvider` |
 | `pause.py` | 暂停标记 + 执行 journal | `PauseRegistry`、`ActionJournal`、`action_pauses` / `action_journal*` |
 | `sandbox.py` | 进程内沙箱 Guard / 沙箱执行器 | `SandboxPolicy`、`SandboxGuard`、`SandboxedToolExecutor` |
 
@@ -281,7 +283,7 @@ Schema/seed（scenarios + extensions）
 - 命中 `确认 <action_id> [验证码] <otp>` 则调用 `scheduler.confirm`，否则调用 `scheduler.run`；
 - 结果渲染成人类可读回执，同时保留原始 `structured` 结果；
 - 每个入站消息写 `im_message_executed / im_message_rejected` 审计；
-- `message_id` 命中 `im_messages` 时直接回放首次回执；写入使用 `INSERT OR IGNORE`，重复投递不会二次执行；
+- 按通道/发送者/消息 ID 命名空间加内容哈希；动作锁覆盖检查与执行；相同消息回放，不同正文冲突；
 - `extensions/im.py` 提供 `POST /api/channels/im/message`（readiness 503 门禁）与 `GET /api/channels/im/help`。
 
 适配器不实现 Planner、不做权限判断、不持有 MFA 逻辑，也不另建审计链。
@@ -323,7 +325,7 @@ Schema/seed（scenarios + extensions）
 - 任务表 `scheduled_tasks(task_id, kind, payload_json, run_at, recurrence, status, last_run_at, last_result_json, ...)`；
 - 创建：`schedule_transfer`（一次性/每月/每年）与生日场景的 `schedule_flower_order` / `schedule_cake_order`（到期前 2 天）；
 - 执行：`run_due_tasks` 工具按 `run_at <= now` 取到期任务；`POST /api/automation/run-due` 提供**演示时间快进**（可传 `now` 覆盖当前时间），到期执行前重新调用网关复检权限，审计写入 `trigger_source="scheduled"`；该端点已接 readiness 503 门禁；
-- 幂等：先用条件 UPDATE 原子抢占任务（`pending → done`）再执行，重复调用不会重复扣款；
+- 幂等：在同一个执行事务中读取 pending、执行副作用并提交 done，重复调用不会重复扣款；
 - 可选后台线程：`AEGIS_AUTOMATION_ENABLED=true` 时启动守护线程按 `AEGIS_AUTOMATION_INTERVAL_SECONDS` 轮询 `run_due`；默认关闭，测试与演示均可用快进接口触发。
 
 ### 5.10 证据流与审计链
@@ -345,7 +347,7 @@ React 控制台（`frontend/src/`）七个页面：
 - **运维面板**：熔断状态、事件与恢复；
 - **操作审计**：审计字段、证据分层与哈希链校验。
 
-全局 `ReadinessBanner` 展示就绪组件，非 `ready` 时禁用写操作。`roles.ts` 已镜像后端角色矩阵作为展示基础；2A 的补偿/熔断/沙箱/IM 面板由前端同事并行扩展，合入前以后端 OpenAPI 与测试为准。
+全局 `ReadinessBanner` 展示就绪组件，非 `ready` 时禁用写操作。`roles.ts` 从 `/api/authz/me` 获取能力列表，获取失败时关闭写入口；授权、MFA、沙箱、IM、熔断和任务面板均检查能力与 readiness。
 
 ## 6. 数据模型
 
@@ -430,11 +432,11 @@ React 控制台（`frontend/src/`）七个页面：
 - ✅ 证据分层与审计哈希链
 - ✅ 注入整条拒绝、模型候选白名单
 - ✅ 连续失败熔断与运维接口
-- ✅ 场景模块自动发现 + 六场景 6/6（25 个场景工具）
+- ✅ 场景模块自动发现 + 六场景 6/6（26 个场景工具）
 - ✅ 时间维度（任务表 + run-due + 可选后台线程；readiness 503 门禁）
-- ✅ 步骤级暂停/恢复、执行 journal、逆序补偿与人工回退（15 可补偿 / 12 不可逆）
+- ✅ 步骤级暂停/恢复、执行 journal、逆序补偿与人工回退（15 可补偿 / 13 不可逆）
 - ✅ 可疑行为熔断（短时多次红色、注入命中累计）与 operator 解锁
-- ✅ 演示 MFA Provider（OTP + 模拟生物识别）与提示性策略
+- ✅ 演示 MFA Provider（OTP + 模拟生物识别）与强制 provider 策略
 - ✅ IM / CLI / webhook 渠道适配器（复用同一网关、MFA 与审计链）
 - ✅ `ToolExecutor` + `ExecutionGuard` 执行链与进程内沙箱（超时/网络/体积/白名单）
 - ✅ 多角色能力矩阵与撤权（`X-Aegis-Role` 演示头）
@@ -449,3 +451,17 @@ React 控制台（`frontend/src/`）七个页面：
 - ⏳ 工具执行中途强停
 - ✅ 前端 2A 面板（角色切换 / MFA 选择 / 步骤日志与回滚 / 按角色禁写 / 2A 能力页 / 运维面板）
 - ⏳ WORM/合规审计存储、速率限制、CSRF/mTLS、CSP
+
+
+## 2026-10-23 安全复审后的执行契约
+
+- 网关先决定是否允许，执行器在 `BEGIN IMMEDIATE` 事务内再次复核权限、风险和熔断。工具业务写入、输出契约校验、成功审计、步骤 journal 一起提交；故障全部回滚。嵌套工具使用同一线程连接与 SAVEPOINT。
+- confirm / resume / rollback / reconcile 使用按动作的 Linux 文件锁；并发请求返回 `409 ACTION_IN_PROGRESS`，不能以“请求失败”推断尚未扣款。已确认 envelope 必须与节点完整对应；补偿工具标记 internal_only，只接受持久化 journal 生成的原操作证据。
+- 定时任务绑定 source_action、参数哈希、风险和原 MFA 授权。来源未完成、撤权、到期风险超授权上限均拒绝；真实子工具逐笔走网关和执行器。旧任务缺授权记录时不继续执行，需取消后重新创建。
+- 工具输出强制 `simulated=true`、有限 JSON 值、工具名一致，并验证声明 Schema；旧工具的业务输出契约集中于 `tool_outputs.py`。不以空对象或缺失字段伪造金融事实。
+- 沙箱使用有界线程池、ContextVar 网络限制、提交截止时间。只能保护统一 SQLite 提交边界，不能强杀线程或隔离任意 Python、文件、子进程和 C 扩展；未提供任意生成代码执行入口。
+- 前端先保存原请求体和幂等键，再发出请求；断线/刷新查询原请求。待确认动作使用独立队列；恢复先取服务端计划与状态。能力来自 `/authz/me`，全部写页面在状态未知或非 ready 时禁用。
+- 澄清续问使用 `clarification_run_id`：绑定用户和角色、10 分钟、只能消费一次。调用者明确选择补充，否定或修改意图要求重新给出完整指令。通用代词和重复扣款指令仍需明确核对。
+- `audit.result_json` 新增受哈希保护的 run_id / step_id，支持 `GET /api/audit?run_id=...`；历史链不重写。对账只记结论，实际资金补偿使用 rollback。
+
+仍需后续验证：kill -9 / 多 worker 故障恢复、长期 TTL 清理、按用户熔断、OS 隔离、真实身份与 MFA / IM、外部审计锚点与长时间压力测试。详见 [修复记录](REMEDIATION-PLAN-2026-10-23.md)。

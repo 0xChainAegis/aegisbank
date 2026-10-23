@@ -84,6 +84,8 @@ export default function ConfirmationModal({
   const expired = Boolean(pending.confirmation?.expires_at) && remaining <= 0;
 
   const dialogRef = useRef<HTMLElement | null>(null);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -102,7 +104,7 @@ export default function ConfirmationModal({
     focusables()[0]?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !busyRef.current) {
         event.preventDefault();
         onCloseRef.current();
         return;
@@ -167,7 +169,8 @@ export default function ConfirmationModal({
               type="button"
               aria-label="稍后处理并关闭"
               title="稍后处理（保留待确认操作）"
-              onClick={() => onCloseRef.current()}
+              onClick={() => { if (!busy) onCloseRef.current(); }}
+              disabled={busy}
             >
               ×
             </button>
@@ -353,7 +356,7 @@ export default function ConfirmationModal({
           <button
             className="ghost-button"
             type="button"
-            onClick={() => onCloseRef.current()}
+            onClick={() => { if (!busy) onCloseRef.current(); }}
             disabled={busy}
           >
             稍后处理

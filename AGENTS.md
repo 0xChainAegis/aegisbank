@@ -1,5 +1,7 @@
 # AegisBank —— 项目规则
 
+
+> 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](docs/REMEDIATION-PLAN-2026-10-23.md)。
 > 本文件是产品主线仓库的工程约定。上级工作区规则见 `../AGENTS.md`；两者冲突时以本文件为准。
 > 总规划：[`docs/MASTER-PLAN.md`](docs/MASTER-PLAN.md)｜路线图：[`docs/ROADMAP.md`](docs/ROADMAP.md)
 
@@ -25,8 +27,8 @@
 
 - **阶段 0（产品边界与仓库定型）已完成**：上游 PR 材料归档到 `archive/upstream-plan-provenance`，`main` 只保留产品内容。
 - **阶段 1（信任工程）已完成**：`backend/aegisbank_api/trust/` 落地 ActionEnvelope/v1、幂等键、状态机（含 `UNKNOWN / RECONCILED / ROLLED_BACK`）、readiness fail-closed、证据分层、注入整条拒绝与模型候选白名单；新增 `GET /api/health/ready`、`/api/trust/*` 接口；`POST /api/agent/run` 与 `POST /api/confirmations/{id}` 支持 `Idempotency-Key`，确认链路区分 409 / 422 / 503 语义；`backend/tests/test_trust.py` 共 17 条用例。
-- **阶段 2B（六场景完整覆盖）已完成**：`scenarios/` 下 5 个场景模块（`wealth` / `transfers` / `bills` / `cards` / `automation`）覆盖赛题六个参考场景 6/6，新增 25 个场景工具。
-- **阶段 2A（六项硬要求，后端/API）已完成**（基线 `bf36895`）：步骤级暂停/恢复/回退/补偿（27 条补偿规格，15 可补偿 / 12 不可逆）、三类规则可疑行为熔断与 operator 解锁、可插拔 MFA Provider（OTP + 模拟生物识别）、IM/CLI/webhook 渠道适配器、进程内工具沙箱（超时/网络/入参出参/白名单）、多角色与撤权（`user / operator / auditor`）。工具目录共 **48 个**（核心 9 + 场景 25 + 2A 扩展 14）；后端 **144 项** pytest（15 个测试文件，2A 新增 51 条 + 回归 8 条）、前端 22 项 Vitest。
+- **阶段 2B（六场景完整覆盖）已完成**：`scenarios/` 下 5 个场景模块（`wealth` / `transfers` / `bills` / `cards` / `automation`）覆盖赛题六个参考场景 6/6，新增 26 个场景工具。
+- **阶段 2A（六项硬要求，后端/API）已完成**（基线 `bf36895`）：步骤级暂停/恢复/回退/补偿（28 条补偿规格，15 可补偿 / 13 不可逆）、三类规则可疑行为熔断与 operator 解锁、可插拔 MFA Provider（OTP + 模拟生物识别）、IM/CLI/webhook 渠道适配器、进程内工具沙箱（超时/网络/入参出参/白名单）、多角色与撤权（`user / operator / auditor`）。工具目录共 **50 个**（核心 10 + 场景 26 + 2A 扩展 14）；后端 **187 项** pytest（16 个测试文件，2A 新增 51 条 + 回归 8 条）、前端 53 项 Vitest。
 - **阶段 3 交付材料已产出**：`deliverables/`（作品简介、技术文档、14 页答辩 PPT、演示视频分镜脚本、安全自评、部署说明、测试复现）；演示视频待人工录制。
 - 下一步：**阶段 2.5（人工体验，推迟，后续重新进行）**；生产化剩余项：幂等/nonce TTL 清理、按用户熔断、OS 级沙箱、真实身份认证与 MFA、真实 IM 平台接入。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
@@ -89,12 +91,12 @@ git -C $unc push origin main
   - `banking/`：Mock Bank Core 领域模型与 SQLite 仓库
   - `planning/`：Planner 契约、规则/LLM 实现、Plan Compiler 与模型候选校验
   - `trust/`：ActionEnvelope、幂等、状态机、证据、readiness、熔断、角色、MFA、暂停、沙箱
-  - `scenarios/`：5 个可自动发现的业务场景模块（25 个场景工具）与模块契约
+  - `scenarios/`：5 个可自动发现的业务场景模块（26 个场景工具）与模块契约
   - `extensions/`：2A 横切能力自动发现模块（authz / breaker / compensation / im / mfa / sandbox）
   - `channels/`：IM / CLI / webhook 渠道适配层
   - `executor.py` / `compensation.py`：统一执行链与补偿规格注册表
-  - `tools/finance.py`：9 个核心银行工具与 Manifest
-- `backend/tests/`：API 闭环、Planner、信任层、六场景与 2A 测试（15 个测试文件，144 条）
+  - `tools/finance.py`：10 个核心银行工具与 Manifest
+- `backend/tests/`：API 闭环、Planner、信任层、六场景与 2A 测试（16 个测试文件，187 条）
 - `frontend/src/`：银行概览、六场景面板、任务控制台、权限控制台、2A 能力、运维面板、操作审计（7 页）
 - `deliverables/`：阶段 3 参赛交付包（简介 / 技术文档 / 答辩 PPT / 演示视频脚本 / 安全自评 / 部署说明 / 测试复现）
 - `scripts/`：依赖安装、开发启动、lint/build/test/smoke

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   fetchAutomationGoals,
@@ -38,25 +38,29 @@ interface Resource<T> {
   reload: () => Promise<void>;
 }
 
-function useResource<T>(loader: () => Promise<T>, fallbackError: string): Resource<T> {
+export function useResource<T>(loader: () => Promise<T>, fallbackError: string): Resource<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const sequence = useRef(0);
   const reload = useCallback(async () => {
+    const current = ++sequence.current;
     setLoading(true);
     setError('');
     try {
-      setData(await loader());
+      const next = await loader();
+      if (current === sequence.current) setData(next);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : fallbackError);
+      if (current === sequence.current) setError(caught instanceof Error ? caught.message : fallbackError);
     } finally {
-      setLoading(false);
+      if (current === sequence.current) setLoading(false);
     }
   }, [loader, fallbackError]);
 
   useEffect(() => {
     void reload();
+    return () => { sequence.current += 1; };
   }, [reload]);
 
   return { data, loading, error, reload };

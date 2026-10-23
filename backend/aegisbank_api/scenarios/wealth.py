@@ -238,12 +238,10 @@ def _redeem_amount_cents(
     if amount is not None:
         return to_cents(float(amount))
     shares = arguments.get("shares")
-    if shares is not None:
-        return to_cents(float(shares) * SIMULATED_NAV_CNY)
     holding_id = arguments.get("holding_id")
     product_id = arguments.get("product_id")
     query = (
-        "SELECT market_value_cents FROM wealth_holdings "
+        "SELECT market_value_cents, shares FROM wealth_holdings "
         "WHERE user_id = ? AND status = 'active'"
     )
     params: list[Any] = [user_id]
@@ -256,7 +254,14 @@ def _redeem_amount_cents(
     query += " ORDER BY opened_at, holding_id LIMIT 1"
     with repository.db.transaction() as conn:
         row = conn.execute(query, params).fetchone()
-    return None if row is None else int(row["market_value_cents"])
+    if row is None:
+        return None
+    if shares is not None:
+        if float(row["shares"]) <= 0 or float(shares) > float(row["shares"]):
+            return None
+        return int(round(int(row["market_value_cents"]) * float(shares) / float(row["shares"])))
+    return int(row["market_value_cents"])
+
 
 class WealthProductOut(BaseModel):
     product_id: str
@@ -466,15 +471,12 @@ class AssessWealthRiskTool(BaseTool):
 
     def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
         args = AssessWealthRiskArgs.model_validate(arguments)
-        previous = _save_risk_preference(
-            self.services.db, context.user_id, args.risk_preference
-        )
+        previous = _save_risk_preference(self.services.db, context.user_id, args.risk_preference)
         label = RISK_LABELS[args.risk_preference]
         return ToolResult(
             tool_name=self.metadata.name,
             message=(
-                f"已完成模拟风险测评：风险偏好 {args.risk_preference}（{label}）。"
-                f"{DISCLAIMER}"
+                f"已完成模拟风险测评：风险偏好 {args.risk_preference}（{label}）。{DISCLAIMER}"
             ),
             data={
                 "risk_preference": args.risk_preference,
@@ -485,6 +487,7 @@ class AssessWealthRiskTool(BaseTool):
                 "disclaimer": DISCLAIMER,
             },
         )
+
 
 class PurchaseWealthTool(BaseTool):
     metadata = ToolMetadata(
@@ -531,9 +534,7 @@ class PurchaseWealthTool(BaseTool):
 
         preference = _risk_preference(db, context.user_id)
         risk_warning: list[str] = []
-        if preference is not None and _risk_index(product["risk_level"]) > _risk_index(
-            preference
-        ):
+        if preference is not None and _risk_index(product["risk_level"]) > _risk_index(preference):
             risk_warning.append(
                 f"产品风险等级 {product['risk_level']} 高于您的风险偏好 {preference}，"
                 "本次申购属于主动提升风险敞口，请确认可以承受相应净值波动。"
@@ -666,15 +667,11 @@ class RedeemWealthTool(BaseTool):
         active = _holdings(db, context.user_id)
         target: dict[str, Any] | None = None
         if args.holding_id:
-            target = next(
-                (item for item in active if item["holding_id"] == args.holding_id), None
-            )
+            target = next((item for item in active if item["holding_id"] == args.holding_id), None)
             if target is None:
                 raise ValueError(f"可赎回的模拟持仓不存在：{args.holding_id}")
         else:
-            candidates = [
-                item for item in active if item["product_id"] == args.product_id
-            ]
+            candidates = [item for item in active if item["product_id"] == args.product_id]
             if not candidates:
                 raise ValueError(f"当前没有该理财产品的可赎回持仓：{args.product_id}")
             if len(candidates) > 1:
@@ -687,7 +684,9 @@ class RedeemWealthTool(BaseTool):
         if args.amount_cny is not None:
             amount_cents = to_cents(args.amount_cny)
         elif args.shares is not None:
-            amount_cents = to_cents(args.shares * SIMULATED_NAV_CNY)
+            if args.shares > float(target["shares"]) or float(target["shares"]) <= 0:
+                raise ValueError("赎回份额超过实际持仓份额。")
+            amount_cents = int(round(market_value * args.shares / float(target["shares"])))
         else:
             amount_cents = market_value
         if amount_cents <= 0:
@@ -709,23 +708,30 @@ class RedeemWealthTool(BaseTool):
             principal_cut = int(round(principal_cents * amount_cents / market_value))
             remaining_principal = principal_cents - principal_cut
             remaining_market = market_value - amount_cents
-            remaining_shares = round(float(target["shares"]) - amount_cents / 100.0, 2)
+            remaining_shares = round(float(target["shares"]) * remaining_market / market_value, 8)
             holding_status = "active"
 
+        redeemed_shares = round(float(target["shares"]) - remaining_shares, 8)
         now = _now()
         order_id = _new_id("WOD")
         with db.transaction() as conn:
-            conn.execute(
+            updated = conn.execute(
                 "UPDATE wealth_holdings SET shares = ?, principal_cents = ?, "
-                "market_value_cents = ?, status = ? WHERE holding_id = ?",
+                "market_value_cents = ?, status = ? WHERE holding_id = ? "
+                "AND user_id = ? AND status = 'active' AND market_value_cents = ? AND shares = ?",
                 (
                     remaining_shares,
                     remaining_principal,
                     remaining_market,
                     holding_status,
                     target["holding_id"],
+                    context.user_id,
+                    market_value,
+                    target["shares"],
                 ),
-            )
+            ).rowcount
+            if updated != 1:
+                raise ValueError("持仓已变化，拒绝重复或并发赎回，请重新核对。")
             conn.execute(
                 """
                 INSERT INTO wealth_orders
@@ -737,7 +743,7 @@ class RedeemWealthTool(BaseTool):
                     context.user_id,
                     target["product_id"],
                     amount_cents,
-                    round(amount_cents / 100.0 * SIMULATED_NAV_CNY, 2),
+                    redeemed_shares,
                     now,
                 ),
             )
@@ -915,9 +921,7 @@ def _product_tokens(product: dict[str, Any]) -> list[str]:
     return unique
 
 
-def _match_products(
-    instruction: str, products: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+def _match_products(instruction: str, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Match products by id, name/kind keyword, then risk level; never guesses."""
     upper = instruction.upper()
     for product in products:
@@ -1008,17 +1012,13 @@ class PurchaseWealthIntent:
             return None
         if not matches:
             return _clarify(
-                "未找到匹配的模拟理财产品，请补充产品名称或风险等级"
-                "（如：稳健短债A / R2）。",
+                "未找到匹配的模拟理财产品，请补充产品名称或风险等级（如：稳健短债A / R2）。",
                 self.name,
             )
         if len(matches) > 1:
-            labels = "、".join(
-                f"{item['name']}({item['risk_level']})" for item in matches
-            )
+            labels = "、".join(f"{item['name']}({item['risk_level']})" for item in matches)
             return _clarify(
-                f"匹配到多个模拟理财产品（{labels}），"
-                "请明确产品名称或风险等级后重试。",
+                f"匹配到多个模拟理财产品（{labels}），请明确产品名称或风险等级后重试。",
                 self.name,
             )
         product = matches[0]
@@ -1067,12 +1067,9 @@ class RedeemWealthIntent:
             return _clarify("您当前没有可赎回的模拟理财持仓。", self.name)
         matches = _match_products(text, products)
         if len(matches) > 1:
-            labels = "、".join(
-                f"{item['name']}({item['risk_level']})" for item in matches
-            )
+            labels = "、".join(f"{item['name']}({item['risk_level']})" for item in matches)
             return _clarify(
-                f"匹配到多个模拟理财产品（{labels}），"
-                "请明确要赎回的产品名称或风险等级。",
+                f"匹配到多个模拟理财产品（{labels}），请明确要赎回的产品名称或风险等级。",
                 self.name,
             )
         assumptions: list[str] = []
@@ -1082,24 +1079,17 @@ class RedeemWealthIntent:
                 item for item in holdings if item["product_id"] == product["product_id"]
             ]
             if not product_holdings:
-                return _clarify(
-                    f"您当前没有 {product['name']} 的模拟持仓。", self.name
-                )
+                return _clarify(f"您当前没有 {product['name']} 的模拟持仓。", self.name)
             if len(product_holdings) > 1:
                 return _clarify(
-                    f"{product['name']} 存在多笔模拟持仓，"
-                    "请在持仓列表中选择具体持仓后再赎回。",
+                    f"{product['name']} 存在多笔模拟持仓，请在持仓列表中选择具体持仓后再赎回。",
                     self.name,
                 )
             holding = product_holdings[0]
-            assumptions.append(
-                f"已按产品匹配到持仓 {holding['holding_id']}（{product['name']}）。"
-            )
+            assumptions.append(f"已按产品匹配到持仓 {holding['holding_id']}（{product['name']}）。")
         else:
             if len(holdings) > 1:
-                return _clarify(
-                    "当前有多笔模拟理财持仓，请明确要赎回的产品名称。", self.name
-                )
+                return _clarify("当前有多笔模拟理财持仓，请明确要赎回的产品名称。", self.name)
             holding = holdings[0]
             product = holding.get("product") or {}
             assumptions.append(
@@ -1162,8 +1152,7 @@ class AssessWealthRiskIntent:
         preference = _preference_from_text(text)
         if preference is None:
             return _clarify(
-                "请补充风险偏好等级（R1 保守型至 R5 进取型），"
-                "例如“我的风险偏好是 R3”。",
+                "请补充风险偏好等级（R1 保守型至 R5 进取型），例如“我的风险偏好是 R3”。",
                 self.name,
             )
         return _plan(
@@ -1227,18 +1216,12 @@ def router(services: CoreServices) -> APIRouter:
 
     @api.get("/holdings")
     def list_holdings(user_id: str = DEMO_USER) -> dict[str, Any]:
-        holdings = [
-            _serialize_holding(item) for item in _holdings(services.db, user_id)
-        ]
+        holdings = [_serialize_holding(item) for item in _holdings(services.db, user_id)]
         return {
             "holdings": holdings,
             "count": len(holdings),
-            "total_market_value_cny": round(
-                sum(item["market_value_cny"] for item in holdings), 2
-            ),
-            "total_principal_cny": round(
-                sum(item["principal_cny"] for item in holdings), 2
-            ),
+            "total_market_value_cny": round(sum(item["market_value_cny"] for item in holdings), 2),
+            "total_principal_cny": round(sum(item["principal_cny"] for item in holdings), 2),
             "simulated": True,
             "message": "模拟理财持仓。",
             "disclaimer": DISCLAIMER,
@@ -1252,9 +1235,7 @@ def router(services: CoreServices) -> APIRouter:
                 "ORDER BY created_at DESC, order_id DESC",
                 (user_id,),
             ).fetchall()
-        products = {
-            item["product_id"]: item for item in _products(services.db, active_only=False)
-        }
+        products = {item["product_id"]: item for item in _products(services.db, active_only=False)}
         orders: list[dict[str, Any]] = []
         for row in rows:
             item = dict(row)

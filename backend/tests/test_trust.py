@@ -44,9 +44,7 @@ def make_client(
 def load_pending(db_path: Path, action_id: str) -> dict[str, Any]:
     with closing(sqlite3.connect(db_path)) as conn:
         conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM pending_actions WHERE id = ?", (action_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM pending_actions WHERE id = ?", (action_id,)).fetchone()
         assert row is not None
         return dict(row)
 
@@ -100,9 +98,7 @@ def test_envelope_tampering_is_rejected_without_execution(tmp_path: Path) -> Non
         action_id = body["confirmation"]["id"]
         plan = json.loads(load_pending(db_path, action_id)["plan_json"])
         plan["steps"][0]["arguments"]["amount_cny"] = 9999.0
-        update_pending(
-            db_path, action_id, plan_json=json.dumps(plan, ensure_ascii=False)
-        )
+        update_pending(db_path, action_id, plan_json=json.dumps(plan, ensure_ascii=False))
         before_count = client.get("/api/audit").json()["count"]
         before_balance = account_balance(client)
 
@@ -128,9 +124,7 @@ def test_expired_envelope_is_rejected(tmp_path: Path) -> None:
         body = start_transfer(client, 600)
         action_id = body["confirmation"]["id"]
         update_pending(db_path, action_id, expires_at="2000-01-01T00:00:00+00:00")
-        response = client.post(
-            f"/api/confirmations/{action_id}", json={"approved": True}
-        )
+        response = client.post(f"/api/confirmations/{action_id}", json={"approved": True})
         assert response.status_code == 409
         assert response.json()["detail"]["code"] == "ENVELOPE_EXPIRED"
         assert "过期" in response.json()["detail"]["message"]
@@ -144,9 +138,7 @@ def test_reused_nonce_is_rejected(tmp_path: Path) -> None:
         first_id = first["confirmation"]["id"]
         first_envelopes = json.loads(load_pending(db_path, first_id)["envelopes_json"])
         used_nonce = first_envelopes[0]["nonce"]
-        confirmed = client.post(
-            f"/api/confirmations/{first_id}", json={"approved": True}
-        )
+        confirmed = client.post(f"/api/confirmations/{first_id}", json={"approved": True})
         assert confirmed.status_code == 200, confirmed.text
         assert confirmed.json()["status"] == "completed"
 
@@ -159,9 +151,7 @@ def test_reused_nonce_is_rejected(tmp_path: Path) -> None:
             },
         ).json()
         second_id = second["confirmation"]["id"]
-        second_envelopes = json.loads(
-            load_pending(db_path, second_id)["envelopes_json"]
-        )
+        second_envelopes = json.loads(load_pending(db_path, second_id)["envelopes_json"])
         second_envelopes[0]["nonce"] = used_nonce
         update_pending(
             db_path,
@@ -169,9 +159,7 @@ def test_reused_nonce_is_rejected(tmp_path: Path) -> None:
             envelopes_json=json.dumps(second_envelopes, ensure_ascii=False),
         )
 
-        replay = client.post(
-            f"/api/confirmations/{second_id}", json={"approved": True}
-        )
+        replay = client.post(f"/api/confirmations/{second_id}", json={"approved": True})
         assert replay.status_code == 409
         assert replay.json()["detail"]["code"] == "NONCE_REUSED"
         assert "nonce" in replay.json()["detail"]["message"].lower()
@@ -218,9 +206,7 @@ def test_execution_time_business_error_is_readable_422(tmp_path: Path) -> None:
         assert body["status"] == "awaiting_confirmation"
         action_id = body["confirmation"]["id"]
 
-        response = client.post(
-            f"/api/confirmations/{action_id}", json={"approved": True}
-        )
+        response = client.post(f"/api/confirmations/{action_id}", json={"approved": True})
 
         assert response.status_code == 422
         assert "执行失败" in response.json()["detail"]
@@ -246,9 +232,7 @@ def test_idempotency_key_prevents_second_pending_action(tmp_path: Path) -> None:
         assert second.status_code == 200, second.text
         assert first.json() == second.json()
         with closing(sqlite3.connect(db_path)) as conn:
-            pending_count = conn.execute(
-                "SELECT COUNT(*) FROM pending_actions"
-            ).fetchone()[0]
+            pending_count = conn.execute("SELECT COUNT(*) FROM pending_actions").fetchone()[0]
         assert pending_count == 1
         assert audit_events(client).count("confirmation_requested") == 1
 
@@ -262,14 +246,10 @@ def test_idempotency_key_prevents_second_pending_action(tmp_path: Path) -> None:
         assert audit_events(client).count("confirmation_requested") == 1
 
         action_id = first.json()["confirmation"]["id"]
-        first_confirm = client.post(
-            f"/api/confirmations/{action_id}", json={"approved": True}
-        )
+        first_confirm = client.post(f"/api/confirmations/{action_id}", json={"approved": True})
         assert first_confirm.status_code == 200, first_confirm.text
         assert first_confirm.json()["status"] == "completed"
-        replay = client.post(
-            f"/api/confirmations/{action_id}", json={"approved": True}
-        )
+        replay = client.post(f"/api/confirmations/{action_id}", json={"approved": True})
         assert replay.status_code == 200, replay.text
         assert replay.json()["status"] == "completed"
         assert replay.json()["results"] == first_confirm.json()["results"]
@@ -297,14 +277,13 @@ def test_unknown_outcome_is_not_executed_twice(tmp_path: Path) -> None:
             permission="test:unknown",
         )
 
-        def execute(
-            self, arguments: dict[str, Any], context: ExecutionContext
-        ) -> Any:
+        def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> Any:
             calls["count"] += 1
             raise ExecutionOutcomeUnknown("支付通道超时，无法确认是否已扣款")
 
     app.state.services.registry.register(UnknownOutcomeTool())
     with TestClient(app) as client:
+        client.put("/api/permissions/test_unknown", json={"granted": True})
         body = client.post(
             "/api/agent/run",
             json={
@@ -316,9 +295,7 @@ def test_unknown_outcome_is_not_executed_twice(tmp_path: Path) -> None:
         assert body["status"] == "awaiting_confirmation"
         action_id = body["confirmation"]["id"]
 
-        first = client.post(
-            f"/api/confirmations/{action_id}", json={"approved": True}
-        )
+        first = client.post(f"/api/confirmations/{action_id}", json={"approved": True})
         assert first.status_code == 200, first.text
         assert first.json()["status"] == "unknown"
         assert "不确定" in first.json()["reason"]
@@ -327,9 +304,7 @@ def test_unknown_outcome_is_not_executed_twice(tmp_path: Path) -> None:
         view = client.get(f"/api/trust/actions/{action_id}").json()
         assert view["state"] == "UNKNOWN"
 
-        second = client.post(
-            f"/api/confirmations/{action_id}", json={"approved": True}
-        )
+        second = client.post(f"/api/confirmations/{action_id}", json={"approved": True})
         assert second.status_code == 200, second.text
         assert second.json()["status"] == "unknown"
         assert calls["count"] == 1
@@ -337,6 +312,7 @@ def test_unknown_outcome_is_not_executed_twice(tmp_path: Path) -> None:
         reconciled = client.post(
             f"/api/trust/actions/{action_id}/reconcile",
             json={"outcome": "reconciled", "reason": "对账确认未扣款"},
+            headers={"X-Aegis-Role": "operator"},
         ).json()
         assert reconciled["state"] == "RECONCILED"
 
@@ -365,9 +341,7 @@ def test_readiness_not_ready_fails_closed(tmp_path: Path) -> None:
         assert run.status_code == 503
         assert "未就绪" in run.json()["detail"]
 
-        confirm = broken.post(
-            "/api/confirmations/cfm-not-ready", json={"approved": True}
-        )
+        confirm = broken.post("/api/confirmations/cfm-not-ready", json={"approved": True})
         assert confirm.status_code == 503
 
 
@@ -439,9 +413,7 @@ def _planner_with_content(content: dict[str, Any]) -> OpenAICompatiblePlanner:
     )
 
 
-def _transfer_plan_content(
-    amount: float = 500, to_account: str = "ACC-2002"
-) -> dict[str, Any]:
+def _transfer_plan_content(amount: float = 500, to_account: str = "ACC-2002") -> dict[str, Any]:
     return {
         "intent": "transfer",
         "steps": [
@@ -492,9 +464,7 @@ def test_model_candidate_rejects_unknown_tool_and_extra_fields(tmp_path: Path) -
         "steps": [{"id": "step-1", "tool_name": "drop_table", "arguments": {}}],
     }
     with pytest.raises(PlannerError, match="未注册工具"):
-        _planner_with_content(unknown_tool).plan(
-            PlanningRequest(instruction="查一下我的账单")
-        )
+        _planner_with_content(unknown_tool).plan(PlanningRequest(instruction="查一下我的账单"))
 
     extra_plan_field = {**_transfer_plan_content(), "danger": True}
     with pytest.raises(PlannerError, match="契约外字段"):
@@ -572,13 +542,9 @@ def test_evidence_is_present_in_api_and_audit(tmp_path: Path) -> None:
         tool_entry = next(entry for entry in entries if entry["event"] == "tool_executed")
         _assert_evidence_items(tool_entry["evidence"])
         assert any(item["source"] == "mock_bank" for item in tool_entry["evidence"])
-        transition_entry = next(
-            entry for entry in entries if entry["event"] == "state_transition"
-        )
+        transition_entry = next(entry for entry in entries if entry["event"] == "state_transition")
         _assert_evidence_items(transition_entry["evidence"])
-        assert any(
-            item["source"] == "audit_chain" for item in transition_entry["evidence"]
-        )
+        assert any(item["source"] == "audit_chain" for item in transition_entry["evidence"])
 
 
 # 11. 状态机非法迁移被拒

@@ -1,7 +1,9 @@
 # 安全边界与生产化清单
 
+
+> 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
 > 最近更新：2026-10-23（阶段 2A 六项硬要求落地后，基线 `bf36895`）。
-> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 15 个测试文件（144 条）。
+> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 16 个测试文件（187 条）。
 
 ## 1. 信任层实现（阶段 1）
 
@@ -61,7 +63,7 @@ DRAFT → AWAITING_CONFIRMATION → AWAITING_REAUTH → APPROVED → EXECUTING �
 - 状态与迁移历史持久化在 `pending_actions.state` / `state_history_json`；
 - 每次合法迁移写 `state_transition` 审计；非法迁移写 `state_transition_rejected` 审计并抛 `IllegalTransition`；
 - `UNKNOWN` 表示「已发出、结果不确定」，**禁止自动重试**，只能通过人工对账转 `RECONCILED` 或 `ROLLED_BACK`；
-- 对账接口：`POST /api/trust/actions/{action_id}/reconcile`（`outcome=reconciled|rolled_back`），查询接口：`GET /api/trust/actions/{action_id}`（返回状态、历史、掩码 envelope 与证据）；
+- 对账接口：`POST /api/trust/actions/{action_id}/reconcile`（`outcome=reconciled，需 ops:manage；实际回退使用 /api/actions/{id}/rollback`），查询接口：`GET /api/trust/actions/{action_id}`（返回状态、历史、掩码 envelope 与证据）；
 - `UNKNOWN` 的触发方式是工具抛出 `ExecutionOutcomeUnknown`；当前模拟工具正常路径不会触发，测试通过注册测试工具注入（`test_unknown_outcome_is_not_executed_twice`）。
 
 ### 1.4 readiness 与 fail-closed
@@ -78,7 +80,7 @@ DRAFT → AWAITING_CONFIRMATION → AWAITING_REAUTH → APPROVED → EXECUTING �
 - 关键组件任一失败 → `status=not_ready`；仅 Planner 不可用 → `degraded`；否则 `ready`；
 - `POST /api/agent/run` 与 `POST /api/confirmations/{action_id}` 调用前执行 `ReadinessService.require_ready()`，非 `ready` 一律 **HTTP 503**，响应说明未就绪原因；
 - 前端 `ReadinessBanner` 显示各组件状态，非 `ready` 时禁用任务提交、人工确认与时间快进（fail closed）；
-- 已知缺口：`POST /api/automation/run-due` 当前直接调用 `scheduler.run`，尚未接入 readiness 门禁，列入阶段 2A 收尾。
+- 所有 POST/PUT/PATCH/DELETE 共享同一个 readiness 门禁；IM 与后台到期任务复用共享实例，前端全部写页面保持 fail closed。
 
 ### 1.5 证据分层
 
@@ -126,7 +128,7 @@ detail:            人类可读说明
 
 ### 2.1 补偿 / 回滚：网关复检与审计
 
-工具在 `ToolMetadata` 声明 `compensable` / `compensation_tool`，`extensions/compensation.py` 的 `build_specs()` 登记 **27 条**补偿规格（15 可补偿、12 不可逆）：
+工具在 `ToolMetadata` 声明 `compensable` / `compensation_tool`，`extensions/compensation.py` 的 `build_specs()` 登记 **28 条**补偿规格（15 可补偿、13 不可逆）：
 
 - 补偿工具本身也是普通 `BaseTool`（声明风险等级与最小权限），进入统一注册表、权限种子与网关；
 - 回滚只处理执行 journal 中 `phase=executed` 且尚未补偿的节点，并按**相反顺序**执行；
@@ -162,12 +164,12 @@ detail:            人类可读说明
 | `OtpProvider` | `otp` | `246810` | 默认 provider，固定演示验证码 |
 | `SimulatedBiometricProvider` | `biometric` | `FACE-888888` | 模拟人脸/设备确认，不连接摄像头或真实身份服务 |
 
-- `MfaPolicy` 按风险等级/敏感工具给出允许 provider 与推荐默认值：红色默认 `otp`；`report_card_lost`、`reset_card_password` 允许 `biometric + otp` 且推荐 `biometric`；
-- 策略是**提示性**的（供控制台与演示选择），执行时由调度器调用 `MfaService.verify`；确认请求可传 `mfa_provider`，未知 provider 返回 403；
-- 成功/失败均记录 `mfa` 结果（provider、verification_kind、ok）；失败写 `mfa_failed` 审计并拒绝执行；
+- `MfaPolicy` 按风险等级/敏感工具给出允许 provider 与推荐默认值：红色允许 `otp + biometric`、默认 `otp`；`report_card_lost`、`reset_card_password` 允许 `biometric + otp` 且推荐 `biometric`；
+- 策略在执行时**强制校验**，整条计划取允许 provider 的交集，再调用 `MfaService.verify`；确认请求可传 `mfa_provider`，未知 provider 返回 403；
+- 成功/失败均记录 `mfa` 结果（provider、verification_kind、ok）；失败写 `mfa_failed` 审计、累计熔断并拒绝执行；
 - 端点：`GET /api/mfa/providers|policy`、`POST /api/mfa/demo/challenge`（不返回真实凭据）。
 
-**边界**：固定 token、无真实人脸/设备能力，也没有失败次数锁定与速率限制；生产必须接入银行真实 MFA 并由服务端策略强制 provider，而不是仅提示。
+**边界**：固定 token、无真实人脸/设备能力，失败次数纳入熔断，但没有按用户限流；生产必须接入银行真实 MFA 并由服务端策略强制 provider，并验证会话身份与动作绑定。
 
 ### 2.4 沙箱策略与真实局限
 
@@ -179,20 +181,20 @@ detail:            人类可读说明
 | 墙钟超时 | `AEGIS_SANDBOX_TIMEOUT_SECONDS=5` | 超时抛 `SandboxViolation(kind=timeout)` 并写 `sandbox_timeout` |
 | 入参上限 | 8 KB | 超限拒绝并写 `sandbox_blocked` |
 | 出参上限 | `AEGIS_SANDBOX_MAX_OUTPUT_BYTES=64000` | 超限拒绝结果 |
-| 网络阻断 | `AEGIS_SANDBOX_BLOCK_NETWORK=true` | 执行期间替换 socket 的 `connect/create_connection/sendto/getaddrinfo/...` |
+| 网络阻断 | `AEGIS_SANDBOX_BLOCK_NETWORK=true` | 按工具 ContextVar 限制 socket 调用，无关线程委托原始网络函数 |
 | 工具白名单 | 空（不启用） | 非空时只允许白名单工具 |
 
 - 端点：`GET /api/sandbox/policy`、`POST /api/sandbox/demo/run`（`network / slow / oversize`，只执行内存中的演示工具，不触碰业务表）；
 - 违规先写审计再抛错；审计包含策略快照、kind、reason 与证据分层。
 
-**真实局限（不得夸大）**：这是**进程内演示级**限制，不是 OS 容器；Python 线程无法强杀，超时后工具可能继续执行到返回；没有内存/CPU/文件系统命名空间隔离；socket 级阻断可被 C 扩展或子进程绕过。生产必须使用容器/微虚拟机 + seccomp/AppArmor + 网络策略 + 资源配额。
+**真实局限（不得夸大）**：这是**进程内演示级**限制，不是 OS 容器；Python 线程无法强杀，超时后线程可能继续计算，但统一数据库事务拒绝截止时间后的写入和提交；文件/子进程等外部副作用仍需 OS 隔离；没有内存/CPU/文件系统命名空间隔离；socket 级阻断可被 C 扩展或子进程绕过。生产必须使用容器/微虚拟机 + seccomp/AppArmor + 网络策略 + 资源配额。
 
 ### 2.5 IM 渠道复用同一链路
 
 `channels/im.py` 是薄适配层：解析显式确认语法 `确认 <action_id> <otp>`（或 `确认 <action_id> 验证码 <otp>`），其余文本交给 `DagScheduler.run`。因此 IM 路径复用同一个 Planner、动态风险、权限网关、MFA Provider 与审计链，适配器本身不做权限判断。
 
 - 渠道：`im / cli / webhook`；端点 `POST /api/channels/im/message`、`GET /api/channels/im/help`；
-- `message_id` 作为幂等键写入 `im_messages`，重复投递回放首次回执，不产生第二次执行；
+- `channel + sender_id + message_id` 的哈希作为幂等键写入 `im_messages`，正文保存内容哈希，确认文本中的 OTP 不写原文，重复投递回放首次回执，不产生第二次执行；
 - 入站写 `im_message_executed` / `im_message_rejected` 审计；未就绪时返回 503；
 - 正文上限 2000 字、`message_id` 上限 96 字符。
 
@@ -217,7 +219,7 @@ detail:            人类可读说明
 
 ## 3. 工具权限与风险基线
 
-工具必须继承 `BaseTool` 并声明 `risk_level` 与 `permission`；动态风险只能保持或上调。当前工具目录共 **48** 个（核心 9 + 场景 25 + 2A 扩展 14），其中 15 个声明 `compensable=true`。
+工具必须继承 `BaseTool` 并声明 `risk_level` 与 `permission`；动态风险只能保持或上调。当前工具目录共 **50** 个（核心 10 + 场景 26 + 2A 扩展 14），其中 15 个声明 `compensable=true`。
 
 ### 3.1 核心工具（`backend/aegisbank_api/tools/finance.py`）
 
@@ -258,7 +260,7 @@ detail:            人类可读说明
 | automation | `unlock_budget_funds` | 解锁预算资金 | 绿 | `automation:manage` |
 | automation | `schedule_flower_order` | 预约生日鲜花 | 黄 | `automation:manage` |
 | automation | `schedule_cake_order` | 预约生日蛋糕 | 黄 | `automation:manage` |
-| automation | `schedule_transfer` | 定时转账 | 黄（> 5000 元升红） | `transfer:execute` |
+| automation | `schedule_transfer` | 定时转账 | 黄（单笔 >1000 升红，到期复核日累计） | `transfer:execute` |
 | automation | `list_scheduled_tasks` | 查看定时任务 | 绿 | `automation:read` |
 | automation | `cancel_scheduled_task` | 取消定时任务 | 绿 | `automation:manage` |
 | automation | `run_due_tasks` | 执行到期任务 | 绿 | `automation:manage` |
@@ -316,14 +318,14 @@ detail:            人类可读说明
 | 边界 | 状态 | 归属 |
 |---|---|---|
 | 可疑行为熔断（红色/注入累计） | ✅ 已实现，系统级计数 | 生产化：按用户隔离 |
-| 步骤级暂停 / 回退 / 补偿 | ✅ 已实现（15 可补偿 / 12 不可逆） | 生产化：工具中途强停、TTL |
-| 演示 MFA Provider（OTP + 模拟人脸/设备） | ✅ 已实现，固定演示 token | 生产化：真实 MFA、失败锁定、限流 |
+| 步骤级暂停 / 回退 / 补偿 | ✅ 已实现（15 可补偿 / 13 不可逆） | 生产化：工具中途强停、TTL |
+| 演示 MFA Provider（OTP + 模拟人脸/设备） | ✅ 已实现，固定演示 token | 生产化：真实 MFA、按用户锁定和限流 |
 | IM 渠道适配器 | ✅ 已实现（im/cli/webhook） | 生产化：平台签名、用户映射 |
 | 工具执行沙箱 | ✅ 进程内演示级 | 生产化：OS 容器/命名空间/资源配额 |
 | 多角色权限与撤权 | ✅ 演示矩阵 + `X-Aegis-Role` | 生产化：真实认证与 RBAC/ABAC |
 | `POST /api/automation/run-due` readiness 门禁 | ✅ 已接 | — |
 | 幂等键 / `used_nonces` TTL 清理 | ❌ 未实现 | 2A 收尾/生产化 |
-| 多轮上下文与指代消解 | 仅单轮澄清 | 后续阶段 |
+| 多轮上下文与指代消解 | 已支持 10 分钟单次澄清续问 | 通用指代与长会话待扩展 |
 
 ## 7. 开发约定
 
@@ -337,3 +339,17 @@ detail:            人类可读说明
 - 新增场景必须遵守 `backend/aegisbank_api/scenarios/README.md` 契约，不得绕过幂等与状态机；
 - 修改后运行 `gate.ps1`，再通过 `checkpoint.ps1` 提交；
 - 涉及公开、发布、部署时先执行 DSH 工作区的安全审计流程。
+
+
+## 2026-10-23 安全复审后的执行契约
+
+- 网关先决定是否允许，执行器在 `BEGIN IMMEDIATE` 事务内再次复核权限、风险和熔断。工具业务写入、输出契约校验、成功审计、步骤 journal 一起提交；故障全部回滚。嵌套工具使用同一线程连接与 SAVEPOINT。
+- confirm / resume / rollback / reconcile 使用按动作的 Linux 文件锁；并发请求返回 `409 ACTION_IN_PROGRESS`，不能以“请求失败”推断尚未扣款。已确认 envelope 必须与节点完整对应；补偿工具标记 internal_only，只接受持久化 journal 生成的原操作证据。
+- 定时任务绑定 source_action、参数哈希、风险和原 MFA 授权。来源未完成、撤权、到期风险超授权上限均拒绝；真实子工具逐笔走网关和执行器。旧任务缺授权记录时不继续执行，需取消后重新创建。
+- 工具输出强制 `simulated=true`、有限 JSON 值、工具名一致，并验证声明 Schema；旧工具的业务输出契约集中于 `tool_outputs.py`。不以空对象或缺失字段伪造金融事实。
+- 沙箱使用有界线程池、ContextVar 网络限制、提交截止时间。只能保护统一 SQLite 提交边界，不能强杀线程或隔离任意 Python、文件、子进程和 C 扩展；未提供任意生成代码执行入口。
+- 前端先保存原请求体和幂等键，再发出请求；断线/刷新查询原请求。待确认动作使用独立队列；恢复先取服务端计划与状态。能力来自 `/authz/me`，全部写页面在状态未知或非 ready 时禁用。
+- 澄清续问使用 `clarification_run_id`：绑定用户和角色、10 分钟、只能消费一次。调用者明确选择补充，否定或修改意图要求重新给出完整指令。通用代词和重复扣款指令仍需明确核对。
+- `audit.result_json` 新增受哈希保护的 run_id / step_id，支持 `GET /api/audit?run_id=...`；历史链不重写。对账只记结论，实际资金补偿使用 rollback。
+
+仍需后续验证：kill -9 / 多 worker 故障恢复、长期 TTL 清理、按用户熔断、OS 隔离、真实身份与 MFA / IM、外部审计锚点与长时间压力测试。详见 [修复记录](REMEDIATION-PLAN-2026-10-23.md)。

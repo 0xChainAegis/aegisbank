@@ -6,9 +6,17 @@
  * sessionStorage，刷新后由 App 恢复成一条可继续/可放弃的横幅。
  */
 
-import type { RunResponse } from './types';
+import type { AgentRunInput, RunResponse } from './types';
+import type { AegisRole } from './roles';
 
 export const PENDING_STORAGE_KEY = 'aegisbank.pending.v1';
+export const SUBMISSION_STORAGE_KEY = 'aegisbank.submission.v1';
+
+export interface SubmissionSnapshot {
+  key: string;
+  input: AgentRunInput;
+  role: AegisRole;
+}
 
 export interface PendingSnapshot {
   pending: RunResponse;
@@ -48,7 +56,10 @@ export function savePendingSnapshot(
 ): void {
   if (!storage) return;
   try {
-    storage.setItem(PENDING_STORAGE_KEY, JSON.stringify(snapshot));
+    const previous = loadPendingSnapshots(storage).filter(
+      (item) => item.pending.confirmation?.id !== snapshot.pending.confirmation?.id,
+    );
+    storage.setItem(PENDING_STORAGE_KEY, JSON.stringify([...previous, snapshot]));
   } catch {
     // 隐私模式或配额不足：静默降级为不持久化，不影响主流程。
   }
@@ -57,15 +68,52 @@ export function savePendingSnapshot(
 export function loadPendingSnapshot(
   storage: StorageLike | null = defaultStorage(),
 ): PendingSnapshot | null {
-  if (!storage) return null;
+  return loadPendingSnapshots(storage)[0] ?? null;
+}
+
+export function loadPendingSnapshots(
+  storage: StorageLike | null = defaultStorage(),
+): PendingSnapshot[] {
+  if (!storage) return [];
   try {
     const raw = storage.getItem(PENDING_STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
-    return isValidSnapshot(parsed) ? parsed : null;
+    return (Array.isArray(parsed) ? parsed : [parsed]).filter(isValidSnapshot);
   } catch {
-    return null;
+    return [];
   }
+}
+
+export function removePendingSnapshot(actionId: string, storage = defaultStorage()): void {
+  if (!storage) return;
+  try {
+    const remaining = loadPendingSnapshots(storage).filter(
+      (item) => item.pending.confirmation?.id !== actionId,
+    );
+    if (remaining.length) storage.setItem(PENDING_STORAGE_KEY, JSON.stringify(remaining));
+    else storage.removeItem(PENDING_STORAGE_KEY);
+  } catch { /* storage may be disabled */ }
+}
+
+/** Must succeed before sending a write so a reload can recover its original key. */
+export function saveSubmission(snapshot: SubmissionSnapshot, storage = defaultStorage()): void {
+  if (!storage) throw new Error('会话存储不可用，无法保存请求凭据，已停止提交。');
+  storage.setItem(SUBMISSION_STORAGE_KEY, JSON.stringify(snapshot));
+}
+
+export function loadSubmission(storage = defaultStorage()): SubmissionSnapshot | null {
+  if (!storage) return null;
+  try {
+    const value = JSON.parse(storage.getItem(SUBMISSION_STORAGE_KEY) ?? 'null');
+    return value && typeof value.key === 'string' && value.key.length > 0 &&
+      ['user', 'operator', 'auditor'].includes(value.role) &&
+      value.input && typeof value.input.instruction === 'string' ? value : null;
+  } catch { return null; }
+}
+
+export function clearSubmission(storage = defaultStorage()): void {
+  storage?.removeItem(SUBMISSION_STORAGE_KEY);
 }
 
 export function clearPendingSnapshot(storage: StorageLike | null = defaultStorage()): void {

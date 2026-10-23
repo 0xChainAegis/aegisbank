@@ -1,5 +1,7 @@
 # 银行领域模型与六场景闭环
 
+
+> 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
 > 最近更新：2026-10-23（阶段 2A 六项硬要求完成后，基线 `bf36895`）。
 > 所有银行数据都来自确定性的 Mock Bank Core（SQLite），LLM 与 Planner 不得编造余额、账单、交易、联系人、持仓或理财收益。
 
@@ -65,14 +67,15 @@
 | | `budget_goals` | 预算目标：目标金额、已锁定金额、状态 |
 | | `gift_orders` | 生日礼物订单：鲜花/蛋糕、模拟金额、到期时间、状态 |
 
-## 3. 全量工具清单（48 个）
+## 3. 全量工具清单（50 个）
 
-工具必须继承 `BaseTool`、声明风险等级与最小权限，并统一经权限网关与执行器调用。核心 9 个 + 场景 25 个 + 阶段 2A 扩展 14 个（8 个反向工具 + 6 个演示工具）。其中 **15 个**声明 `compensable=true`，**12 个**在补偿规格中声明不可逆。
+工具必须继承 `BaseTool`、声明风险等级与最小权限，并统一经权限网关与执行器调用。核心 10 个 + 场景 26 个 + 阶段 2A 扩展 14 个（8 个反向工具 + 6 个演示工具）。其中 **15 个**声明 `compensable=true`，**13 个**在补偿规格中声明不可逆。
 
-### 3.1 核心工具（`tools/finance.py`，9 个）
+### 3.1 核心工具（`tools/finance.py`，10 个）
 
 | 工具 | 标题 | 基线风险 | 最小权限 |
 |---|---|---|---|
+| `query_balance` | 查询余额 | 绿 | `account:read` |
 | `query_bill` | 分析账单 | 绿 | `billing:read` |
 | `transfer` | 智能转账 | 黄 | `transfer:execute` |
 | `adjust_repayment_date` | 调整还款日 | 黄 | `card:manage` |
@@ -83,7 +86,7 @@
 | `list_subscriptions` | 订阅查询 | 绿 | `subscription:read` |
 | `cancel_subscription` | 取消订阅 | 黄 | `subscription:manage` |
 
-### 3.2 场景工具（`scenarios/`，25 个）
+### 3.2 场景工具（`scenarios/`，26 个）
 
 | 模块 | 工具 | 标题 | 基线风险 | 最小权限 |
 |---|---|---|---|---|
@@ -132,9 +135,9 @@
 | `demo_irreversible_marker` | 演示不可撤销步骤 | 绿 | `compensation:demo` | 演示 |
 | `demo_fail_step` | 演示可控失败 | 绿 | `compensation:demo` | 演示 |
 
-### 3.4 可补偿 / 不可逆清单（27 条规格）
+### 3.4 可补偿 / 不可逆清单（28 条规格）
 
-`GET /api/compensation/specs` 返回 27 条规格：15 条可补偿、12 条不可逆。可补偿工具由 `compensation_tool` 指定反向工具：
+`GET /api/compensation/specs` 返回 28 条规格：15 条可补偿、13 条不可逆。可补偿工具由 `compensation_tool` 指定反向工具：
 
 | 工具 | 反向工具 | 说明 |
 |---|---|---|
@@ -158,6 +161,7 @@
 
 | 工具 | 不可逆原因 |
 |---|---|
+| `execute_gift_order` | 内部到期订单消费，不能自动撤销 |
 | `report_card_lost` | 挂失是账户安全终态，需人工与银行核实 |
 | `reset_card_password` | 安全凭证变更不可自动回退 |
 | `unlock_card` | 解挂属安全状态变更，自动重新挂失会放大风险 |
@@ -398,5 +402,14 @@ POST /api/trust/breaker/unlock          （仅 operator）
 
 1. 阶段 2.5：开发者 Dogfooding（六场景 + 2A 安全路径），修复可用性问题；
 2. 生产化收尾：TTL 清理、按用户熔断、OS 级隔离、真实身份/MFA、真实 IM 平台接入；
-3. 多轮上下文与指代消解（后续）；
+3. 通用指代消解与长会话（后续，现已支持限时单次澄清续问）；
 4. 准备比赛材料（阶段 3）。
+
+
+## 2026-10-23 账本与定时授权修正
+
+- 50 个工具：核心 10、场景 26、扩展 14；新增 `query_balance` 与仅限定时链调用的 `execute_gift_order`。
+- 金额必须为有限正数并精确到分；并发扣款使用条件更新。额度调整保留已用额度；持仓按实际市值和份额同比例赎回，全部赎回关闭持仓。
+- 生日预约不能超锁定预算；到期扣款同事务更新订单、剩余预算与 `bank_transactions`。新增 `scheduled_authorizations` 绑定来源 action、参数哈希、风险和 MFA；旧任务没有授权记录时拒绝执行，需取消后重新创建。
+- `compensation_reversals` 按原交易唯一登记冲正；`im_actions` 绑定发送者与动作，`clarification_uses` 记录已消费澄清上下文；审计 `result_json` 新增 run_id / step_id，旧哈希链不改写。
+- 反向工具只能由补偿链调用。到期执行与补偿同样经过网关、执行器、输出校验与审计；自动化订单扣款是不可逆操作，不能以对账标记代替退款。

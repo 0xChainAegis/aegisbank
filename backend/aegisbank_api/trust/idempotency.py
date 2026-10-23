@@ -47,14 +47,15 @@ class IdempotencyStore:
         return canonical_hash(payload)
 
     def begin(self, *, scope: str, key: str, request_hash: str) -> IdempotencyOutcome:
-        existing = self.db.get_idempotency(scope, key)
-        if existing is None:
-            self.db.create_idempotency(scope=scope, key=key, request_hash=request_hash)
-            return IdempotencyOutcome(state="new")
+        if not key.strip() or len(key) > 128:
+            raise IdempotencyKeyReused("Idempotency-Key 必须为 1–128 字符。")
+        with self.db.transaction():
+            existing = self.db.get_idempotency(scope, key)
+            if existing is None:
+                self.db.create_idempotency(scope=scope, key=key, request_hash=request_hash)
+                return IdempotencyOutcome(state="new")
         if existing["request_hash"] != request_hash:
-            raise IdempotencyKeyReused(
-                "同一个 Idempotency-Key 携带了不同的请求内容，拒绝处理。"
-            )
+            raise IdempotencyKeyReused("同一个 Idempotency-Key 携带了不同的请求内容，拒绝处理。")
         if existing["status"] == "completed" and existing.get("response_json"):
             return IdempotencyOutcome(
                 state="replay", response=json.loads(existing["response_json"])

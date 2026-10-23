@@ -12,6 +12,7 @@ class AgentRunRequest(BaseModel):
     user_id: str = Field(default="demo-user", min_length=1, max_length=64)
     tool_name: str | None = Field(default=None, max_length=64)
     arguments: dict[str, Any] = Field(default_factory=dict)
+    clarification_run_id: str | None = Field(default=None, max_length=64)
 
 
 class ConfirmationRequest(BaseModel):

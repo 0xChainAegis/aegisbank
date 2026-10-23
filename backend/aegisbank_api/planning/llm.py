@@ -10,6 +10,8 @@ silently winning.
 from __future__ import annotations
 
 import json
+import re
+from collections import Counter
 from typing import Any
 
 import httpx
@@ -86,33 +88,81 @@ def _value_mentioned(value: Any, text: str) -> bool:
         candidates = {str(value), f"{value:g}", f"{float(value):.2f}"}
         if float(value).is_integer():
             candidates.add(str(int(value)))
-        return any(item in haystack for item in candidates)
+        return any(
+            re.search(r"(?<![\d.\-])" + re.escape(item) + r"(?![\d.])", haystack)
+            for item in candidates
+        )
     return str(value) in haystack
 
 
-def _candidate_conflict(plan: ExecutionPlan, request: PlanningRequest) -> str | None:
+def _candidate_conflict(
+    plan: ExecutionPlan, request: PlanningRequest, reference: ExecutionPlan | None = None
+) -> str | None:
     """Return a human-readable conflict reason, or ``None`` when safe."""
     explicit = request.arguments or {}
-    if (
-        request.tool_name
-        and len(plan.steps) == 1
-        and plan.steps[0].tool_name != request.tool_name
-    ):
-        return (
-            f"模型试图改用 {plan.steps[0].tool_name}，"
-            f"与用户显式指定的 {request.tool_name} 冲突"
-        )
+    if request.tool_name and (len(plan.steps) != 1 or plan.steps[0].tool_name != request.tool_name):
+        return f"模型步骤与用户显式指定的 {request.tool_name} 冲突"
     for step in plan.steps:
         for key, value in explicit.items():
             if key in step.arguments:
                 if not _same_value(step.arguments[key], value):
                     return (
-                        f"模型试图覆盖用户显式给定的参数 {key}"
-                        f"（{value} → {step.arguments[key]}）"
+                        f"模型试图覆盖用户显式给定的参数 {key}（{value} → {step.arguments[key]}）"
                     )
             elif key in _HIGH_RISK_ARGUMENTS:
                 return f"模型丢弃了用户显式给定的参数 {key}"
     instruction = request.instruction or ""
+    if re.search(r"不要|暂不|不必|do not|don't", instruction, re.I):
+        return "指令含否定意图，需要明确意图后再规划"
+    write_fields = {
+        "transfer": ("from_account", "to_account", "amount_cny"),
+        "transfer_to_contact": ("to_name", "to_phone", "amount_cny"),
+        "add_contact": ("name", "phone", "account_id"),
+        "apply_virtual_card": ("requested_limit_cny", "card_type"),
+        "issue_virtual_card": ("application_id",),
+        "run_due_tasks": ("now",),
+        "schedule_transfer": ("to_account", "to_name", "amount_cny", "run_at"),
+        "purchase_wealth": ("product_id", "amount_cny"),
+        "redeem_wealth": ("holding_id", "product_id", "amount_cny", "shares"),
+        "adjust_card_limit": ("card_id", "new_limit_cny"),
+        "adjust_repayment_date": ("card_id", "new_day"),
+        "report_card_lost": ("card_id",),
+        "unlock_card": ("card_id",),
+        "reset_card_password": ("card_id",),
+        "unlock_transaction_limit": ("card_id", "daily_limit_cny"),
+        "cancel_subscription": ("subscription_id",),
+        "cancel_scheduled_task": ("task_id",),
+        "unlock_budget_funds": ("goal_id",),
+        "schedule_flower_order": ("to_name", "goal_id", "birthday"),
+        "schedule_cake_order": ("to_name", "goal_id", "birthday"),
+        "set_transaction_limit": ("daily_limit_cny",),
+        "assess_wealth_risk": ("risk_preference",),
+        "lock_budget_funds": ("amount_cny",),
+    }
+    if reference is not None:
+        candidate_writes = Counter(s.tool_name for s in plan.steps if s.tool_name in write_fields)
+        expected_writes = Counter(
+            s.tool_name for s in reference.steps if s.tool_name in write_fields
+        )
+        if candidate_writes != expected_writes:
+            return "模型改变了确定性规划中的写操作种类或笔数，需要重新明确任务"
+    for step in plan.steps:
+        if step.tool_name in write_fields:
+            if reference is not None and reference.needs_clarification:
+                return "确定性意图校验仍缺少必要信息，模型不能补全写参数"
+            for key in write_fields[step.tool_name]:
+                value = step.arguments.get(key)
+                if value is None or key in explicit:
+                    continue
+                grounded = reference is not None and any(
+                    ref.tool_name == step.tool_name and _same_value(ref.arguments.get(key), value)
+                    for ref in reference.steps
+                )
+                if not grounded and not _value_mentioned(value, instruction):
+                    return (
+                        f"模型的 {step.tool_name}.{key}（收款方或关键参数）"
+                        "无法对应用户指令或确定性解析结果"
+                    )
     for step in plan.steps:
         if step.tool_name != "transfer":
             continue
@@ -127,9 +177,7 @@ def _candidate_conflict(plan: ExecutionPlan, request: PlanningRequest) -> str | 
     return None
 
 
-def _conflict_clarification(
-    plan: ExecutionPlan, message: str, planner_name: str
-) -> ExecutionPlan:
+def _conflict_clarification(plan: ExecutionPlan, message: str, planner_name: str) -> ExecutionPlan:
     return ExecutionPlan(
         intent=plan.intent,
         planner=planner_name,
@@ -156,6 +204,7 @@ class OpenAICompatiblePlanner:
         model: str,
         timeout_seconds: float = 20.0,
         client: httpx.Client | None = None,
+        repository: Any = None,
     ) -> None:
         self.registry = registry
         self.base_url = base_url.rstrip("/")
@@ -164,6 +213,9 @@ class OpenAICompatiblePlanner:
         self.name = f"llm:{model}"
         self._owns_client = client is None
         self.client = client or httpx.Client(timeout=timeout_seconds)
+        from .rule import RuleBasedPlanner
+
+        self.reference_planner = RuleBasedPlanner(registry, repository)
 
     def close(self) -> None:
         if self._owns_client:
@@ -182,6 +234,7 @@ class OpenAICompatiblePlanner:
                 "input_schema": tool.metadata.input_schema,
             }
             for tool in self.registry.list()
+            if not tool.metadata.internal_only
         ]
         system_prompt = (
             "你是 AegisBank 的结构化 Planner，只负责把用户意图变成计划，不执行任何工具。"
@@ -232,14 +285,16 @@ class OpenAICompatiblePlanner:
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
             raise PlannerError(f"LLM Planner 调用或解析失败：{exc}") from exc
 
-        known_tools = set(self.registry.names())
+        known_tools = {
+            tool.metadata.name for tool in self.registry.list() if not tool.metadata.internal_only
+        }
         unknown_tools = sorted(
             {step.tool_name for step in plan.steps if step.tool_name not in known_tools}
         )
         if unknown_tools:
             raise PlannerError(f"模型返回了未注册工具：{', '.join(unknown_tools)}")
 
-        conflict = _candidate_conflict(plan, request)
+        conflict = _candidate_conflict(plan, request, self.reference_planner.plan(request))
         if conflict:
             return _conflict_clarification(plan, conflict, self.name)
 

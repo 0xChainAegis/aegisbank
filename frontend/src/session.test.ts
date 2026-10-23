@@ -6,6 +6,8 @@ import {
   formatRemaining,
   isSnapshotExpired,
   loadPendingSnapshot,
+  loadPendingSnapshots,
+  removePendingSnapshot,
   remainingSeconds,
   savePendingSnapshot,
   type PendingSnapshot,
@@ -84,5 +86,18 @@ describe('confirmation countdown (UX-16)', () => {
     const expired = snapshot('2026-10-23T08:05:00+00:00');
     expect(isSnapshotExpired(expired, Date.parse('2026-10-23T08:06:00+00:00'))).toBe(true);
     expect(isSnapshotExpired(expired, Date.parse('2026-10-23T08:04:00+00:00'))).toBe(false);
+  });
+});
+
+describe('pending queue integrity', () => {
+  it('retains an earlier action when saving a second pending action', () => {
+    const storage = memoryStorage();
+    const first = snapshot(new Date(Date.now() + 300_000).toISOString());
+    savePendingSnapshot(first, storage);
+    savePendingSnapshot({ ...first, pending: { ...first.pending, confirmation: { ...first.pending.confirmation!, id: 'second' } } }, storage);
+    expect(loadPendingSnapshots(storage)).toHaveLength(2);
+    expect(loadPendingSnapshot(storage)?.pending.confirmation?.id).toBe('cfm_123');
+    removePendingSnapshot('cfm_123', storage);
+    expect(loadPendingSnapshot(storage)?.pending.confirmation?.id).toBe('second');
   });
 });

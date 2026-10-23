@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
 from .db import Database, utc_now
+
+audit_run_id: ContextVar[str | None] = ContextVar("audit_run_id", default=None)
 
 
 def _canonical(value: dict[str, Any]) -> str:
@@ -31,6 +34,8 @@ class AuditService:
         confirmation_state: str,
         risk_level: str,
         evidence: list[dict[str, Any]] | None = None,
+        run_id: str | None = None,
+        step_id: str | None = None,
     ) -> dict[str, Any]:
         entry = {
             "created_at": utc_now(),
@@ -41,16 +46,22 @@ class AuditService:
             "tool_name": tool_name,
             "arguments_json": _canonical(arguments),
             "result_json": _canonical(
-                {"result": result, "evidence": evidence or []}
+                {
+                    "result": result,
+                    "evidence": evidence or [],
+                    "run_id": run_id or audit_run_id.get() or arguments.get("action_id"),
+                    "step_id": step_id,
+                }
             ),
             "confirmation_state": confirmation_state,
             "risk_level": risk_level,
         }
-        prev_hash = self.db.last_audit_hash()
-        digest_input = prev_hash + _canonical(entry)
-        entry_hash = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
-        row = {**entry, "prev_hash": prev_hash, "entry_hash": entry_hash}
-        record_id = self.db.append_audit(row)
+        with self.db.transaction():
+            prev_hash = self.db.last_audit_hash()
+            digest_input = prev_hash + _canonical(entry)
+            entry_hash = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
+            row = {**entry, "prev_hash": prev_hash, "entry_hash": entry_hash}
+            record_id = self.db.append_audit(row)
         return {
             "id": record_id,
             **entry,
@@ -61,13 +72,15 @@ class AuditService:
             "entry_hash": entry_hash,
         }
 
-    def list(self, limit: int = 100) -> list[dict[str, Any]]:
-        rows = self.db.list_audit(limit=limit)
+    def list(self, limit: int = 100, run_id: str | None = None) -> list[dict[str, Any]]:
+        rows = self.db.list_audit(limit=limit, run_id=run_id)
         for row in rows:
             row["arguments"] = json.loads(row.pop("arguments_json"))
             payload = json.loads(row.pop("result_json"))
             row["result"] = payload.get("result")
             row["evidence"] = payload.get("evidence") or []
+            row["run_id"] = payload.get("run_id")
+            row["step_id"] = payload.get("step_id")
         return rows
 
     def verify(self) -> dict[str, Any]:
@@ -86,9 +99,7 @@ class AuditService:
                 "confirmation_state": row["confirmation_state"],
                 "risk_level": row["risk_level"],
             }
-            expected = hashlib.sha256(
-                (prev_hash + _canonical(entry)).encode("utf-8")
-            ).hexdigest()
+            expected = hashlib.sha256((prev_hash + _canonical(entry)).encode("utf-8")).hexdigest()
             if row["prev_hash"] != prev_hash or row["entry_hash"] != expected:
                 return {
                     "valid": False,

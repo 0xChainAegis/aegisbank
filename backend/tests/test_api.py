@@ -298,7 +298,7 @@ def test_card_limit_change_escalates_to_red_and_updates_card(tmp_path):
     with make_client(tmp_path) as client:
         response = client.post(
             "/api/agent/run",
-            json={"instruction": "把信用卡额度调整到 8000 元"},
+            json={"instruction": "把信用卡额度调整到 10000 元"},
         ).json()
         assert response["status"] == "awaiting_confirmation"
         assert response["risk_level"] == "red"
@@ -312,4 +312,4 @@ def test_card_limit_change_escalates_to_red_and_updates_card(tmp_path):
         assert confirmed.status_code == 200, confirmed.text
         cards = client.get("/api/banking/overview").json()["cards"]
         card = next(item for item in cards if item["card_id"] == "CARD-8821")
-        assert card["credit_limit_cny"] == 8000.0
+        assert card["credit_limit_cny"] == 10000.0

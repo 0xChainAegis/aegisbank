@@ -1,11 +1,13 @@
 # AegisBank · 可信行行 AI 智能体
 
+
+> 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](docs/REMEDIATION-PLAN-2026-10-23.md)。
 > 让每一次金融操作，都经过可解释的动态风险判断、最小权限和可验证的审计。
 
 AegisBank 是一个面向行行场景的安全自治智能体原型：用户用自然语言发起账户、卡片、转账、理财或订阅任务，系统将意图编译为结构化 DAG 计划，在执行前经过动态风险引擎与统一权限网关，高风险动作进入确认/MFA 流程，执行过程和结果同步写入 SHA-256 审计哈希链。
 
 > [!IMPORTANT]
-> **本项目是本地可运行的演示原型。** 所有账户、卡片、账单、交易、订阅、理财与转账结果均来自确定性的 Mock Bank Core 模拟数据，不连接任何真实行行系统、支付网络或客户数据。演示 OTP `246810` 与模拟生物识别 token `FACE-888888` 仅用于本地流程展示，不代表生产级身份认证或 MFA 能力；`X-Aegis-Role` 是演示请求头，不是真实认证；工具沙箱是进程内演示级，不是 OS 容器。理财内容不构成任何投资建议。
+> **本项目是本地可运行的演示原型。** 所有账户、卡片、账单、交易、订阅、理财与转账结果均来自确定性的 Mock Bank Core 模拟数据，不连接任何真实银行系统、支付网络或客户数据。演示 OTP `246810` 与模拟生物识别 token `FACE-888888` 仅用于本地流程展示，不代表生产级身份认证或 MFA 能力；`X-Aegis-Role` 是演示请求头，不是真实认证；工具沙箱是进程内演示级，不是 OS 容器。理财内容不构成任何投资建议。
 
 ## 产品定位
 
@@ -23,7 +25,7 @@ AegisBank 不是把大模型直接接上几个行行函数，而是为 Agent 增
   → 证据分层 + SHA-256 审计哈希链
 ```
 
-它适合用作行行 Agent 原型的安全控制面参考实现、多工具 DAG 与人机确认的可运行 Demo，以及「Agent 如何被治理」的端到端样例；它**不**替代核心行行系统、真实风控决策引擎或生产身份认证系统。
+它适合用作行行 Agent 原型的安全控制面参考实现、多工具 DAG 与人机确认的可运行 Demo，以及「Agent 如何被治理」的端到端样例；它**不**替代核心银行系统、真实风控决策引擎或生产身份认证系统。
 
 ## 界面预览
 
@@ -57,7 +59,7 @@ AegisBank 不是把大模型直接接上几个行行函数，而是为 Agent 增
 | **Readiness fail-closed** | `GET /api/health/ready` 检查 SQLite、审计链、Mock 种子与 Planner；未就绪时写操作返回 503，前端禁用写操作。 |
 | **证据分层与审计链** | 工具结果（Mock 数据）、人工确认、策略判断、审计链四类证据随操作写入审计，SHA-256 哈希链可通过 API 校验。 |
 | **六场景覆盖 6/6** | 转账（联系人/AA/定时）、账单（月报/年报/异常）、理财（产品/持仓/申购/赎回）、卡片（虚拟卡/密码/限额）、订阅（扣费识别/续费提醒）、跨场景联动（账单→取消订阅、生日 4 步 DAG）。 |
-| **步骤级暂停 / 回退 / 补偿** | 节点间暂停与恢复不重复已执行步骤；失败后按相反顺序补偿，补偿前经网关复检；不可逆步骤阻止自动回滚，转人工对账；27 条补偿规格（15 可补偿 / 12 不可逆）。 |
+| **步骤级暂停 / 回退 / 补偿** | 节点间暂停与恢复不重复已执行步骤；失败后按相反顺序补偿，补偿前经网关复检；不可逆步骤阻止自动回滚，转人工对账；28 条补偿规格（15 可补偿 / 13 不可逆）。 |
 | **可疑行为熔断** | 连续失败、短时多次红色操作、注入命中累计三类规则共用 open 状态；触发后写操作 fail closed，operator 可审计解锁。 |
 | **可插拔 MFA Provider** | OTP + 模拟人脸/设备确认；红色操作可选择 provider，审计记录验证方式与结果；策略按风险等级/敏感工具给出提示。 |
 | **IM 渠道适配器** | `im / cli / webhook` 复用同一 Planner、风险、网关、MFA 与审计链；`message_id` 幂等回放，重复投递不会二次执行。 |
@@ -298,7 +300,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 | 调整卡片额度超过 5000 元、限额解锁目标超过 5000 元、卡片挂失/解挂/密码重置 | 🔴 红色 | 确认 + 演示 OTP |
 | 理财申购 | 🔴 红色 | 确认 + 演示 OTP |
 | 理财赎回 ≤ 1000 元 / > 1000 元 | 🟡 / 🔴 | 确认 / 确认 + 演示 OTP |
-| 定时转账单笔 > 5000 元 | 🔴 红色 | 确认 + 演示 OTP |
+| 定时转账单笔 > 1000 元 | 🔴 红色 | 确认 + 演示 OTP |
 | 预算锁定、生日礼物预订 | 🟡 黄色 | 一次用户确认 |
 | 取消定时任务、解锁预算资金 | 🟢 绿色 | 直接执行（补偿/取消） |
 
@@ -333,7 +335,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 │  ToolExecutor + ExecutionGuard（进程内沙箱：超时/网络/体积）  │
 │      │                                                      │
 │      ▼                                                      │
-│  48 个行行工具（核心 9 + 场景 25 + 2A 扩展 14）               │
+│  50 个银行工具（核心 10 + 场景 26 + 2A 扩展 14）               │
 │      │      scenario：wealth / transfers / bills /          │
 │      │                cards / automation（自动发现）          │
 │      │      extensions：compensation / authz / breaker /     │
@@ -365,7 +367,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 | `list_subscriptions` | `subscription:read` | 绿色 | 查询订阅与风险标记 |
 | `cancel_subscription` | `subscription:manage` | 黄色 | 取消指定订阅 |
 
-场景工具 25 个（理财 5、转账 3、账单 4、卡片 4、自动化 9）；阶段 2A 扩展工具 14 个（8 个反向工具 + 6 个演示工具）。完整清单、可补偿/不可逆映射与风险规则见 [BANKING-DOMAIN.md](docs/BANKING-DOMAIN.md) §3。
+场景工具 26 个（理财 5、转账 3、账单 4、卡片 4、自动化 9）；阶段 2A 扩展工具 14 个（8 个反向工具 + 6 个演示工具）。完整清单、可补偿/不可逆映射与风险规则见 [BANKING-DOMAIN.md](docs/BANKING-DOMAIN.md) §3。
 
 ### 关键 API
 
@@ -373,7 +375,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 
 ```text
 GET  /api/banking/overview          行行概览：账户、卡片、订阅与异常提示
-GET  /api/tools                     工具目录与当前授权状态（48 个工具）
+GET  /api/tools                     工具目录与当前授权状态（50 个工具）
 GET  /api/planner/info              Planner 模式、工具与计划契约
 POST /api/planner/plan              仅预览结构化计划，不执行工具
 POST /api/agent/run                 规划、风险评估、网关校验并执行（支持 Idempotency-Key）
@@ -384,7 +386,7 @@ GET  /api/audit                     查看审计记录（含证据分层）
 GET  /api/audit/verify              校验 SHA-256 审计哈希链
 GET  /api/health/ready              就绪检查（sqlite / audit_chain / mock_bank_seed / planner）
 GET  /api/trust/actions/{action_id}        查询任务状态机历史与掩码 envelope
-POST /api/trust/actions/{action_id}/reconcile  UNKNOWN 人工对账（reconciled / rolled_back）
+POST /api/trust/actions/{action_id}/reconcile  UNKNOWN 人工对账（reconciled，operator；资金回退使用 actions/{id}/rollback）
 GET  /api/trust/circuit-breaker     熔断状态
 POST /api/trust/circuit-breaker/reset  重置熔断
 GET  /api/wealth/products|holdings|orders
@@ -419,14 +421,14 @@ POST /api/trust/breaker/unlock      运维解锁（仅 operator）
 | Planner | Rule + OpenAI-compatible LLM | 结构化 `ExecutionPlan/v1`，可插拔、可回退、可校验 |
 | 持久化 | SQLite（stdlib） | 本地零依赖；保存 Mock Bank Core、授权、待确认动作、信任状态与审计链 |
 | 前端 | React 19 · TypeScript · Vite | 行行概览、六场景面板、2A 能力、运维面板、任务控制台、权限控制台、操作审计 |
-| 测试 | pytest · httpx · Vitest | 后端 144 项、前端 38 项 |
+| 测试 | pytest · httpx · Vitest | 后端 187 项、前端 53 项 |
 
 ## 快速开始
 
 前置条件：
 
 - Python 3.11+、`uv`
-- Node.js 20.19+（或 22.12+）、`pnpm`
+- Node.js 22.22.2+（22.x）或 24.15.0+（24.x）、`pnpm`
 - Linux / WSL Ubuntu 24.04 环境
 
 ```bash
@@ -456,7 +458,7 @@ bash scripts/dev.sh
 ```bash
 # 终端 1：后端
 cd backend
-uv run uvicorn aegisbank_api.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn aegisbank_api.main:app --reload --host 127.0.0.1 --port 8000
 
 # 终端 2：前端
 cd frontend
@@ -488,7 +490,7 @@ AEGIS_CIRCUIT_BREAKER_LOCK_SECONDS=60
 ```bash
 bash scripts/lint.sh    # 后端 ruff + 前端 TypeScript 类型检查
 bash scripts/build.sh   # 后端 compileall + 前端 Vite 生产构建
-bash scripts/test.sh    # pytest（144 项）+ Vitest（38 项）
+bash scripts/test.sh    # pytest（187 项）+ Vitest（53 项）
 cd backend && uv run python ../scripts/scenario-check.py   # 六场景端到端回归（29 项检查）
 bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 ```
@@ -537,10 +539,10 @@ aegisbank/
 │  │  ├─ banking/          # Mock Bank Core 领域模型与 SQLite 仓库
 │  │  ├─ planning/         # Planner 契约、规则/LLM 实现、Compiler、意图规则
 │  │  ├─ trust/            # Envelope、幂等、状态机、证据、readiness、熔断、MFA、暂停、沙箱
-│  │  ├─ scenarios/        # 5 个自动发现场景模块（25 个工具）与模块契约
+│  │  ├─ scenarios/        # 5 个自动发现场景模块（26 个工具）与模块契约
 │  │  ├─ extensions/       # 2A 横切能力（authz/breaker/compensation/im/mfa/sandbox）
 │  │  ├─ channels/         # IM / CLI / webhook 适配层
-│  │  ├─ tools/finance.py  # 9 个核心行行工具与 Manifest
+│  │  ├─ tools/finance.py  # 9 个核心银行工具与 Manifest
 │  │  ├─ executor.py       # ToolExecutor + ExecutionGuard 执行链
 │  │  ├─ compensation.py   # 补偿规格注册表
 │  │  ├─ risk.py           # 动态风险引擎与可解释原因
@@ -549,7 +551,7 @@ aegisbank/
 │  │  ├─ audit.py          # 证据分层 + SHA-256 审计哈希链
 │  │  ├─ db.py             # SQLite 表与事务（信任层持久化）
 │  │  └─ main.py           # FastAPI 入口与 API 路由
-│  └─ tests/               # API、Planner、信任层、六场景与 2A 测试（15 个文件，144 条）
+│  └─ tests/               # API、Planner、信任层、六场景与 2A 测试（16 个文件，187 条）
 ├─ frontend/
 │  └─ src/                 # React 控制台（7 页）、API 客户端、风险展示与测试
 ├─ docs/
@@ -558,7 +560,7 @@ aegisbank/
 │  ├─ MASTER-PLAN.md       # 总规划与阶段设计
 │  ├─ ROADMAP.md           # 路线图
 │  ├─ ARCHITECTURE.md      # 模块边界、信任层与扩展契约
-│  ├─ BANKING-DOMAIN.md    # 数据模型、48 个工具、补偿矩阵与六场景闭环
+│  ├─ BANKING-DOMAIN.md    # 数据模型、50 个工具、补偿矩阵与六场景闭环
 │  ├─ SECURITY.md          # 安全边界与信任层实现
 │  └─ TECH-STACK.md        # 开发工具与技术栈
 ├─ deliverables/           # 阶段 3 参赛交付包（简介/技术文档/PPT/视频脚本/安全自评/部署/测试）
@@ -591,14 +593,14 @@ aegisbank/
 
 AegisBank 是**安全自治 Agent 的可运行原型**，以下边界是刻意保留的：
 
-- **模拟行行数据**：所有账户、卡片、交易、账单、订阅、理财、余额与转账结果均为 Mock Bank Core 数据，不连接真实行行接口，不产生真实资金变动；理财内容不构成投资建议；
+- **模拟行行数据**：所有账户、卡片、交易、账单、订阅、理财、余额与转账结果均为 Mock Bank Core 数据，不连接真实银行接口，不产生真实资金变动；理财内容不构成投资建议；
 - **固定演示用户**：使用 `demo-user`，未接入登录、会话、设备指纹或真实身份认证；
 - **演示 OTP / MFA**：默认验证码 `246810`、模拟生物识别 token `FACE-888888` 与演示确认令牌仅用于本地演示，不是生产 MFA；
 - **演示风险规则**：动态风险引擎是确定性规则，不是生产反欺诈/信用决策模型；
 - **六场景已覆盖 6/6**：阶段 2A 的步骤级暂停/回退/补偿、可疑行为熔断、MFA Provider、IM 渠道、工具沙箱与多角色撤权均已落地；但跨场景「完整覆盖」不等于生产级业务完整性；
 - **沙箱是进程内演示级**：socket 级网络阻断、线程超时（Python 线程无法强杀）、入参 8 KB/出参 64 KB、可选工具白名单；不是 OS 容器，无内存/CPU/文件系统隔离；
 - **角色头不是认证**：`X-Aegis-Role` 由客户端自报，服务端不验证身份；生产必须由真实认证后的会话/Token 推导角色；
-- **补偿有边界**：只覆盖已登记规格的 27 条（15 可补偿 / 12 不可逆，其余为只读工具或反向工具）；不可逆步骤阻止自动回滚；红色补偿若需二次校验会转人工对账；
+- **补偿有边界**：只覆盖已登记规格的 28 条（15 可补偿 / 13 不可逆，其余为只读工具或反向工具）；不可逆步骤阻止自动回滚；红色补偿若需二次校验会转人工对账；
 - **时间维度为演示实现**：`scheduled_tasks` + `POST /api/automation/run-due` 时间快进 + 可选后台轮询，不是真实常驻 cron，也未实现跨进程分布式调度；
 - **单机持久化**：SQLite 适合本地原型，不满足行行级高可用、隔离、容灾和 WORM 审计要求；幂等键、`used_nonces` 与 `im_messages` 无 TTL 清理；熔断为系统级计数；
 - **有限安全防护**：注入检测、权限网关、ActionEnvelope、幂等与哈希链是基线，不替代专门的安全策略引擎、OS 沙箱、限流、CSRF/mTLS 与渗透测试；
