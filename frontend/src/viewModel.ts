@@ -1,7 +1,12 @@
+import { formatCny } from './risk';
 import type {
   BankingAccount,
   BankingCard,
   BankingOverview,
+  EvidenceItem,
+  ReadinessComponent,
+  ReadinessSnapshot,
+  ReadinessStatus,
   RiskAssessment,
   RiskLevel,
   RunResponse,
@@ -18,6 +23,23 @@ export const statusLabels: Record<string, string> = {
   blocked: '被权限网关拦截',
   rejected: '用户已拒绝',
   failed: '执行失败',
+  unknown: '结果未知（需对账）',
+  reconciled: '已人工对账',
+  rolled_back: '已人工回滚',
+  planned: '计划已生成',
+};
+
+export const statusDescriptions: Record<string, string> = {
+  completed: '全部节点已通过统一权限网关执行完成，结果已写入审计哈希链。',
+  awaiting_confirmation: '计划已生成，正在等待用户在有效期内完成人工确认。',
+  needs_clarification: 'Planner 判断信息不足，需要补充任务信息后重新发起。',
+  blocked: '统一权限网关或风险策略拦截请求，未执行任何工具。',
+  rejected: '用户明确拒绝，未执行任何资金或账户变更。',
+  failed: '执行过程中失败，失败原因已写入审计链，系统不会自动重试。',
+  unknown: '执行结果不确定：副作用可能已经发生。请勿重复提交，需要人工对账或回滚。',
+  reconciled: 'UNKNOWN 状态已由人工对账处理，结论已写入审计链。',
+  rolled_back: 'UNKNOWN 状态已由人工回滚，相关变更已撤销并记录到审计链。',
+  planned: '只生成了执行计划预览，尚未执行任何工具。',
 };
 
 export const eventLabels: Record<string, string> = {
@@ -30,6 +52,13 @@ export const eventLabels: Record<string, string> = {
   tool_failed: '执行失败',
   permission_denied: '权限不足',
   plan_created: '计划生成',
+  state_transition: '状态迁移',
+  state_transition_rejected: '非法迁移被拒',
+  action_reconciled: '人工对账',
+  action_rolled_back: '人工回滚',
+  scheduled_task_executed: '定时任务执行',
+  scheduled_task_failed: '定时任务失败',
+  tool_outcome_unknown: '执行结果未知',
 };
 
 export const confirmationLabels: Record<string, string> = {
@@ -39,6 +68,23 @@ export const confirmationLabels: Record<string, string> = {
   rejected: '已拒绝',
   blocked: '已拦截',
   expired: '已过期',
+  executing: '执行中',
+  failed: '执行失败',
+  DRAFT: '草稿',
+  AWAITING_CONFIRMATION: '等待确认',
+  AWAITING_REAUTH: '等待二次验证',
+  APPROVED: '已批准',
+  EXECUTING: '执行中',
+  COMPLETED: '已完成',
+  FAILED: '已失败',
+  REJECTED: '已拒绝',
+  EXPIRED: '已过期',
+  UNKNOWN: '结果未知',
+  RECONCILED: '已对账',
+  ROLLED_BACK: '已回滚',
+  unknown: '结果未知',
+  reconciled: '已对账',
+  rolled_back: '已回滚',
 };
 
 export const argumentLabels: Record<string, string> = {
@@ -67,6 +113,55 @@ export const argumentLabels: Record<string, string> = {
   simulated: '模拟数据',
   reason: '原因',
   risk_level: '风险等级',
+  product_id: '产品',
+  holding_id: '持仓',
+  shares: '份额',
+  risk_preference: '风险偏好',
+  requested_limit_cny: '申请额度（元）',
+  to_name: '收款人',
+  to_phone: '收款手机号',
+  goal_id: '预算目标',
+  run_at: '执行时间',
+  recurrence: '重复周期',
+  now: '快照时间',
+  days_ahead: '提醒窗口（天）',
+  cycle: '周期',
+};
+
+export const evidenceSourceLabels: Record<string, string> = {
+  mock_bank: 'Mock 数据',
+  human_confirmation: '人工确认',
+  policy_engine: '策略判断',
+  audit_chain: '审计哈希链',
+};
+
+export const severityLabels: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+};
+
+export const readinessStatusLabels: Record<string, string> = {
+  ready: '系统就绪',
+  degraded: '降级运行',
+  not_ready: '系统未就绪',
+};
+
+export const readinessComponentLabels: Record<string, string> = {
+  sqlite: 'SQLite 数据库',
+  audit_chain: '审计哈希链',
+  mock_bank_seed: '模拟银行种子',
+  planner: '规划器',
+};
+
+export const readinessComponentOrder = ['sqlite', 'audit_chain', 'mock_bank_seed', 'planner'] as const;
+
+export const wealthRiskLabels: Record<string, string> = {
+  R1: 'R1 保守型',
+  R2: 'R2 稳健型',
+  R3: 'R3 平衡型',
+  R4: 'R4 成长型',
+  R5: 'R5 进取型',
 };
 
 function asRecord(value: unknown): UnknownRecord | null {
@@ -384,4 +479,136 @@ export function paginate<T>(items: T[], page: number, pageSize: number) {
     start: items.length === 0 ? 0 : start + 1,
     end: Math.min(start + safePageSize, items.length),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* 信任层与六场景展示用纯函数                                            */
+/* ------------------------------------------------------------------ */
+
+export function statusLabel(status: string): string {
+  return statusLabels[status] ?? status;
+}
+
+export function statusDescription(status: string): string {
+  return statusDescriptions[status] ?? '';
+}
+
+export function severityLabel(severity: string): string {
+  return severityLabels[severity] ?? severity;
+}
+
+export function evidenceSourceLabel(source: string): string {
+  return evidenceSourceLabels[source] ?? source;
+}
+
+export function formatRate(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return `${value.toFixed(2)}%`;
+}
+
+export function formatSignedCny(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  if (value === 0) return formatCny(0);
+  return `${value > 0 ? '+' : '−'}${formatCny(Math.abs(value))}`;
+}
+
+export function formatChangePct(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+  return `${sign}${Math.abs(value).toFixed(1)}%`;
+}
+
+export function daysLeft(days: number | null | undefined, overdue = false): string {
+  if (days === null || days === undefined || !Number.isFinite(days)) return '—';
+  if (overdue || days < 0) return `已逾期 ${Math.abs(Math.trunc(days))} 天`;
+  if (days === 0) return '今天到期';
+  return `${Math.trunc(days)} 天后`;
+}
+
+export function wealthRiskLevel(riskLevel: string): RiskLevel {
+  switch (riskLevel.trim().toUpperCase()) {
+    case 'R1':
+    case 'R2':
+      return 'green';
+    case 'R3':
+      return 'yellow';
+    case 'R4':
+    case 'R5':
+      return 'red';
+    default:
+      return 'green';
+  }
+}
+
+export function wealthRiskLabel(riskLevel: string): string {
+  const key = riskLevel.trim().toUpperCase();
+  return wealthRiskLabels[key] ?? riskLevel;
+}
+
+export function normalizeEvidence(value: unknown): EvidenceItem[] {
+  const items = Array.isArray(value) ? value : [];
+  const output: EvidenceItem[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const record = asRecord(item);
+    if (!record) continue;
+    const source = typeof record.source === 'string' ? record.source.trim() : '';
+    if (!source) continue;
+    const verified = record.verified === true;
+    const verificationKind =
+      typeof record.verification_kind === 'string' ? record.verification_kind : '';
+    const detail = typeof record.detail === 'string' ? record.detail : '';
+    const key = `${source}|${verified}|${detail}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push({
+      source,
+      verified,
+      verification_kind: verificationKind,
+      detail,
+    });
+  }
+  return output;
+}
+
+export function normalizeReadiness(payload: unknown): ReadinessSnapshot {
+  const record = asRecord(payload) ?? {};
+  const rawComponents = asRecord(record.components) ?? {};
+  const components: Record<string, ReadinessComponent> = {};
+  for (const [name, value] of Object.entries(rawComponents)) {
+    const item = asRecord(value);
+    components[name] = {
+      ok: item?.ok === true,
+      detail: typeof item?.detail === 'string' ? item.detail : '',
+    };
+  }
+  const rawStatus = typeof record.status === 'string' ? record.status : '';
+  const status: ReadinessStatus =
+    rawStatus === 'ready' || rawStatus === 'degraded' ? rawStatus : 'not_ready';
+  return { status, components };
+}
+
+export function readinessStatusLabel(status: ReadinessStatus | string): string {
+  return readinessStatusLabels[status] ?? String(status);
+}
+
+export function readinessComponentLabel(name: string): string {
+  return readinessComponentLabels[name] ?? name;
+}
+
+export function readinessBlockers(snapshot: ReadinessSnapshot | null): string[] {
+  if (!snapshot) return ['尚未获取系统就绪状态'];
+  const reasons = Object.entries(snapshot.components)
+    .filter(([, component]) => !component.ok)
+    .map(([name, component]) => {
+      const detail = component.detail?.trim() || '不可用';
+      return `${readinessComponentLabel(name)}：${detail}`;
+    });
+  if (snapshot.status === 'ready') return [];
+  if (reasons.length === 0) {
+    reasons.push(
+      snapshot.status === 'degraded' ? '系统处于降级运行状态' : '关键依赖不可用',
+    );
+  }
+  return reasons;
 }

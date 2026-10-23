@@ -1,16 +1,24 @@
 import { FormEvent, useMemo } from 'react';
 import { formatCny, riskDescriptions } from '../risk';
-import type { AgentRunInput, RiskLevel, RunResponse, ToolMetadata } from '../types';
+import type {
+  AgentRunInput,
+  RiskLevel,
+  RunResponse,
+  ToolMetadata,
+  TrustActionDetail,
+} from '../types';
 import {
   argumentLabels,
   collectRiskReasons,
+  formatDateTime,
   formatDisplayValue,
   resultRiskLevel,
   runRiskLevel,
+  statusDescription,
+  statusLabel,
   stepRiskLevel,
-  statusLabels,
 } from '../viewModel';
-import { PageAlerts, RiskBadge, StatusPill } from './ui';
+import { EvidenceBadges, PageAlerts, RiskBadge, StatusPill } from './ui';
 
 interface ScenarioAction {
   id: string;
@@ -57,6 +65,16 @@ const scenarioGroups: ScenarioGroup[] = [
         arguments: { account_id: 'ACC-1001', period: 'current_month' },
         requiredTools: ['query_bill'],
         hint: '只读操作，命中绿色规则后直接执行。',
+      },
+      {
+        id: 'bill-annual',
+        title: '生成年度账单',
+        description: '生成年度账单报告，汇总分类支出、Top 商户与同比。',
+        instruction: '生成我的年度账单报告',
+        toolName: 'bill_report',
+        arguments: { account_id: 'ACC-1001', period: 'year' },
+        requiredTools: ['bill_report'],
+        hint: '只读年报，不改变账户状态。',
       },
     ],
   },
@@ -167,6 +185,13 @@ interface Props {
   busy: boolean;
   error: string;
   notice: string;
+  writesBlocked: boolean;
+  blockReason: string;
+  lastActionId: string | null;
+  trustAction: TrustActionDetail | null;
+  trustActionLoading: boolean;
+  trustActionError: string;
+  onInspectTrustAction: () => void;
   onExecute: (input: AgentRunInput) => void;
   onRefresh: () => void;
 }
@@ -180,6 +205,13 @@ export default function TaskConsolePage({
   busy,
   error,
   notice,
+  writesBlocked,
+  blockReason,
+  lastActionId,
+  trustAction,
+  trustActionLoading,
+  trustActionError,
+  onInspectTrustAction,
   onExecute,
   onRefresh,
 }: Props) {
@@ -190,12 +222,12 @@ export default function TaskConsolePage({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = instruction.trim();
-    if (!value || busy) return;
+    if (!value || busy || writesBlocked) return;
     onExecute({ instruction: value });
   }
 
   function trigger(action: ScenarioAction) {
-    if (busy) return;
+    if (busy || writesBlocked) return;
     setInstruction(action.instruction);
     onExecute({
       instruction: action.instruction,
@@ -254,6 +286,12 @@ export default function TaskConsolePage({
           </button>
         </div>
 
+        {writesBlocked && (
+          <div className="alert alert-warn command-blocked" role="alert">
+            写操作已按 fail-closed 禁用：{blockReason}。系统恢复 ready 后才能提交任务或执行确认。
+          </div>
+        )}
+
         <form className="command-form" onSubmit={submit}>
           <label className="sr-only" htmlFor="instruction">
             输入任务指令
@@ -265,7 +303,11 @@ export default function TaskConsolePage({
             rows={3}
             placeholder="例如：分析我的本月账单和所有订阅，找出异常订阅并取消它"
           />
-          <button className="primary-button" type="submit" disabled={busy || !instruction.trim()}>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={busy || writesBlocked || !instruction.trim()}
+          >
             {busy ? '处理中…' : '交给 Agent'}
             <span aria-hidden="true">↗</span>
           </button>
@@ -298,14 +340,26 @@ export default function TaskConsolePage({
                       className="scenario-action"
                       key={action.id}
                       onClick={() => trigger(action)}
-                      disabled={busy || !available}
-                      title={available ? action.hint : `缺少工具：${action.requiredTools.join(', ')}`}
+                      disabled={busy || writesBlocked || !available}
+                      title={
+                        writesBlocked
+                          ? `写操作已禁用：${blockReason}`
+                          : available
+                            ? action.hint
+                            : `缺少工具：${action.requiredTools.join(', ')}`
+                      }
                     >
                       <span className="scenario-action-head">
                         <strong>{action.title}</strong>
                         <RiskBadge risk={actionRisk} />
                       </span>
-                      <small>{available ? action.description : '后端尚未注册该工具'}</small>
+                      <small>
+                        {writesBlocked
+                          ? '系统未就绪，写操作已禁用'
+                          : available
+                            ? action.description
+                            : '后端尚未注册该工具'}
+                      </small>
                       <span className="scenario-hint">{action.hint}</span>
                     </button>
                   );
@@ -345,7 +399,7 @@ export default function TaskConsolePage({
             </div>
             <div>
               <span className="eyebrow">STATUS</span>
-              <strong>{statusLabels[lastRun.status] ?? lastRun.status}</strong>
+              <strong>{statusLabel(lastRun.status)}</strong>
             </div>
             <div>
               <span className="eyebrow">RISK</span>
@@ -353,7 +407,29 @@ export default function TaskConsolePage({
             </div>
           </div>
 
+          <p className="status-description">{statusDescription(lastRun.status)}</p>
           <p className="result-reason">{lastRun.reason}</p>
+
+          {(lastRun.status === 'unknown' ||
+            lastRun.status === 'reconciled' ||
+            lastRun.status === 'rolled_back') && (
+            <div
+              className={`alert ${lastRun.status === 'unknown' ? 'alert-warn' : 'alert-info'}`}
+              role="status"
+            >
+              {lastRun.status === 'unknown'
+                ? '结果未知不等于失败：副作用可能已发生，系统不会自动重试。请人工对账（reconciled）或回滚（rolled_back）。'
+                : '任务状态已由人工处理，结论已写入审计哈希链。'}
+            </div>
+          )}
+
+          <div className="result-evidence">
+            <span className="eyebrow">EVIDENCE LAYERS</span>
+            <EvidenceBadges
+              evidence={lastRun.evidence ?? lastRun.evidence_list}
+              emptyHint="本次回执未返回分层证据。"
+            />
+          </div>
 
           {riskReasons.length > 0 && (
             <div className={`risk-reason-panel risk-panel-${overallRisk}`}>
@@ -470,6 +546,111 @@ export default function TaskConsolePage({
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {lastActionId && (
+            <div className="trust-panel">
+              <div className="section-head compact-head">
+                <div>
+                  <span className="eyebrow">TRUST ACTION VIEW</span>
+                  <h3>任务状态机与 ActionEnvelope</h3>
+                </div>
+                <button
+                  className="ghost-button small-button"
+                  onClick={onInspectTrustAction}
+                  disabled={trustActionLoading}
+                >
+                  {trustActionLoading ? '读取中…' : trustAction ? '重新读取' : '查看信任详情'}
+                </button>
+              </div>
+
+              {trustActionError && (
+                <div className="alert alert-error" role="alert">
+                  {trustActionError}
+                </div>
+              )}
+
+              {!trustAction && !trustActionError && (
+                <p className="panel-note">
+                  读取任务状态机（UNKNOWN / RECONCILED / ROLLED_BACK）、ActionEnvelope 与分层证据；
+                  数据来自 <code>GET /api/trust/actions/&#123;id&#125;</code>。
+                </p>
+              )}
+
+              {trustAction && (
+                <>
+                  <dl className="trust-facts">
+                    <div>
+                      <dt>ACTION ID</dt>
+                      <dd><code>{trustAction.action_id}</code></dd>
+                    </div>
+                    <div>
+                      <dt>STATE</dt>
+                      <dd>
+                        {trustAction.state} · {statusLabel(trustAction.state.toLowerCase())}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>RISK</dt>
+                      <dd><RiskBadge risk={trustAction.risk_level} verbose /></dd>
+                    </div>
+                    <div>
+                      <dt>REAUTH</dt>
+                      <dd>{trustAction.requires_reauth ? '需要 MFA/OTP' : '无需二次校验'}</dd>
+                    </div>
+                    <div>
+                      <dt>创建时间</dt>
+                      <dd>{trustAction.created_at ? formatDateTime(trustAction.created_at) : '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>过期时间</dt>
+                      <dd>{trustAction.expires_at ? formatDateTime(trustAction.expires_at) : '—'}</dd>
+                    </div>
+                  </dl>
+
+                  {trustAction.history.length > 0 && (
+                    <ul className="trust-history">
+                      {trustAction.history.map((transition, index) => (
+                        <li key={`${transition.from}-${transition.to}-${index}`}>
+                          <code>{transition.from}</code>
+                          <span aria-hidden="true">→</span>
+                          <code>{transition.to}</code>
+                          {transition.reason && <span>{transition.reason}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {trustAction.envelopes.length > 0 && (
+                    <div className="trust-envelopes">
+                      {trustAction.envelopes.map((envelope, index) => (
+                        <div
+                          className="trust-envelope"
+                          key={envelope.nonce ?? envelope.step_id ?? `envelope-${index}`}
+                        >
+                          <strong>{envelope.step_id ?? `step-${index + 1}`}</strong>
+                          <code>{envelope.tool_name ?? '—'}</code>
+                          {envelope.risk_level && <RiskBadge risk={envelope.risk_level} />}
+                          <span>{envelope.confirmation_state ?? '—'}</span>
+                          <span>
+                            {envelope.approval_token_present
+                              ? 'approval token 已存在（不回传）'
+                              : 'approval token 未生成'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="result-evidence">
+                    <EvidenceBadges
+                      evidence={trustAction.evidence ?? trustAction.evidence_list}
+                      emptyHint="状态视图未返回分层证据。"
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

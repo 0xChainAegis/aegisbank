@@ -1,6 +1,6 @@
 import { formatDateTime, collectRiskReasons, runRiskLevel, stepRiskLevel } from '../viewModel';
 import type { RunResponse } from '../types';
-import { RiskBadge } from './ui';
+import { EvidenceBadges, RiskBadge } from './ui';
 
 interface Props {
   pending: RunResponse;
@@ -9,6 +9,8 @@ interface Props {
   setOtp: (value: string) => void;
   onDecision: (approved: boolean) => void;
   error?: string;
+  writesBlocked: boolean;
+  blockReason: string;
 }
 
 export default function ConfirmationModal({
@@ -18,6 +20,8 @@ export default function ConfirmationModal({
   setOtp,
   onDecision,
   error,
+  writesBlocked,
+  blockReason,
 }: Props) {
   const risk = runRiskLevel(pending);
   const needsOtp = Boolean(pending.confirmation?.requires_reauth) || risk === 'red';
@@ -48,6 +52,14 @@ export default function ConfirmationModal({
               ? '该操作命中红色风险规则，必须输入动态验证码后才能执行。'
               : '该操作会修改账户设置，请在 5 分钟有效期内确认。'}
           </span>
+        </div>
+
+        <div className="result-evidence modal-evidence">
+          <span className="eyebrow">EVIDENCE LAYERS</span>
+          <EvidenceBadges
+            evidence={pending.evidence ?? pending.evidence_list}
+            emptyHint="本次确认尚未返回分层证据。"
+          />
         </div>
 
         {pending.plan && pending.plan.steps.length > 0 && (
@@ -86,22 +98,33 @@ export default function ConfirmationModal({
               placeholder="输入 6 位验证码"
               value={otp}
               onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              disabled={writesBlocked}
               autoFocus
             />
             <small>本地演示验证码：246810。生产环境须接入银行真实 MFA，演示 OTP 不得用于真实业务。</small>
           </label>
         )}
 
+        {writesBlocked && (
+          <div className="alert alert-warn modal-alert" role="alert">
+            写操作已按 fail-closed 禁用：{blockReason}。系统恢复 ready 后才能确认或拒绝该操作。
+          </div>
+        )}
+
         {error && <div className="alert alert-error modal-alert" role="alert">{error}</div>}
 
         <div className="modal-actions">
-          <button className="ghost-button" onClick={() => onDecision(false)} disabled={busy}>
+          <button
+            className="ghost-button"
+            onClick={() => onDecision(false)}
+            disabled={busy || writesBlocked}
+          >
             拒绝执行
           </button>
           <button
             className="primary-button"
             onClick={() => onDecision(true)}
-            disabled={busy || (needsOtp && otp.length !== 6)}
+            disabled={busy || writesBlocked || (needsOtp && otp.length !== 6)}
           >
             {busy ? '校验中…' : needsOtp ? '验证并执行' : '确认执行'}
           </button>

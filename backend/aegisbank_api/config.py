@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 20.0
     automation_enabled: bool = False
     automation_interval_seconds: int = 30
+    circuit_breaker_threshold: int = 3
+    circuit_breaker_window_seconds: int = 60
+    circuit_breaker_lock_seconds: int = 60
 
     @property
     def cors_origin_list(self) -> list[str]:

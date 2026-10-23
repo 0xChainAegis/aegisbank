@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .audit import AuditService
@@ -24,16 +24,29 @@ from .scenarios import (
     start_scenario_background,
     stop_scenario_background,
 )
-from .scheduler import DagScheduler, IntentError, ReauthError
-from .schemas import AgentRunRequest, ConfirmationRequest, PermissionUpdateRequest
+from .scheduler import DagScheduler, ExecutionFailedError, IntentError, ReauthError
+from .schemas import (
+    AgentRunRequest,
+    ConfirmationRequest,
+    PermissionUpdateRequest,
+    ReconcileRequest,
+)
 from .services import CoreServices
 from .tools.finance import build_registry
+from .trust.action_envelope import EnvelopeError
+from .trust.idempotency import (
+    IdempotencyError,
+    IdempotencyOutcome,
+    IdempotencyStore,
+)
+from .trust.readiness import NotReadyError, ReadinessService
 
 
 def create_app(
     *,
     database_path: str | Path | None = None,
     settings: Settings | None = None,
+    readiness_overrides: dict[str, Any] | None = None,
 ) -> FastAPI:
     config = settings or get_settings()
     if database_path is not None:
@@ -67,8 +80,48 @@ def create_app(
         audit=audit,
         confirmation_ttl_seconds=config.confirmation_ttl_seconds,
         demo_otp=config.demo_otp,
+        circuit_breaker_threshold=config.circuit_breaker_threshold,
+        circuit_breaker_window_seconds=config.circuit_breaker_window_seconds,
+        circuit_breaker_lock_seconds=config.circuit_breaker_lock_seconds,
     )
     services.scheduler = scheduler
+    readiness = ReadinessService(
+        db=db,
+        audit=audit,
+        repository=bank_repository,
+        planner=planner,
+        user_id=DEMO_USER,
+        overrides=readiness_overrides,
+    )
+    idempotency = IdempotencyStore(db)
+
+    def ensure_ready() -> None:
+        try:
+            readiness.require_ready()
+        except NotReadyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    def begin_idempotent(
+        key: str | None, *, scope: str, request_hash: str
+    ) -> IdempotencyOutcome | None:
+        if not key:
+            return None
+        try:
+            return idempotency.begin(scope=scope, key=key, request_hash=request_hash)
+        except IdempotencyError as exc:
+            raise HTTPException(
+                status_code=409, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+
+    def release_idempotent(key: str | None, *, scope: str) -> None:
+        if key:
+            idempotency.release(scope=scope, key=key)
+
+    def complete_idempotent(
+        key: str | None, *, scope: str, response: dict[str, Any]
+    ) -> None:
+        if key:
+            idempotency.complete(scope=scope, key=key, response=response)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -86,6 +139,9 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.state.services = services
+    app.state.readiness = readiness
+    app.state.idempotency = idempotency
 
     @app.get(f"{config.api_prefix}/health")
     def health() -> dict[str, Any]:
@@ -96,6 +152,10 @@ def create_app(
             "mode": "local-mvp",
             "planner": describe_planner(planner),
         }
+
+    @app.get(f"{config.api_prefix}/health/ready")
+    def health_ready() -> dict[str, Any]:
+        return readiness.check()
 
     @app.get(f"{config.api_prefix}/banking/overview")
     def banking_overview(
@@ -151,30 +211,107 @@ def create_app(
         }
 
     @app.post(f"{config.api_prefix}/agent/run")
-    def run_agent(body: AgentRunRequest) -> dict[str, Any]:
+    def run_agent(
+        body: AgentRunRequest,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        ensure_ready()
+        scope = "agent.run"
+        request_hash = IdempotencyStore.request_hash(
+            {"endpoint": "agent.run", "body": body.model_dump()}
+        )
+        outcome = begin_idempotent(
+            idempotency_key, scope=scope, request_hash=request_hash
+        )
+        if outcome is not None and outcome.state == "replay":
+            return outcome.response or {}
         try:
-            return scheduler.run(
+            result = scheduler.run(
                 user_id=body.user_id,
                 instruction=body.instruction,
                 tool_name=body.tool_name,
                 arguments=body.arguments,
             )
         except IntentError as exc:
+            release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:
+            release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        complete_idempotent(idempotency_key, scope=scope, response=result)
+        return result
 
     @app.post(f"{config.api_prefix}/confirmations/{{action_id}}")
-    def resolve_confirmation(action_id: str, body: ConfirmationRequest) -> dict[str, Any]:
+    def resolve_confirmation(
+        action_id: str,
+        body: ConfirmationRequest,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        ensure_ready()
+        scope = "confirmation"
+        request_hash = IdempotencyStore.request_hash(
+            {
+                "endpoint": "confirmation",
+                "action_id": action_id,
+                "approved": body.approved,
+            }
+        )
+        outcome = begin_idempotent(
+            idempotency_key, scope=scope, request_hash=request_hash
+        )
+        if outcome is not None and outcome.state == "replay":
+            return outcome.response or {}
         try:
-            return scheduler.confirm(
+            result = scheduler.confirm(
                 user_id=DEMO_USER,
                 action_id=action_id,
                 approved=body.approved,
                 reauth_token=body.reauth_token,
             )
+        except EnvelopeError as exc:
+            release_idempotent(idempotency_key, scope=scope)
+            raise HTTPException(
+                status_code=409, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
         except ReauthError as exc:
+            release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ExecutionFailedError as exc:
+            release_idempotent(idempotency_key, scope=scope)
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except IntentError as exc:
+            release_idempotent(idempotency_key, scope=scope)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        complete_idempotent(idempotency_key, scope=scope, response=result)
+        return result
+
+    @app.get(f"{config.api_prefix}/trust/circuit-breaker")
+    def circuit_breaker_status() -> dict[str, Any]:
+        return scheduler.circuit_breaker_status()
+
+    @app.post(f"{config.api_prefix}/trust/circuit-breaker/reset")
+    def circuit_breaker_reset() -> dict[str, Any]:
+        return scheduler.reset_circuit_breaker()
+
+    @app.get(f"{config.api_prefix}/trust/actions/{{action_id}}")
+    def trust_action(
+        action_id: str,
+        user_id: str = Query(default=DEMO_USER, max_length=64),
+    ) -> dict[str, Any]:
+        try:
+            return scheduler.action_view(action_id, user_id=user_id)
+        except IntentError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post(f"{config.api_prefix}/trust/actions/{{action_id}}/reconcile")
+    def trust_reconcile(action_id: str, body: ReconcileRequest) -> dict[str, Any]:
+        try:
+            return scheduler.reconcile(
+                action_id=action_id,
+                outcome=body.outcome,
+                user_id=DEMO_USER,
+                reason=body.reason,
+            )
         except IntentError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

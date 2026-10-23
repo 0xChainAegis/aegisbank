@@ -1,6 +1,31 @@
 # AegisBank 产品路线图
 
 > 总规划与阶段详细设计见 [MASTER-PLAN.md](MASTER-PLAN.md)。
+> 最近更新：2026-10-23（阶段 1 信任工程与阶段 2B 六场景覆盖完成并合入 `main`）。
+
+## 状态速览
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| 0 | 产品边界与仓库定型 | ✅ 已完成 |
+| 1 | 信任工程（ActionEnvelope / 幂等 / 状态机 / readiness / 证据分层 / 注入整条拒绝 / 模型候选白名单） | ✅ 已完成 |
+| 2A | 比赛硬要求（回退补偿、MFA Provider、IM、沙箱、多角色） | 计划中（下一步） |
+| 2B | 六场景完整覆盖（理财 / 转账形态 / 账单深度 / 卡片补齐 / 订阅深度 / 生日联动） | ✅ 已完成 |
+| 2.5 | 人工用户体验（开发者 Dogfooding） | 计划中 |
+| 3 | 比赛交付（简介、PPT、视频、安全自评、部署说明） | 计划中 |
+
+### 当前验证基线（2026-10-23）
+
+| 指标 | 数值 | 来源 |
+|---|---|---|
+| 后端测试 | **85 项** pytest 全部通过（8 个测试文件） | `cd backend && uv run pytest` |
+| 其中信任层 | **17 条** | `backend/tests/test_trust.py` |
+| 前端测试 | **14 个** Vitest 用例（2 个测试文件） | `frontend/src/*.test.ts` |
+| 银行工具 | **34 个**（核心 9 + 场景 25） | `GET /api/tools` / 权限种子行数 |
+| HTTP 接口 | **29 个**（核心 16 + 场景 13） | FastAPI OpenAPI paths |
+| 六场景覆盖 | **6/6** | [MASTER-PLAN.md](MASTER-PLAN.md) §4.6 |
+
+> 工具数、测试数、接口数必须以代码或测试输出为准；变更实现后需重新核对。
 
 ## 阶段 0：产品边界与仓库定型（已完成）
 
@@ -9,57 +34,71 @@
 已完成：
 
 - AegisBank 产品主线确定为银行 AI 智能体；
-- 上游计划溯源 PR 材料从产品 `main` 移出；
-- 历史材料归档到独立 branch：`archive/upstream-plan-provenance`；
+- 上游计划溯源 PR 材料从产品 `main` 移出，归档到 `archive/upstream-plan-provenance`；
 - README 不再把上游 PR 作为产品入口；
 - 产品、文档、截图、MIT License 和 GitHub 仓库已就绪；
-- 工程文件补齐：`AGENTS.md`（项目规则）、`CONTRIBUTING.md`（贡献指南）；
+- 工程文件补齐：`AGENTS.md`、`CONTRIBUTING.md`；
 - 环境记录更新为 Linux ext4 主线（`docs/DEVELOPMENT-ENVIRONMENT.md`）；
 - 新增 `docs/MASTER-PLAN.md` 作为项目总规划。
 
-阶段 0 验收（2026-10-23）：
+阶段 0 验收（2026-10-23）：`main` 不包含 `upstream-pr/`；lint / build / test 全绿；文档与实现一致。当时基线为后端 20 项 pytest、前端 7 项 Vitest，已被本轮 85 / 14 的新基线取代。
 
-- `main` 不包含 `upstream-pr/`，历史材料仅存在于归档分支；
-- lint / build / test 全绿（后端 20 项 pytest、前端 7 项 Vitest）；
-- 文档与实现一致，Windows 旧副本已冻结，开发主线仅保留 Linux ext4。
+## 阶段 1：信任工程（已完成）
 
-## 阶段 1：吸收 AegisAgent 的信任工程
+目标：把上游可借鉴的身份、策略、证据和状态恢复设计移植到 Python 银行 Agent，并把「确认后执行的是用户刚刚确认的那一笔」做成可验证契约。
 
-目标：把上游可借鉴的身份、策略、证据和状态恢复设计移植到 Python 银行 Agent。
+已交付：
 
-计划任务：
+| # | 能力 | 实现位置 | 验收证据 |
+|---|---|---|---|
+| 1 | ActionEnvelope/v1：`plan_hash + arguments_hash + risk_level + permission + nonce + expires_at + user_id` 一次性绑定 | `backend/aegisbank_api/trust/action_envelope.py`；`scheduler.py` 发放与复核 | 篡改计划、过期、nonce 复用均 409 且不执行 |
+| 2 | 幂等键与执行前持久化（`Idempotency-Key`，重复请求返回首次结果） | `trust/idempotency.py`；`db.py` 的 `idempotency_keys` | 同键重复提交只产生 1 个待确认动作；改正文 409 |
+| 3 | 状态机扩展：`UNKNOWN / RECONCILED / ROLLED_BACK` 与非法迁移拒绝 | `trust/state_machine.py`；`pending_actions.state*` | 非法迁移抛错并写审计；UNKNOWN 不重复执行 |
+| 4 | readiness 与 fail closed | `trust/readiness.py`；`GET /api/health/ready`；`/api/agent/run` 与确认接口 503 门禁 | 注入故障时写操作 503，前端禁用写操作 |
+| 5 | 证据来源分层 | `trust/evidence.py`；API 的 `evidence/evidence_list` 与审计 `result_json` | 四类 `source` 与 `verified/verification_kind` 可查 |
+| 6 | 注入整条拒绝 | `gateway.py` 的 `scan_injection`；`scheduler.py` 在 Planner 之前拒绝 | 命中即阻断、不生成计划、写审计 |
+| 7 | 模型候选白名单与冲突校验 | `planning/llm.py` | 契约外字段/未注册工具拒绝；覆盖用户金额、编造收款方转澄清 |
+| 8 | 异常熔断骨架（阶段 1 落骨架，2A 完善策略） | `trust/circuit_breaker.py`；`GET/POST /api/trust/circuit-breaker[/reset]` | 连续 3 次失败熔断，写操作被拒，可重置恢复 |
 
-1. Action Envelope：`plan_hash + arguments_hash + nonce + expires_at + user_id`；
-2. 幂等键与执行前持久化；
-3. 状态机增加 `UNKNOWN`、`RECONCILED`、`ROLLED_BACK`；
-4. readiness 接口与前端 fail closed；
-5. 证据来源分层：`mock_bank / human_confirmation / policy_engine / chain`；
-6. Prompt 注入整条请求拒绝；
-7. 模型候选字段白名单与冲突校验。
+阶段 1 验收：`backend/tests/test_trust.py` 17 条用例覆盖 §8.7 的 12 类矩阵（另含熔断与可读 422），全部通过；接口新增 `GET /api/health/ready`、`GET/POST /api/trust/circuit-breaker[/reset]`、`GET /api/trust/actions/{action_id}`、`POST /api/trust/actions/{action_id}/reconcile`。
 
-## 阶段 2：比赛硬要求补齐（2A）与六场景完整覆盖（2B）
+## 阶段 2B：六场景完整覆盖（已完成）
 
-目标：覆盖赛题的技术必需项，并补齐六个参考场景的典型能力。
+目标：把六场景覆盖从 5/6 补齐到 6/6，并让每个场景都有「自然语言 → 工具 → 风险分级 → 审计」的完整链路。
 
-### 2A 比赛硬要求
+交付的五个可自动发现场景模块（`backend/aegisbank_api/scenarios/`）：
 
-1. DAG 步骤级暂停、回退、补偿；
-2. 异常熔断；
-3. 工具执行沙箱；
-4. 演示 MFA Provider：OTP + 模拟人脸/设备确认；
-5. IM 渠道适配器；
-6. 多角色权限与撤权演示。
+| 模块 | 场景 | 工具（风险基线） | 只读路由 | 测试 |
+|---|---|---|---|---|
+| `wealth.py` | 理财操作 | `list_wealth_products`(绿)、`query_wealth_holdings`(绿)、`assess_wealth_risk`(绿)、`purchase_wealth`(红)、`redeem_wealth`(黄/按金额升红) | `GET /api/wealth/products`、`/holdings`、`/orders` | `test_wealth.py` 11 条 |
+| `transfers.py` | 智能转账形态 | `list_contacts`(绿)、`add_contact`(黄)、`transfer_to_contact`(黄/动态升红)；AA 拆分为并行 DAG | `GET /api/contacts` | `test_transfers.py` 10 条 |
+| `bills.py` | 账单分析深化 | `bill_report`(绿)、`detect_bill_anomalies`(绿)、`identify_subscription_charges`(绿)、`list_renewal_reminders`(绿) | `GET /api/bills/report`、`/api/bills/anomalies`、`/api/subscriptions/charges`、`/api/subscriptions/reminders` | `test_bills.py` 8 条 |
+| `cards.py` | 卡片管理补齐 | `apply_virtual_card`(黄)、`issue_virtual_card`(黄)、`reset_card_password`(红)、`unlock_transaction_limit`(黄/升红) | `GET /api/cards/applications` | `test_cards.py` 8 条 |
+| `automation.py` | 跨场景联动与时间维度 | `query_contact_birthday`(绿)、`lock_budget_funds`(黄)、`unlock_budget_funds`(绿)、`schedule_flower_order`(黄)、`schedule_cake_order`(黄)、`schedule_transfer`(黄/升红)、`list_scheduled_tasks`(绿)、`cancel_scheduled_task`(绿)、`run_due_tasks`(绿) | `GET /api/automation/schedules`、`/goals`、`/orders`；`POST /api/automation/run-due` | `test_automation.py` 10 条 |
 
-### 2B 六场景完整覆盖
+配套基座与规则：
 
-7. 理财操作：产品列表、持仓、申购、赎回、风险评估（全部模拟数据）；
-8. 智能转账形态：联系人簿（人名/手机号/备注）、AA 拆分、定时转账；
-9. 账单分析深化：月度/年度报告、更广异常检测；
-10. 卡片管理补齐：卡申请/虚拟卡、密码修改、限额解锁；
-11. 订阅/代扣深化：扣费识别、站内续费提醒；
-12. 第二条跨场景联动：生日场景（识别日期 → 锁定资金 → 定时订购）。
+- `scenarios/__init__.py` 自动发现与装配（schema、seed、tools、routers、background 钩子），核心文件不随场景增加而改动；
+- `scenarios/README.md` 记录模块契约与并行开发开关（`AEGIS_SCENARIO_ALLOW` / `AEGIS_SCENARIO_STRICT`）；
+- 每个模块自带 `SCHEMA_SQL`、`seed`、`tools`、`intents`、`risk_rules`、只读 `router`；`automation` 额外提供 `start_background` / `stop_background`；
+- 两条真实跨场景 DAG：账单分析 → 取消异常订阅；生日场景 `query_contact_birthday → lock_budget_funds → schedule_flower_order / schedule_cake_order`；
+- 时间维度：`scheduled_tasks` + `POST /api/automation/run-due`（时间快进）+ 可选后台轮询线程（`AEGIS_AUTOMATION_ENABLED=true`），不做真实常驻 cron。
 
-> 难度与工时排序（第一波 / 第二波 / 第三波）、架构级缺口（时间维度、多轮上下文）见 [MASTER-PLAN.md](MASTER-PLAN.md) §9.2。
+阶段 2B 验收：六场景 6/6；25 个场景工具全部继承 `BaseTool`、经统一网关、风险只升不降；每个场景至少覆盖正向链路、风险分级、撤权/失败与幂等种子；后端测试由 20 项增至 85 项。
+
+## 阶段 2A：比赛硬要求（下一步）
+
+阶段 1 已完成熔断骨架与 readiness 门禁，2A 剩余工作：
+
+1. **步骤级暂停、回退、补偿**：工具 Manifest 增加 `compensable` / `compensate` 声明；DAG 支持中途暂停与人工接管；失败按逆序补偿并写审计回退路径；
+2. **异常熔断策略完善**：在现有「连续失败」基础上增加可疑行为规则（短时间多次红色操作、注入命中累计），UI 展示锁定原因与解除方式；
+3. **工具执行沙箱**：工具运行在受限、可监控环境（超时 / 资源限制 / 无外网 / 结构化输入输出），越界调用写审计；
+4. **演示 MFA Provider**：`MfaProvider` 接口 + OTP Provider + 模拟人脸/设备确认，红色操作可选择验证方式，审计记录 provider 与结果；
+5. **IM 渠道适配器**：至少一个 IM 通道复用同一 Planner / 网关 / 确认流程；
+6. **多角色与撤权**：用户 / 运营 / 审计角色矩阵；撤权立即生效（阶段 1 已有「待确认动作执行前复检」）。
+7. **信任层收尾**：`POST /api/automation/run-due` 接入 readiness 门禁；幂等键与已用 nonce 的过期清理策略。
+
+2A 退出标准：赛题四项硬要求（熔断、沙箱、MFA、IM）均可在演示中一次走通，并有自动化测试或可重复脚本。
 
 ## 阶段 2.5：人工用户体验（开发者 Dogfooding）
 
@@ -75,27 +114,11 @@
 
 三轮狗粮测试：
 
-1. **第一轮：无脚本首次使用**
-   - 新开发者只读 README 启动；
-   - 不看接口文档，完成三个场景；
-   - 记录所有卡点。
-2. **第二轮：安全与异常路径**
-   - 撤权后重试；
-   - 红色 OTP 错误；
-   - 重复确认/刷新页面；
-   - 服务离线/数据为空。
-3. **第三轮：修复后回归**
-   - 重跑全部场景；
-   - 更新真实截图；
-   - 形成 UX 验收记录。
+1. **第一轮：无脚本首次使用** —— 新开发者只读 README 启动；不看接口文档，完成六场景中的三个代表场景；记录所有卡点。
+2. **第二轮：安全与异常路径** —— 撤权后重试、红色 OTP 错误、重复确认/刷新、服务离线/数据为空、readiness 非 ready、注入请求。
+3. **第三轮：修复后回归** —— 重跑全部场景；更新真实截图；形成 UX 验收记录。
 
-退出标准：
-
-- 3 个核心场景从首次打开到完成均不超过 10 分钟；
-- 无 P0/P1 可用性阻塞；
-- 所有关键页面有 loading / empty / error 状态；
-- 确认、MFA、撤权、审计证据可被非开发者理解；
-- 真实截图与当前界面一致。
+退出标准：三个代表场景从首次打开到完成均不超过 10 分钟；无 P0/P1 可用性阻塞；关键页面有 loading / empty / error 状态；确认、MFA、撤权、证据可被非开发者理解；真实截图与当前界面一致。
 
 详细执行清单见 [UX-DOGFOODING.md](UX-DOGFOODING.md)。
 

@@ -53,7 +53,11 @@ class Database:
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     expires_at TEXT NOT NULL,
-                    resolved_at TEXT
+                    resolved_at TEXT,
+                    envelopes_json TEXT NOT NULL DEFAULT '[]',
+                    state TEXT NOT NULL DEFAULT 'DRAFT',
+                    state_history_json TEXT NOT NULL DEFAULT '[]',
+                    result_json TEXT NOT NULL DEFAULT ''
                 );
 
                 CREATE TABLE IF NOT EXISTS audit_log (
@@ -71,15 +75,51 @@ class Database:
                     prev_hash TEXT NOT NULL,
                     entry_hash TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS idempotency_keys (
+                    scope TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    request_hash TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    response_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (scope, key)
+                );
+
+                CREATE TABLE IF NOT EXISTS used_nonces (
+                    nonce TEXT PRIMARY KEY,
+                    action_id TEXT NOT NULL,
+                    used_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS circuit_breaker (
+                    name TEXT PRIMARY KEY,
+                    failures INTEGER NOT NULL DEFAULT 0,
+                    last_failure_at TEXT,
+                    opened_at TEXT,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
-            columns = {
+            pending_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(pending_actions)")
             }
-            if "plan_json" not in columns:
-                conn.execute(
-                    "ALTER TABLE pending_actions ADD COLUMN plan_json TEXT NOT NULL DEFAULT '{}'"
-                )
+            migrations = {
+                "plan_json": "ALTER TABLE pending_actions ADD COLUMN "
+                "plan_json TEXT NOT NULL DEFAULT '{}'",
+                "envelopes_json": "ALTER TABLE pending_actions ADD COLUMN "
+                "envelopes_json TEXT NOT NULL DEFAULT '[]'",
+                "state": "ALTER TABLE pending_actions ADD COLUMN "
+                "state TEXT NOT NULL DEFAULT 'DRAFT'",
+                "state_history_json": "ALTER TABLE pending_actions ADD COLUMN "
+                "state_history_json TEXT NOT NULL DEFAULT '[]'",
+                "result_json": "ALTER TABLE pending_actions ADD COLUMN "
+                "result_json TEXT NOT NULL DEFAULT ''",
+            }
+            for column, statement in migrations.items():
+                if column not in pending_columns:
+                    conn.execute(statement)
 
     @contextmanager
     def transaction(self):
@@ -135,16 +175,25 @@ class Database:
 
     # ---------- pending confirmations ----------
     def create_pending(self, record: dict[str, Any]) -> None:
+        payload = {
+            "envelopes_json": "[]",
+            "state": "DRAFT",
+            "state_history_json": "[]",
+            "result_json": "",
+            **record,
+        }
         with self._lock, self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO pending_actions
                 (id, user_id, instruction, dag_json, plan_json, risk_level, requires_reauth,
-                 status, created_at, expires_at, resolved_at)
+                 status, created_at, expires_at, resolved_at, envelopes_json, state,
+                 state_history_json, result_json)
                 VALUES (:id, :user_id, :instruction, :dag_json, :plan_json, :risk_level,
-                        :requires_reauth, :status, :created_at, :expires_at, NULL)
+                        :requires_reauth, :status, :created_at, :expires_at, NULL,
+                        :envelopes_json, :state, :state_history_json, :result_json)
                 """,
-                record,
+                payload,
             )
 
     def get_pending(self, action_id: str) -> dict[str, Any] | None:
@@ -159,6 +208,131 @@ class Database:
             conn.execute(
                 "UPDATE pending_actions SET status = ?, resolved_at = ? WHERE id = ?",
                 (status, utc_now(), action_id),
+            )
+
+    def set_pending_state(self, action_id: str, state: str, history_json: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE pending_actions SET state = ?, state_history_json = ? WHERE id = ?",
+                (state, history_json, action_id),
+            )
+
+    def set_pending_envelopes(self, action_id: str, envelopes_json: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE pending_actions SET envelopes_json = ? WHERE id = ?",
+                (envelopes_json, action_id),
+            )
+
+    def set_pending_result(self, action_id: str, result_json: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE pending_actions SET result_json = ? WHERE id = ?",
+                (result_json, action_id),
+            )
+
+    # ---------- idempotency ----------
+    def get_idempotency(self, scope: str, key: str) -> dict[str, Any] | None:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM idempotency_keys WHERE scope = ? AND key = ?",
+                (scope, key),
+            ).fetchone()
+        return None if row is None else dict(row)
+
+    def create_idempotency(self, *, scope: str, key: str, request_hash: str) -> None:
+        now = utc_now()
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO idempotency_keys
+                (scope, key, request_hash, status, response_json, created_at, updated_at)
+                VALUES (?, ?, ?, 'running', NULL, ?, ?)
+                """,
+                (scope, key, request_hash, now, now),
+            )
+
+    def complete_idempotency(
+        self, *, scope: str, key: str, response_json: str
+    ) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE idempotency_keys
+                SET status = 'completed', response_json = ?, updated_at = ?
+                WHERE scope = ? AND key = ?
+                """,
+                (response_json, utc_now(), scope, key),
+            )
+
+    def delete_idempotency(self, *, scope: str, key: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "DELETE FROM idempotency_keys WHERE scope = ? AND key = ?", (scope, key)
+            )
+
+    # ---------- nonce one-time store ----------
+    def nonce_used(self, nonce: str) -> bool:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM used_nonces WHERE nonce = ?", (nonce,)
+            ).fetchone()
+        return row is not None
+
+    def claim_nonce(self, nonce: str, action_id: str) -> bool:
+        with self._lock, self._connect() as conn:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO used_nonces (nonce, action_id, used_at) "
+                "VALUES (?, ?, ?)",
+                (nonce, action_id, utc_now()),
+            )
+            return int(cursor.rowcount) == 1
+
+    # ---------- circuit breaker ----------
+    def get_circuit_breaker(self, name: str) -> dict[str, Any] | None:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM circuit_breaker WHERE name = ?", (name,)
+            ).fetchone()
+        return None if row is None else dict(row)
+
+    def save_circuit_breaker(
+        self,
+        *,
+        name: str,
+        failures: int,
+        last_failure_at: str | None,
+        opened_at: str | None,
+    ) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO circuit_breaker
+                (name, failures, last_failure_at, opened_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    failures = excluded.failures,
+                    last_failure_at = excluded.last_failure_at,
+                    opened_at = excluded.opened_at,
+                    updated_at = excluded.updated_at
+                """,
+                (name, failures, last_failure_at, opened_at, utc_now()),
+            )
+
+    def reset_circuit_breaker(self, name: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO circuit_breaker
+                (name, failures, last_failure_at, opened_at, updated_at)
+                VALUES (?, 0, NULL, NULL, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    failures = 0,
+                    last_failure_at = NULL,
+                    opened_at = NULL,
+                    updated_at = excluded.updated_at
+                """,
+                (name, utc_now()),
             )
 
     # ---------- audit chain ----------

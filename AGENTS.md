@@ -23,8 +23,9 @@
 ## 当前阶段
 
 - **阶段 0（产品边界与仓库定型）已完成**：上游 PR 材料归档到 `archive/upstream-plan-provenance`，`main` 只保留产品内容。
-- **当前进入阶段 1：吸收 AegisAgent 的信任工程**——Action Envelope、幂等键、状态机（`UNKNOWN/RECONCILED/ROLLED_BACK`）、readiness 与 fail closed、证据分层、注入整条拒绝、模型候选白名单。
-- 阶段 2（回退补偿、熔断、沙箱、MFA、IM）、阶段 2.5（人工用户体验 Dogfooding）、阶段 3（比赛材料）见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+- **阶段 1（信任工程）已完成**：`backend/aegisbank_api/trust/` 落地 ActionEnvelope/v1、幂等键、状态机（含 `UNKNOWN / RECONCILED / ROLLED_BACK`）、readiness fail-closed、证据分层、注入整条拒绝与模型候选白名单；新增 `GET /api/health/ready`、`/api/trust/*` 接口；`POST /api/agent/run` 与 `POST /api/confirmations/{id}` 支持 `Idempotency-Key`，确认链路区分 409 / 422 / 503 语义；`backend/tests/test_trust.py` 共 17 条用例。
+- **阶段 2B（六场景完整覆盖）已完成**：`scenarios/` 下 5 个场景模块（`wealth` / `transfers` / `bills` / `cards` / `automation`）覆盖赛题六个参考场景 6/6，新增 25 个场景工具；加上核心 9 个工具，工具目录共 34 个。
+- 下一步：**阶段 2A** 比赛硬要求（步骤级暂停/回退/补偿、演示 MFA Provider、IM 渠道适配器、工具沙箱、多角色撤权；异常熔断已在阶段 1 落骨架），然后是**阶段 2.5**（Dogfooding）与**阶段 3**（比赛材料）。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
 ## 仓库与开发位置
 
@@ -42,9 +43,13 @@
 - 所有工具调用必须经过 `backend/aegisbank_api/gateway.py`，禁止在 API 或工具内部绕过权限判断。
 - 新工具必须继承 `BaseTool` 并声明：风险等级、最小权限、输入/输出 schema。
 - 动态风险引擎只能保持或上调工具基线风险，**任何模型输出都不得降低风险等级**。
-- 审计日志必须包含：触发时间、原始指令、DAG 路径、工具入参、执行结果、用户确认状态，并保持 SHA-256 哈希链。
-- LLM 只生成计划/草稿，不得直接执行工具、决定权限、跳过确认或编造金融结果。
+- 审计日志必须包含：触发时间、原始指令、DAG 路径、工具入参、执行结果、用户确认状态，并保持 SHA-256 哈希链；证据以 `source / verified / verification_kind` 分层写入。
+- LLM 只生成计划/草稿，不得直接执行工具、决定权限、跳过确认或编造金融结果；模型输出必须通过字段白名单与冲突校验。
+- 黄色/红色操作确认后，执行前必须复核 `ActionEnvelope`（`plan_hash`、`arguments_hash`、风险等级、权限、`nonce`、过期时间），不一致返回 `409` 且不得执行。
+- 幂等：带同一 `Idempotency-Key` 的重复请求必须返回首次结果，不得产生第二笔待确认动作或第二次扣款。
+- 服务未就绪（`GET /api/health/ready` 非 `ready`）时，写操作必须 fail closed 返回 `503`，不得伪装成功。
 - 前端只通过 `/api` 调用后端，不内嵌业务权限判断；服务未就绪时必须禁用写操作（fail closed）。
+- 新增业务场景必须遵守 `backend/aegisbank_api/scenarios/README.md` 的自动发现契约（`NAME / SCHEMA_SQL / seed / tools / intents / risk_rules / router / start_background / stop_background`），不得修改核心装配文件。
 - 禁止提交真实银行凭证、客户数据或 `.env`；演示 OTP `246810` 只能用于本地开发。
 
 ## 门禁与提交
@@ -75,15 +80,18 @@ git -C $unc push origin main
 
 - `backend/aegisbank_api/`：FastAPI、工具 SDK、权限网关、动态风险、DAG 调度、审计
   - `banking/`：Mock Bank Core 领域模型与 SQLite 仓库
-  - `planning/`：Planner 契约、规则/LLM 实现、Plan Compiler
-  - `tools/finance.py`：9 个银行工具与 Manifest
-- `backend/tests/`：API 闭环与 Planner 契约测试
-- `frontend/src/`：银行概览、任务控制台、权限控制台、操作审计
+  - `planning/`：Planner 契约、规则/LLM 实现、Plan Compiler 与模型候选校验
+  - `trust/`：ActionEnvelope、幂等、状态机、证据、readiness、熔断
+  - `scenarios/`：5 个可自动发现的业务场景模块（25 个场景工具）与模块契约
+  - `tools/finance.py`：9 个核心银行工具与 Manifest
+- `backend/tests/`：API 闭环、Planner 契约与信任层/六场景测试（9 个测试文件）
+- `frontend/src/`：银行概览、六场景面板、任务控制台、权限控制台、操作审计
 - `scripts/`：依赖安装、开发启动、lint/build/test/smoke
 - `docs/`：总规划、架构、安全边界、路线图、Dogfooding、参考资料
 
 ## 文档纪律
 
-- 行为变更必须同步更新对应文档（README / ROADMAP / SECURITY / MASTER-PLAN）。
+- 行为变更必须同步更新对应文档（README / ROADMAP / SECURITY / MASTER-PLAN / ARCHITECTURE / BANKING-DOMAIN）。
 - 阶段性结论写入 `docs/MASTER-PLAN.md` 和 `docs/ROADMAP.md`，不要只留在对话里。
 - 对外材料（README、产品介绍页、截图）必须反映当前真实功能，不得把“计划中”写成“已完成”。
+- 文档中的工具数、测试数、接口数必须与代码/测试输出一致；不确定时不要写具体数字。

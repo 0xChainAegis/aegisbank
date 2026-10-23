@@ -42,3 +42,20 @@ backend/aegisbank_api/scenarios/
 ```
 
 统一测试方式：`cd backend && uv run pytest -q`。每个场景至少 1 条正向链路、1–2 条风险分级、1 条撤权/失败/DAG 用例。
+
+## 并行开发开关
+
+多场景并行开发时，某个模块尚未完成会连带影响其它模块的 `create_app()`。可用环境变量隔离：
+
+```bash
+# 只加载一个场景（测试自己的模块）
+AEGIS_SCENARIO_ALLOW=wealth uv run pytest tests/test_wealth.py -q
+
+# 一个都不加载（只验证核心链路）
+AEGIS_SCENARIO_ALLOW=none uv run pytest -q
+
+# 容错模式：加载失败的场景模块跳过并告警（仅开发期使用）
+AEGIS_SCENARIO_STRICT=0 uv run pytest -q
+```
+
+默认（无环境变量）加载全部场景且严格失败，与比赛演示一致。

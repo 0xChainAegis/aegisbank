@@ -1,24 +1,24 @@
-# 银行领域模型与三场景闭环
+# 银行领域模型与六场景闭环
 
-## 1. 目标
+> 最近更新：2026-10-23（阶段 2B 六场景完整覆盖完成后）。
+> 所有银行数据都来自确定性的 Mock Bank Core（SQLite），LLM 与 Planner 不得编造余额、账单、交易、联系人、持仓或理财收益。
 
-本阶段在 AegisBank 本地骨架上补齐可演示的银行领域模型、动态风险引擎和三类核心场景：
+## 1. 目标与范围
 
-1. 智能转账
-2. 账单分析
-3. 卡片管理
+当前覆盖赛题六个参考场景 **6/6**：
 
-同时增加一个跨场景 DAG：
+1. 智能转账（含联系人簿、人名/手机号转账、AA 拆分、定时转账）
+2. 账单分析（月报/年报、异常检测）
+3. 理财操作（产品、持仓、风险测评、申购、赎回；全部模拟数据）
+4. 卡片管理（额度/还款日/限额/挂失/解挂、虚拟卡申请与发卡、密码重置、限额解锁）
+5. 订阅/代扣（查询、取消、扣费识别、续费提醒）
+6. 跨场景联动（账单 → 取消异常订阅；生日 → 查生日 → 锁预算 → 预订鲜花/蛋糕）
 
-```text
-分析账单 -> 识别异常订阅 -> 取消订阅 -> 写入审计
-```
+业务场景以 `backend/aegisbank_api/scenarios/` 下的可自动发现模块落地；信任层（ActionEnvelope、幂等、状态机、证据、readiness、熔断）见 [SECURITY.md](SECURITY.md) 与 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-所有银行数据都来自确定性的 Mock Bank Core，LLM 和 Planner 不得编造余额、账单、交易结果或订阅状态。
+## 2. 数据模型
 
-## 2. 银行领域模型
-
-数据表由 `BankingRepository` 自动创建并播种。
+### 2.1 Mock Bank Core（核心）
 
 | 表 | 说明 |
 |---|---|
@@ -27,126 +27,134 @@
 | `bank_transactions` | 交易流水、分类、金额、时间、状态 |
 | `bank_subscriptions` | 订阅商户、金额、周期、状态、风险标记 |
 
-种子数据只针对 `demo-user`，包括：
+### 2.2 信任层与核心状态表
 
-- `ACC-1001` 工资卡
-- `ACC-2002` 日常储蓄
-- `CARD-8821` / `CARD-9902`
-- 工资、餐饮、购物、交通、订阅等本月交易
-- `SUB-3001` 云端影音
-- `SUB-3002` AI 工具订阅：带异常标记
-- `SUB-3003` 健身房月卡
+| 表 | 关键列 | 说明 |
+|---|---|---|
+| `permissions` | `(user_id, tool_name, granted, updated_at)` | 每个工具的最小权限授权 |
+| `pending_actions` | `id / dag_json / plan_json / envelopes_json / risk_level / requires_reauth / status / state / state_history_json / result_json / expires_at` | 待确认动作、计划快照、ActionEnvelope、状态机历史与首次结果 |
+| `audit_log` | `event / instruction / dag_path / tool_name / arguments_json / result_json(含 evidence) / confirmation_state / risk_level / prev_hash / entry_hash` | 追加式审计与 SHA-256 哈希链 |
+| `idempotency_keys` | `(scope, key, request_hash, status, response_json, created_at, updated_at)` | 幂等键与首次响应 |
+| `used_nonces` | `(nonce, action_id, used_at)` | ActionEnvelope 一次性 nonce |
+| `circuit_breaker` | `(name, failures, last_failure_at, opened_at, updated_at)` | 连续失败熔断状态 |
 
-## 3. 工具目录
+### 2.3 场景模块自建表
 
-| 工具 | 权限 | 基线风险 | 说明 |
+| 模块 | 表 | 说明 |
+|---|---|---|
+| `wealth.py` | `wealth_products` | 模拟理财产品（ID/名称/类型/风险等级 R1–R5/起购金额/预期年化/期限/状态） |
+| | `wealth_holdings` | 持仓（份额、本金、市值、开仓时间、状态） |
+| | `wealth_orders` | 申购/赎回订单（side、金额、份额、状态、时间） |
+| | `wealth_profile` | 用户风险偏好（R1–R5） |
+| `transfers.py` | `contacts` | 联系人簿：姓名、别名、手机号、收款账户、生日、关系、状态 |
+| `bills.py` | `budgets` | 分类月预算（异常检测的「超预算」规则使用） |
+| `cards.py` | `card_applications` | 虚拟卡申请：`applying / approved / issued / rejected`，申请额度与关联卡 |
+| | `card_secrets` | 仅保存 `password_changed_at`，不存明文密码 |
+| `automation.py` | `scheduled_tasks` | 定时任务：转账/礼物、`run_at`、周期（`none/monthly/yearly`）、状态、最近执行结果 |
+| | `budget_goals` | 预算目标：目标金额、已锁定金额、状态 |
+| | `gift_orders` | 生日礼物订单：鲜花/蛋糕、模拟金额、到期时间、状态 |
+
+## 3. 全量工具清单（34 个）
+
+工具必须继承 `BaseTool`、声明风险等级与最小权限，并统一经权限网关调用。核心 9 个 + 场景 25 个。
+
+### 3.1 核心工具（`tools/finance.py`，9 个）
+
+| 工具 | 标题 | 基线风险 | 最小权限 |
 |---|---|---|---|
-| `query_bill` | `billing:read` | 绿色 | 账单分析、分类、异常订阅 |
-| `transfer` | `transfer:execute` | 黄色 | 按金额和日累计动态升级 |
-| `adjust_repayment_date` | `card:manage` | 黄色 | 修改还款日 |
-| `adjust_card_limit` | `card:manage` | 黄色 | 超过 5000 元升级红色 |
-| `set_transaction_limit` | `card:manage` | 黄色 | 设置单日交易限额 |
-| `report_card_lost` | `card:security` | 红色 | 挂失 |
-| `unlock_card` | `card:security` | 红色 | 解挂 |
-| `list_subscriptions` | `subscription:read` | 绿色 | 查询订阅 |
-| `cancel_subscription` | `subscription:manage` | 黄色 | 取消订阅 |
+| `query_bill` | 分析账单 | 绿 | `billing:read` |
+| `transfer` | 智能转账 | 黄 | `transfer:execute` |
+| `adjust_repayment_date` | 调整还款日 | 黄 | `card:manage` |
+| `adjust_card_limit` | 调整卡片额度 | 黄 | `card:manage` |
+| `set_transaction_limit` | 设置交易限额 | 黄 | `card:manage` |
+| `report_card_lost` | 卡片挂失 | 红 | `card:security` |
+| `unlock_card` | 卡片解挂 | 红 | `card:security` |
+| `list_subscriptions` | 订阅查询 | 绿 | `subscription:read` |
+| `cancel_subscription` | 取消订阅 | 黄 | `subscription:manage` |
 
-## 4. 动态风险引擎
+### 3.2 场景工具（`scenarios/`，25 个）
 
-`DynamicRiskEngine` 使用确定性数据做风险判断，规则如下：
+| 模块 | 工具 | 标题 | 基线风险 | 最小权限 |
+|---|---|---|---|---|
+| wealth | `list_wealth_products` | 查看理财产品 | 绿 | `wealth:read` |
+| wealth | `query_wealth_holdings` | 查询理财持仓 | 绿 | `wealth:read` |
+| wealth | `assess_wealth_risk` | 风险测评 | 绿 | `wealth:read` |
+| wealth | `purchase_wealth` | 申购理财产品 | 红 | `wealth:execute` |
+| wealth | `redeem_wealth` | 赎回理财产品 | 黄 | `wealth:execute` |
+| transfers | `list_contacts` | 查看联系人 | 绿 | `contact:read` |
+| transfers | `add_contact` | 新增联系人 | 黄 | `contact:manage` |
+| transfers | `transfer_to_contact` | 联系人转账 | 黄 | `transfer:execute` |
+| bills | `bill_report` | 账单报告 | 绿 | `billing:read` |
+| bills | `detect_bill_anomalies` | 账单异常检测 | 绿 | `billing:read` |
+| bills | `identify_subscription_charges` | 订阅扣费识别 | 绿 | `subscription:read` |
+| bills | `list_renewal_reminders` | 续费提醒 | 绿 | `subscription:read` |
+| cards | `apply_virtual_card` | 申请虚拟卡 | 黄 | `card:manage` |
+| cards | `issue_virtual_card` | 审核并发放虚拟卡 | 黄 | `card:manage` |
+| cards | `reset_card_password` | 重置卡片密码 | 红 | `card:security` |
+| cards | `unlock_transaction_limit` | 解锁交易限额 | 黄 | `card:manage` |
+| automation | `query_contact_birthday` | 查询联系人生日 | 绿 | `calendar:read` |
+| automation | `lock_budget_funds` | 锁定预算资金 | 黄 | `automation:manage` |
+| automation | `unlock_budget_funds` | 解锁预算资金 | 绿 | `automation:manage` |
+| automation | `schedule_flower_order` | 预约生日鲜花 | 黄 | `automation:manage` |
+| automation | `schedule_cake_order` | 预约生日蛋糕 | 黄 | `automation:manage` |
+| automation | `schedule_transfer` | 定时转账 | 黄 | `transfer:execute` |
+| automation | `list_scheduled_tasks` | 查看定时任务 | 绿 | `automation:read` |
+| automation | `cancel_scheduled_task` | 取消定时任务 | 绿 | `automation:manage` |
+| automation | `run_due_tasks` | 执行到期任务 | 绿 | `automation:manage` |
 
-### 智能转账
+> 上表是**基线**风险；动态风险规则可能在执行时上调（见 §5）。风险只升不降。
 
-```text
-单笔金额 > 5000 元             -> 红色
-今日累计转账（含本次） > 1000 元 -> 红色
-其他转账                       -> 黄色
-```
+## 4. 六场景能力矩阵
 
-### 卡片管理
+| 场景 | 典型自然语言 | 主要工具 | 只读接口 | 测试 |
+|---|---|---|---|---|
+| 智能转账 | 「给妈妈转 500」「这顿 300 元 4 个人 AA」「明天给张三转 300」 | `transfer`、`transfer_to_contact`、`list_contacts`、`add_contact`、`schedule_transfer` | `GET /api/contacts` | `test_transfers.py`（10）+ `test_api.py` 转账用例 |
+| 账单分析 | 「分析我的本月账单」「去年的年度账单」「哪些扣费异常」 | `query_bill`、`bill_report`、`detect_bill_anomalies` | `GET /api/bills/report`、`/api/bills/anomalies` | `test_bills.py`（8）+ `test_api.py` |
+| 理财操作 | 「有哪些理财产品」「买 1000 元稳健短债A」「赎回 500 元」 | `list_wealth_products`、`query_wealth_holdings`、`assess_wealth_risk`、`purchase_wealth`、`redeem_wealth` | `GET /api/wealth/products`、`/holdings`、`/orders` | `test_wealth.py`（11） |
+| 卡片管理 | 「申请一张虚拟卡」「把 CARD-8821 密码重置」「解锁交易限额」「挂失 CARD-9902」 | `apply_virtual_card`、`issue_virtual_card`、`reset_card_password`、`unlock_transaction_limit` + 核心卡片工具 | `GET /api/cards/applications` | `test_cards.py`（8）+ `test_api.py` |
+| 订阅/代扣 | 「识别我的订阅扣费」「这个月有哪些续费」「取消异常订阅」 | `list_subscriptions`、`cancel_subscription`、`identify_subscription_charges`、`list_renewal_reminders` | `GET /api/subscriptions/charges`、`/api/subscriptions/reminders` | `test_bills.py`、`test_api.py` |
+| 跨场景联动 | 「分析我的账单并取消异常订阅」「帮我准备下个月妈妈的生日，预算 1000 元」 | `query_bill → cancel_subscription`；`query_contact_birthday → lock_budget_funds → schedule_flower_order / schedule_cake_order` | 组合上述只读接口 | `test_api.py`、`test_transfers.py`、`test_automation.py`（10） |
 
-```text
-额度调整 > 5000 元 -> 红色
-挂失 / 解挂        -> 红色
-其他卡片设置变更   -> 黄色
-```
+### 4.1 转账形态
 
-### 查询
+- 联系人解析：姓名/别名/手机号唯一命中才执行；未命中或多命中一律澄清，**不猜测收款人**；
+- 人名转账示例：「给妈妈转 500」→ 解析 `contacts` → `transfer_to_contact(to_name="妈妈", amount_cny=500)`；
+- AA 拆分：「这顿 300 元 4 个人 AA」→ 总额 ÷ 人数，为其余参与者各生成一笔 `transfer_to_contact`，形成可并行的多步 DAG；风险按 AA 总额与当日累计判定；
+- 定时转账：`schedule_transfer(run_at, recurrence=none|monthly|yearly)` 创建 `scheduled_tasks`，到期由 `run_due_tasks` 执行。
 
-```text
-账单分析 / 订阅查询 -> 绿色
-```
+### 4.2 理财操作
 
-风险结果会同时写入：
+- 产品清单为 5 个模拟产品（R1–R5，起购 100–10000 元），全部标注「模拟数据，不构成任何投资建议，不产生真实资金变动」；
+- `purchase_wealth` 基线红色、始终需要强验证：资金从演示账户投入产品，校验起购金额与产品存在性，写入 `wealth_orders` 与 `wealth_holdings`；
+- `redeem_wealth`：赎回金额 ≤ 1000 元为黄色，> 1000 元升红；支持按 `amount_cny` / `shares` / 持仓隐含市值计算；全额赎回后持仓关闭；
+- `assess_wealth_risk` 记录用户风险偏好（R1–R5），并在申购风险原因中提示产品风险等级与偏好匹配。
 
-- Agent 响应的 `risk`
-- 计划步骤的 `risk_level` / `risk_reasons`
-- 工具执行结果
-- 审计记录
+### 4.3 账单与订阅深度
 
-## 5. 三类场景
+- `bill_report`：`period=month|year`，输出分类汇总、Top 商户、环比、异常说明；
+- `detect_bill_anomalies`：确定性规则——同商户重复扣费、单类目超预算（`budgets`）、订阅扣费金额突增（金额/比例双阈值）、非活跃时段交易；
+- `identify_subscription_charges`：基于流水聚合成订阅实体并标记未登记扣费；
+- `list_renewal_reminders`：基于订阅周期与下次扣费日生成站内提醒，支持 `cycle` 过滤与 `days_ahead` 窗口；不含外部推送。
 
-### 5.1 智能转账
+### 4.4 卡片补齐
 
-示例：
+- `apply_virtual_card`：申请额度默认 3000 元、上限 20000 元，写入 `card_applications(status=applying)`；
+- `issue_virtual_card`：审核 `applying` 状态的申请，校验通过后置为 `issued` 并生成虚拟卡（卡号掩码、额度、还款日、交易限额）；
+- `reset_card_password`：红色 + 演示 OTP；不接收、不保存、不审计明文密码，只记录 `password_changed_at`；
+- `unlock_transaction_limit`：默认恢复 10000 元；指定目标限额 > 5000 元时升红。
 
-```text
-向 ACC-2002 转账 880 元
-```
+### 4.5 跨场景 DAG
 
-- 880 元 -> 黄色确认
-- 同一天再转 500 元 -> 累计 1380 元 -> 红色强验证
-- 确认后更新账户余额和交易流水
-
-### 5.2 账单分析
-
-示例：
-
-```text
-分析我的本月账单
-```
-
-返回：
-
-- 本月支出总额
-- 消费分类
-- 异常交易说明
-- 异常订阅 ID
-- 最近交易明细
-
-### 5.3 卡片管理
-
-示例：
-
-```text
-把还款日调整到每月 18 日
-把信用卡额度调整到 8000 元
-把 CARD-8821 的单日交易限额设置为 3000 元
-挂失卡片 CARD-9902
-```
-
-- 还款日调整 -> 黄色
-- 8000 元额度调整 -> 红色
-- 挂失/解挂 -> 红色
-
-## 6. 跨场景 DAG
-
-示例：
-
-```text
-分析我的账单并取消异常订阅
-```
-
-生成计划：
+**DAG 一：账单分析 → 取消异常订阅**
 
 ```text
 step-1: query_bill
-   |
-   v
+   │  data.suspicious_subscription_id
+   ▼
 step-2: cancel_subscription
 ```
 
-步骤 2 的参数使用前一步结果：
+步骤 2 参数使用前一步结果：
 
 ```json
 {
@@ -154,52 +162,131 @@ step-2: cancel_subscription
 }
 ```
 
-执行器在运行 step-2 前解析引用，确保取消的是账单分析实际发现的订阅。
+**DAG 二：生日准备（4 步，含跨模块数据）**
+
+```text
+step-1: query_contact_birthday   （读 transfers.contacts 的生日）   绿
+   ▼
+step-2: lock_budget_funds        （在 ACC-1001 锁定预算，可补偿解锁） 黄
+   ├──────────────┐
+   ▼              ▼
+step-3: schedule_flower_order   step-4: schedule_cake_order         黄
+```
+
+到期前 2 天由 `run_due_tasks` 触发礼物下单；`unlock_budget_funds` 可在取消时退回锁定金额。
+
+**DAG 三：AA 并行拆分**
+
+```text
+step-1..n: transfer_to_contact（各自独立，可并行执行；风险按 AA 总额与日累计统一评估）
+```
+
+调度器在执行前解析变量引用，整条 DAG 风险取最高节点；任一节点需要确认时整个任务先进入待确认状态。
+
+## 5. 动态风险规则
+
+`DynamicRiskEngine` 使用确定性数据判断；场景模块可通过 `risk_rules()` 提供规则，结果与工具基线取最大值（只升不降），LLM 输出不参与风险判定。
+
+### 5.1 核心工具
+
+```text
+单笔转账 > 5000 元                    -> 红色
+今日累计转账（含本次） > 1000 元       -> 红色
+其他转账                              -> 黄色
+额度调整 > 5000 元                    -> 红色
+挂失 / 解挂                           -> 红色
+其他卡片设置变更 / 取消订阅           -> 黄色
+账单分析 / 订阅查询                   -> 绿色
+```
+
+### 5.2 场景规则
+
+| 工具 | 规则 |
+|---|---|
+| `purchase_wealth` | 始终红色（资金投入 + 强验证；标注产品风险等级） |
+| `redeem_wealth` | ≤ 1000 元黄色；> 1000 元红色；无法确认金额按红色 |
+| `transfer_to_contact` | 单笔（AA 取总额）> 5000 元红色；预计日累计 > 1000 元红色；否则黄色 |
+| `unlock_transaction_limit` | 指定目标限额 > 5000 元红色；否则黄色 |
+| `reset_card_password` | 红色（账户安全凭证） |
+| `apply_virtual_card` / `issue_virtual_card` | 黄色 |
+| `bill_report` / `detect_bill_anomalies` / 订阅查询 | 绿色（只读） |
+| `schedule_transfer` | 单笔 > 5000 元红色；否则黄色 |
+| `lock_budget_funds` / 生日礼物预订 | 黄色（锁定可补偿、礼物为模拟订单） |
+| `cancel_scheduled_task` / `unlock_budget_funds` / `run_due_tasks` | 绿色（取消未执行任务 / 补偿退回 / 到期触发） |
+
+风险结果会同时写入 Agent 响应的 `risk`、计划步骤的 `risk_level / risk_reasons`、工具执行结果与审计记录。
+
+## 6. 演示数据（`demo-user`）
+
+Mock Bank Core 种子：
+
+- `ACC-1001` 工资卡（主账户）、`ACC-2002` 日常储蓄；
+- `CARD-8821` / `CARD-9902`；
+- 工资、餐饮、购物、交通、订阅等本月流水；
+- `SUB-3001` 云端影音、`SUB-3002` AI 工具订阅（带异常标记）、`SUB-3003` 健身房月卡。
+
+场景种子：
+
+| 模块 | 种子事实 |
+|---|---|
+| wealth | 5 个模拟产品 `WPRD-R1` 稳健货币A / `WPRD-R2` 稳健短债A / `WPRD-R3` 平衡混合A / `WPRD-R4` 指数增强A / `WPRD-R5` 行业主题A；1 笔演示持仓 `HLTH-DEMO-R2`（3000 份，本金 3000 元，市值 3060 元）；风险偏好表初始为空 |
+| transfers | 4 个联系人：妈妈（`ACC-9001`）、老爸（`ACC-9002`）、张三（`ACC-9003`）、李四（`ACC-9004`），姓名/别名/手机号可解析 |
+| bills | 4 个分类预算：餐饮 1500 元、购物 2000 元、订阅 500 元、交通 500 元/月；账单数据读取 `bank_transactions` 与 `bank_subscriptions` |
+| cards | 1 条已发卡申请 `APP-8001`（虚拟卡，额度 8000 元，关联 `CARD-8821`）；密码修改表初始为空 |
+| automation | 定时任务、预算目标、礼物订单初始为空，由演示操作创建；鲜花 199 元、蛋糕 159 元，提前 2 天预订 |
+
+所有种子幂等（`INSERT OR IGNORE` / 先查存在），重复启动不会重复写入。演示前可删除 `backend/data/aegisbank.db` 恢复初始种子。
 
 ## 7. API
 
-新增：
+核心：
 
 ```text
-GET /api/banking/overview
-```
-
-返回：
-
-- 账户列表
-- 卡片列表
-- 订阅列表
-- 本月支出
-- 今日累计转账
-- 异常订阅 ID 和原因
-
-现有：
-
-```text
+GET  /api/banking/overview
 GET  /api/tools
-GET  /api/permissions
-PUT  /api/permissions/{tool}
-POST /api/agent/run
+GET  /api/planner/info
 POST /api/planner/plan
-POST /api/confirmations/{id}
+POST /api/agent/run
+POST /api/confirmations/{action_id}
+GET  /api/permissions
+PUT  /api/permissions/{tool_name}
 GET  /api/audit
 GET  /api/audit/verify
+GET  /api/health
+GET  /api/health/ready
+GET  /api/trust/actions/{action_id}
+POST /api/trust/actions/{action_id}/reconcile
+GET  /api/trust/circuit-breaker
+POST /api/trust/circuit-breaker/reset
+```
+
+场景（只读，写操作统一走 `/api/agent/run` 或对应确认链路）：
+
+```text
+GET  /api/wealth/products | /holdings | /orders
+GET  /api/contacts
+GET  /api/bills/report | /api/bills/anomalies
+GET  /api/subscriptions/charges | /api/subscriptions/reminders
+GET  /api/cards/applications
+GET  /api/automation/schedules | /goals | /orders
+POST /api/automation/run-due            （演示时间快进）
 ```
 
 ## 8. 当前边界
 
-- 银行数据仍为本地模拟数据，不连接真实银行核心；
-- 强验证仍使用演示 OTP，不冒充真实短信/人脸/U 盾；
-- DAG 当前支持依赖和变量解析，但还没有步骤级回滚和补偿；
-- 异常熔断和工具沙箱尚未实现；
-- 只支持 Web 控制台，IM 适配器尚未接入；
-- 比赛文档、PPT、演示视频和安全自评报告仍需后续补齐。
+- 银行数据仍为本地模拟数据，不连接真实银行核心；理财内容不构成投资建议，不产生真实资金变动；
+- 强验证仍使用演示 OTP `246810`，不冒充真实短信/人脸/U 盾；
+- DAG 支持依赖、变量解析与幂等，但步骤级回滚/补偿尚未实现（阶段 2A）；
+- 熔断只有连续失败规则，无工具沙箱与可疑行为策略（阶段 2A）；
+- 只支持 Web 控制台，IM 适配器尚未接入（阶段 2A）；
+- 时间维度用「持久化任务表 + 按需/可选轮询」实现，不是真实常驻 cron；
+- 比赛文档、PPT、演示视频和安全自评报告仍需阶段 3 补齐。
 
 ## 9. 下一步
 
-1. 增加步骤级暂停、回退和补偿；
-2. 增加异常熔断器；
-3. 增加工具执行沙箱；
-4. 增加事实校验和注入攻击测试集；
-5. 增加 IM 渠道适配器；
-6. 准备比赛材料。
+1. 步骤级暂停、回退和补偿（2A）；
+2. 可疑行为熔断策略与 `run-due` readiness 门禁收尾（2A）；
+3. 工具执行沙箱与演示 MFA Provider（2A）；
+4. IM 渠道适配器与多角色撤权演示（2A）；
+5. 多轮上下文与指代消解（后续）；
+6. 准备比赛材料（阶段 3）。

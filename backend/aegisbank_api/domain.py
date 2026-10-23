@@ -22,6 +22,9 @@ class ExecutionStatus(StrEnum):
     BLOCKED = "blocked"
     REJECTED = "rejected"
     FAILED = "failed"
+    UNKNOWN = "unknown"
+    RECONCILED = "reconciled"
+    ROLLED_BACK = "rolled_back"
 
 
 @dataclass(frozen=True, slots=True)

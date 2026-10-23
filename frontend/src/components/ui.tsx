@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react';
 import { riskLabels, riskShortLabels } from '../risk';
-import type { RiskLevel, RunStatus } from '../types';
-import { statusLabels } from '../viewModel';
+import type { EvidenceItem, RiskLevel, RunStatus } from '../types';
+import {
+  evidenceSourceLabel,
+  normalizeEvidence,
+  statusLabel,
+} from '../viewModel';
 
 export function RiskBadge({ risk, verbose = false }: { risk: RiskLevel; verbose?: boolean }) {
   return (
@@ -13,8 +17,82 @@ export function RiskBadge({ risk, verbose = false }: { risk: RiskLevel; verbose?
 
 export function StatusPill({ status }: { status: RunStatus | string }) {
   return (
-    <span className={`status-pill status-${status}`}>{statusLabels[status] ?? status}</span>
+    <span className={`status-pill status-${status}`}>{statusLabel(status)}</span>
   );
+}
+
+/** Layered evidence badges: mock data / human confirmation / policy / audit chain. */
+export function EvidenceBadges({
+  evidence,
+  emptyHint,
+}: {
+  evidence?: EvidenceItem[] | null;
+  emptyHint?: string;
+}) {
+  const items = normalizeEvidence(evidence ?? []);
+  if (items.length === 0) {
+    return emptyHint ? <span className="evidence-empty">{emptyHint}</span> : null;
+  }
+  return (
+    <div className="evidence-badges" aria-label="证据分层">
+      {items.map((item) => (
+        <span
+          key={`${item.source}-${item.verified}-${item.detail ?? ''}`}
+          className={`evidence-badge evidence-${item.source}`}
+          title={item.detail || evidenceSourceLabel(item.source)}
+        >
+          <span className="evidence-source">{evidenceSourceLabel(item.source)}</span>
+          <span
+            className={`evidence-verified ${item.verified ? 'is-verified' : 'is-unverified'}`}
+          >
+            {item.verified ? 'verified' : 'unverified'}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Shared loading / error / empty fallback for a single read-only data area. */
+export function ResourceState({
+  loading,
+  error,
+  empty,
+  emptyText,
+  onRetry,
+  children,
+}: {
+  loading: boolean;
+  error: string;
+  empty: boolean;
+  emptyText: string;
+  onRetry?: () => void;
+  children: ReactNode;
+}) {
+  if (loading) {
+    return (
+      <div className="inline-loading" role="status" aria-live="polite">
+        <span className="loading-spinner" aria-hidden="true" />
+        <span>正在加载数据…</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="inline-error" role="alert">
+        <span>{error}</span>
+        {onRetry && (
+          <button className="text-button" onClick={onRetry}>
+            重试
+          </button>
+        )}
+      </div>
+    );
+  }
+  if (empty) {
+    return <div className="inline-empty">{emptyText}</div>;
+  }
+  return <>{children}</>;
 }
 
 export function LoadingState({ label = '正在加载数据…' }: { label?: string }) {

@@ -8,7 +8,7 @@ import {
   formatDisplayValue,
   prettyEvidence,
 } from '../viewModel';
-import { EmptyState, LoadingState, PageAlerts, RiskBadge } from './ui';
+import { EmptyState, EvidenceBadges, LoadingState, PageAlerts, RiskBadge } from './ui';
 
 interface Props {
   audit: AuditEntry[];
@@ -145,6 +145,12 @@ export default function AuditPage({
                         ))}
                         {Object.keys(entry.arguments).length === 0 && <span>无入参</span>}
                       </div>
+                    </dd>
+                  </div>
+                  <div className="detail-wide">
+                    <dt>证据分层</dt>
+                    <dd>
+                      <EvidenceBadges evidence={entry.evidence} emptyHint="该记录没有分层证据。" />
                     </dd>
                   </div>
                   <div className="detail-wide">

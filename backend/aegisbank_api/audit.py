@@ -30,6 +30,7 @@ class AuditService:
         result: dict[str, Any] | list[dict[str, Any]] | None,
         confirmation_state: str,
         risk_level: str,
+        evidence: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         entry = {
             "created_at": utc_now(),
@@ -39,7 +40,9 @@ class AuditService:
             "dag_path": dag_path,
             "tool_name": tool_name,
             "arguments_json": _canonical(arguments),
-            "result_json": _canonical({"result": result}),
+            "result_json": _canonical(
+                {"result": result, "evidence": evidence or []}
+            ),
             "confirmation_state": confirmation_state,
             "risk_level": risk_level,
         }
@@ -53,6 +56,7 @@ class AuditService:
             **entry,
             "arguments": arguments,
             "result": result,
+            "evidence": evidence or [],
             "prev_hash": prev_hash,
             "entry_hash": entry_hash,
         }
@@ -61,7 +65,9 @@ class AuditService:
         rows = self.db.list_audit(limit=limit)
         for row in rows:
             row["arguments"] = json.loads(row.pop("arguments_json"))
-            row["result"] = json.loads(row.pop("result_json")).get("result")
+            payload = json.loads(row.pop("result_json"))
+            row["result"] = payload.get("result")
+            row["evidence"] = payload.get("evidence") or []
         return rows
 
     def verify(self) -> dict[str, Any]:

@@ -3,7 +3,9 @@ import {
   fetchAudit,
   fetchBankingOverview,
   fetchPermissions,
+  fetchReadiness,
   fetchTools,
+  fetchTrustAction,
   resolveConfirmation,
   runAgent,
   updatePermission,
@@ -13,22 +15,28 @@ import AuditPage from './components/AuditPage';
 import BankOverviewPage from './components/BankOverviewPage';
 import ConfirmationModal from './components/ConfirmationModal';
 import PermissionsPage from './components/PermissionsPage';
+import ReadinessBanner from './components/ReadinessBanner';
+import ScenariosPage from './components/ScenariosPage';
 import TaskConsolePage from './components/TaskConsolePage';
+import { readinessBlockers } from './viewModel';
 import type {
   AgentRunInput,
   AuditEntry,
   BankingOverview,
+  ReadinessSnapshot,
   RunResponse,
   ToolMetadata,
+  TrustActionDetail,
 } from './types';
 
-type Page = 'overview' | 'console' | 'permissions' | 'audit';
+type Page = 'overview' | 'scenarios' | 'console' | 'permissions' | 'audit';
 
 const navigation: Array<{ id: Page; index: string; label: string; hint: string }> = [
   { id: 'overview', index: '01', label: '银行概览', hint: '账户与订阅' },
-  { id: 'console', index: '02', label: '任务控制台', hint: '三场景任务' },
-  { id: 'permissions', index: '03', label: '权限控制台', hint: '工具授权' },
-  { id: 'audit', index: '04', label: '操作审计', hint: '哈希链证据' },
+  { id: 'scenarios', index: '02', label: '六场景面板', hint: '理财 / 账单 / 自动化' },
+  { id: 'console', index: '03', label: '任务控制台', hint: '三场景任务' },
+  { id: 'permissions', index: '04', label: '权限控制台', hint: '工具授权' },
+  { id: 'audit', index: '05', label: '操作审计', hint: '哈希链证据' },
 ];
 
 const CROSS_SCENARIO_INSTRUCTION = '分析我的本月账单和所有订阅，找出异常订阅并取消它';
@@ -54,9 +62,16 @@ export default function App() {
   const [auditError, setAuditError] = useState('');
   const [auditValid, setAuditValid] = useState<boolean | null>(null);
   const [auditChecked, setAuditChecked] = useState(0);
+  const [readiness, setReadiness] = useState<ReadinessSnapshot | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
+  const [readinessError, setReadinessError] = useState('');
   const [instruction, setInstruction] = useState('查询并分析我的本月账单');
   const [lastRun, setLastRun] = useState<RunResponse | null>(null);
   const [pending, setPending] = useState<RunResponse | null>(null);
+  const [lastActionId, setLastActionId] = useState<string | null>(null);
+  const [trustAction, setTrustAction] = useState<TrustActionDetail | null>(null);
+  const [trustActionLoading, setTrustActionLoading] = useState(false);
+  const [trustActionError, setTrustActionError] = useState('');
   const [otp, setOtp] = useState('');
   const [busy, setBusy] = useState(false);
   const [busyTool, setBusyTool] = useState('');
@@ -64,6 +79,11 @@ export default function App() {
   const [notice, setNotice] = useState('');
 
   const grantedCount = useMemo(() => tools.filter((tool) => tool.granted).length, [tools]);
+
+  const writesBlocked = Boolean(readinessError) || readiness?.status !== 'ready';
+  const blockReason = readinessError
+    ? readinessError
+    : readinessBlockers(readiness).join('；') || '系统尚未就绪';
 
   const loadTools = useCallback(async (showLoading = false) => {
     if (showLoading) setToolsLoading(true);
@@ -120,11 +140,32 @@ export default function App() {
     }
   }, []);
 
+  const loadReadiness = useCallback(async (showLoading = false) => {
+    if (showLoading) setReadinessLoading(true);
+    try {
+      setReadiness(await fetchReadiness());
+      setReadinessError('');
+    } catch (error) {
+      // 无法确认就绪状态时保持 fail-closed：写操作继续被禁用。
+      setReadinessError(messageOf(error, '无法获取系统就绪状态'));
+    } finally {
+      setReadinessLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadTools(true);
     void loadOverview(true);
     void loadAudit(true);
-  }, [loadAudit, loadOverview, loadTools]);
+    void loadReadiness(true);
+  }, [loadAudit, loadOverview, loadReadiness, loadTools]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadReadiness();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [loadReadiness]);
 
   function navigate(next: Page) {
     setPage(next);
@@ -138,16 +179,19 @@ export default function App() {
   }
 
   async function refreshAfterRun() {
-    await Promise.all([loadTools(), loadOverview(), loadAudit()]);
+    await Promise.all([loadTools(), loadOverview(), loadAudit(), loadReadiness()]);
   }
 
   async function execute(input: AgentRunInput) {
     setBusy(true);
     setActionError('');
     setNotice('');
+    setTrustAction(null);
+    setTrustActionError('');
     try {
       const result = await runAgent(input);
       setLastRun(result);
+      setLastActionId(result.confirmation?.id ?? null);
       if (result.status === 'awaiting_confirmation') {
         setOtp('');
         setPending(result);
@@ -167,19 +211,36 @@ export default function App() {
 
   async function decide(approved: boolean) {
     if (!pending?.confirmation) return;
+    const actionId = pending.confirmation.id;
     setBusy(true);
     setActionError('');
     try {
-      const result = await resolveConfirmation(pending.confirmation.id, approved, otp);
+      const result = await resolveConfirmation(actionId, approved, otp);
       setLastRun(result);
+      setLastActionId(actionId);
       setPending(null);
       setOtp('');
       setNotice(result.reason);
+      setTrustAction(null);
+      setTrustActionError('');
       await refreshAfterRun();
     } catch (error) {
       setActionError(messageOf(error, approved ? '确认执行失败' : '拒绝操作失败'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function inspectTrustAction() {
+    if (!lastActionId || trustActionLoading) return;
+    setTrustActionLoading(true);
+    setTrustActionError('');
+    try {
+      setTrustAction(await fetchTrustAction(lastActionId));
+    } catch (error) {
+      setTrustActionError(messageOf(error, '无法读取信任详情'));
+    } finally {
+      setTrustActionLoading(false);
     }
   }
 
@@ -219,6 +280,13 @@ export default function App() {
           <span className="env-pill">DEV</span>
         </div>
       </header>
+
+      <ReadinessBanner
+        snapshot={readiness}
+        loading={readinessLoading}
+        error={readinessError}
+        onRefresh={() => void loadReadiness(true)}
+      />
 
       <div className="layout">
         <aside className="sidebar">
@@ -267,6 +335,10 @@ export default function App() {
             />
           )}
 
+          {page === 'scenarios' && (
+            <ScenariosPage writesBlocked={writesBlocked} blockReason={blockReason} />
+          )}
+
           {page === 'console' && (
             <TaskConsolePage
               tools={tools}
@@ -277,6 +349,13 @@ export default function App() {
               busy={busy}
               error={combineErrors(toolsError, overlayError)}
               notice={sharedNotice}
+              writesBlocked={writesBlocked}
+              blockReason={blockReason}
+              lastActionId={lastActionId}
+              trustAction={trustAction}
+              trustActionLoading={trustActionLoading}
+              trustActionError={trustActionError}
+              onInspectTrustAction={() => void inspectTrustAction()}
               onExecute={(input) => void execute(input)}
               onRefresh={() => void loadTools(true)}
             />
@@ -316,6 +395,8 @@ export default function App() {
           setOtp={setOtp}
           onDecision={(approved) => void decide(approved)}
           error={actionError}
+          writesBlocked={writesBlocked}
+          blockReason={blockReason}
         />
       )}
     </div>

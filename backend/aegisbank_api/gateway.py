@@ -20,6 +20,20 @@ INJECTION_PATTERNS = (
 )
 
 
+def scan_text(instruction: str, arguments: dict[str, Any] | None = None) -> str:
+    return f"{instruction}\n{json.dumps(arguments or {}, ensure_ascii=False)}"
+
+
+def detect_injection(text: str) -> list[str]:
+    """Return the matched injection rule sources for a piece of text."""
+    return [pattern.pattern for pattern in INJECTION_PATTERNS if pattern.search(text)]
+
+
+def scan_injection(instruction: str, arguments: dict[str, Any] | None = None) -> list[str]:
+    """Scan instruction *and* arguments before a plan is even proposed."""
+    return detect_injection(scan_text(instruction, arguments))
+
+
 class PermissionStore:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -66,8 +80,7 @@ class PermissionGateway:
         instruction: str,
         arguments: dict[str, Any],
     ) -> GatewayDecision:
-        scan_text = f"{instruction}\n{json.dumps(arguments, ensure_ascii=False)}"
-        if any(pattern.search(scan_text) for pattern in INJECTION_PATTERNS):
+        if scan_injection(instruction, arguments):
             return GatewayDecision(
                 outcome="deny",
                 reason="检测到疑似 Prompt 注入或越权指令，已交由权限网关拦截。",

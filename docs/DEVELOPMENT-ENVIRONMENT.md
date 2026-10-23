@@ -1,6 +1,6 @@
 # 开发环境与验收记录
 
-更新日期：2026-10-23（阶段 0 收尾）
+更新日期：2026-10-23（阶段 1 信任工程 + 阶段 2B 六场景覆盖完成后）
 适用仓库：<https://github.com/LQZ5885/aegisbank>
 总规划：[MASTER-PLAN.md](MASTER-PLAN.md)
 
@@ -45,18 +45,19 @@ pnpm lock: frontend/pnpm-lock.yaml
 依赖目录: frontend/node_modules
 ```
 
-## 4. 验收记录（2026-10-23 复验）
+## 4. 验收记录（2026-10-23，阶段 1 + 2B 实现后）
 
 | 命令 | 结果 |
 |---|---|
-| `bash scripts/lint.sh` | ruff 通过；TypeScript `tsc --noEmit` 通过 |
-| `bash scripts/build.sh` | 后端 compileall 通过；Vite 生产构建成功（JS 269.22 kB / gzip 83.24 kB） |
-| `bash scripts/test.sh` | 后端 **20 项** pytest 通过；前端 **7 项** Vitest 通过（2 个测试文件） |
-| `bash scripts/smoke.sh` | `/api/health` 正常；结构化计划预览生成 `plan_hash`；绿色账单工具执行成功；审计链 `valid=true`（checked=8） |
-| `gate.ps1`（WSL 内调用） | encoding pass / lint pass / build pass / test skip（纯文档改动走快速通道）/ security pass（扫描 80 个文件，HIGH=0 MEDIUM=0） |
-| 依赖安装 | 本次未重装；依赖来自此前 `bash scripts/bootstrap.sh` 的锁定安装，`uv.lock` 与 `pnpm-lock.yaml` 未变 |
+| `cd backend && uv run pytest` | 后端 **85 项** pytest 全部通过（8 个测试文件；其中 `test_trust.py` 17 条） |
+| `cd frontend && pnpm test` | 前端 **14 个** Vitest 用例通过（2 个测试文件） |
+| HTTP 接口枚举 | **29 个** `/api` 接口（核心 16 + 场景 13） |
+| 工具目录 | **34 个**（核心 9 + 场景 25） |
+| `bash scripts/lint.sh` / `build.sh` / `smoke.sh` | 本轮文档同步未重跑；交付前需补跑完整门禁 |
+| `gate.ps1`（WSL 内调用） | 纯文档改动走 docs 快速通道（encoding / lint / build / test skip / security），提交会带「纯文档改动」标记 |
+| 依赖安装 | 依赖来自此前 `bash scripts/bootstrap.sh` 的锁定安装，`uv.lock` 与 `pnpm-lock.yaml` 未变 |
 
-补充说明：本轮改动为文档与工程约定（`AGENTS.md`、`CONTRIBUTING.md`、`docs/MASTER-PLAN.md`、`docs/ROADMAP.md`、`docs/TECH-STACK.md`、本文件），门禁按约定对纯文档改动跳过 test 阶段；测试、构建、smoke 已在同一提交前手动完整运行并通过。
+补充说明：本轮改动为阶段 1 信任工程、2B 六场景模块（后端/前端）与文档同步；测试数字来自实际 `pytest` / `vitest` 输出，实现变更后必须重新核对。纯文档同步提交按约定走门禁 docs 快速通道，交付前需补跑一次 lint / build / smoke。
 
 ## 5. 本地启动
 
@@ -68,9 +69,11 @@ bash scripts/dev.sh         # 同时启动后端与前端
 
 - UI：<http://127.0.0.1:5173>
 - API：<http://127.0.0.1:8000>
+- 健康检查：<http://127.0.0.1:8000/api/health>
+- 就绪检查：<http://127.0.0.1:8000/api/health/ready>
 - Swagger：<http://127.0.0.1:8000/docs>
 
-红色演示链路使用本地演示验证码 `246810`，只用于演示，不得用于任何真实环境。
+红色演示链路使用本地演示验证码 `246810`，只用于演示，不得用于任何真实环境。时间维度演示可使用 `POST /api/automation/run-due`（可传 `now` 做时间快进）；如需后台轮询，设置 `AEGIS_AUTOMATION_ENABLED=true`。
 
 ## 6. 复验方式
 
@@ -109,4 +112,4 @@ git -C $unc push origin main
 - `security/credential-file`：`.env.example` 因文件名启发式被标记，只包含本地演示变量，无真实凭据；
 - 纯文档改动时门禁 test 阶段会走快速通道并给出 `unverified` 结论，提交会带 `Note: 纯文档改动`，需在交付前补跑一次完整测试；
 - WSL 分区为 loop 镜像，宿主机异常关机后如未自动挂载，需执行 `sudo mount /home/lqz5885/aegisbank`；
-- 演示数据固定在 SQLite 中，重复演示前建议删除 `backend/data/aegisbank.db` 后重启以恢复种子数据。
+- 演示数据固定在 SQLite 中，重复演示前建议删除 `backend/data/aegisbank.db` 后重启以恢复种子数据（六场景种子均幂等）。

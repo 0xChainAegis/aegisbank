@@ -12,7 +12,9 @@ See ``README.md`` in this package for the module contract.
 from __future__ import annotations
 
 import importlib
+import os
 import pkgutil
+import warnings
 from collections.abc import Iterator
 from types import ModuleType
 
@@ -22,14 +24,60 @@ from ..db import Database
 from ..services import CoreServices
 
 DEMO_USER = "demo-user"
+ALLOW_ENV = "AEGIS_SCENARIO_ALLOW"
+STRICT_ENV = "AEGIS_SCENARIO_STRICT"
+
+_MODULES: list[ModuleType] | None = None
 
 
-def iter_scenario_modules() -> Iterator[ModuleType]:
-    """Import and yield every scenario module in deterministic name order."""
+def reset_scenario_cache() -> None:
+    """Forget discovered modules (tests that switch scenario allowlists)."""
+    global _MODULES
+    _MODULES = None
+
+
+def _allowlist() -> set[str] | None:
+    raw = os.environ.get(ALLOW_ENV, "").strip()
+    if not raw:
+        return None
+    if raw.lower() == "none":
+        return set()
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
+def _strict() -> bool:
+    return os.environ.get(STRICT_ENV, "1").strip().lower() not in {"0", "false", "no"}
+
+
+def _load_modules() -> list[ModuleType]:
+    global _MODULES
+    if _MODULES is not None:
+        return _MODULES
+    allow = _allowlist()
+    strict = _strict()
+    modules: list[ModuleType] = []
     for info in sorted(pkgutil.iter_modules(__path__), key=lambda item: item.name):
         if info.name.startswith("_"):
             continue
-        yield importlib.import_module(f"{__name__}.{info.name}")
+        if allow is not None and info.name not in allow:
+            continue
+        try:
+            modules.append(importlib.import_module(f"{__name__}.{info.name}"))
+        except Exception as exc:  # noqa: BLE001 - tolerant mode is a dev switch
+            if strict:
+                raise
+            warnings.warn(
+                f"场景模块 {info.name} 加载失败，已跳过：{exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    _MODULES = modules
+    return modules
+
+
+def iter_scenario_modules() -> Iterator[ModuleType]:
+    """Yield scenario modules in deterministic name order."""
+    yield from _load_modules()
 
 
 def prepare_persistence(db: Database, user_id: str = DEMO_USER) -> list[ModuleType]:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,3 +21,8 @@ class ConfirmationRequest(BaseModel):
 
 class PermissionUpdateRequest(BaseModel):
     granted: bool
+
+
+class ReconcileRequest(BaseModel):
+    outcome: Literal["reconciled", "rolled_back"]
+    reason: str = Field(default="", max_length=240)
