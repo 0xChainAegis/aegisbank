@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +16,17 @@ from .db import Database
 from .gateway import PermissionGateway, PermissionStore
 from .planning.factory import build_planner, describe_planner
 from .risk import DynamicRiskEngine
+from .scenarios import (
+    DEMO_USER,
+    include_scenario_routers,
+    prepare_persistence,
+    register_scenario_tools,
+    start_scenario_background,
+    stop_scenario_background,
+)
 from .scheduler import DagScheduler, IntentError, ReauthError
 from .schemas import AgentRunRequest, ConfirmationRequest, PermissionUpdateRequest
+from .services import CoreServices
 from .tools.finance import build_registry
 
 
@@ -31,13 +41,23 @@ def create_app(
 
     db = Database(config.database_path)
     bank_repository = BankingRepository(db)
+    services = CoreServices(db=db, repository=bank_repository, settings=config)
+
+    # Scenario modules own their schema, seed data, tools, intents and routes.
+    scenario_modules = prepare_persistence(db, DEMO_USER)
+
     registry = build_registry(bank_repository)
+    services.registry = registry
+    register_scenario_tools(services, scenario_modules)
+
     permission_store = PermissionStore(db)
-    permission_store.seed("demo-user", registry)
+    permission_store.seed(DEMO_USER, registry)
     gateway = PermissionGateway(registry=registry, permissions=permission_store)
+    services.gateway = gateway
     risk_engine = DynamicRiskEngine(bank_repository)
     audit = AuditService(db)
-    planner = build_planner(config, registry)
+    services.audit = audit
+    planner = build_planner(config, registry, bank_repository)
     scheduler = DagScheduler(
         planner=planner,
         registry=registry,
@@ -48,8 +68,17 @@ def create_app(
         confirmation_ttl_seconds=config.confirmation_ttl_seconds,
         demo_otp=config.demo_otp,
     )
+    services.scheduler = scheduler
 
-    app = FastAPI(title=config.app_name, version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        start_scenario_background(services, scenario_modules)
+        try:
+            yield
+        finally:
+            stop_scenario_background(scenario_modules)
+
+    app = FastAPI(title=config.app_name, version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origin_list,
@@ -70,12 +99,12 @@ def create_app(
 
     @app.get(f"{config.api_prefix}/banking/overview")
     def banking_overview(
-        user_id: str = Query(default="demo-user", max_length=64),
+        user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
         return bank_repository.overview(user_id).model_dump()
 
     @app.get(f"{config.api_prefix}/tools")
-    def list_tools(user_id: str = Query(default="demo-user", max_length=64)) -> dict[str, Any]:
+    def list_tools(user_id: str = Query(default=DEMO_USER, max_length=64)) -> dict[str, Any]:
         return {"tools": permission_store.list(user_id, registry)}
 
     @app.get(f"{config.api_prefix}/planner/info")
@@ -100,7 +129,7 @@ def create_app(
 
     @app.get(f"{config.api_prefix}/permissions")
     def list_permissions(
-        user_id: str = Query(default="demo-user", max_length=64),
+        user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
         return {"permissions": permission_store.list(user_id, registry)}
 
@@ -108,7 +137,7 @@ def create_app(
     def update_permission(
         tool_name: str,
         body: PermissionUpdateRequest,
-        user_id: str = Query(default="demo-user", max_length=64),
+        user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
         try:
             tool = registry.get(tool_name)
@@ -139,7 +168,7 @@ def create_app(
     def resolve_confirmation(action_id: str, body: ConfirmationRequest) -> dict[str, Any]:
         try:
             return scheduler.confirm(
-                user_id="demo-user",
+                user_id=DEMO_USER,
                 action_id=action_id,
                 approved=body.approved,
                 reauth_token=body.reauth_token,
@@ -158,6 +187,7 @@ def create_app(
     def verify_audit() -> dict[str, Any]:
         return audit.verify()
 
+    include_scenario_routers(app, services, scenario_modules)
     return app
 
 

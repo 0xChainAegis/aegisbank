@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import re
 
+from ..banking.repository import BankingRepository
 from ..registry import ToolRegistry
 from .contracts import ExecutionPlan, PlanningRequest, PlanStep
+from .intents import IntentContext, collect_intent_rules, extract_amounts
 
 
 class RuleBasedPlanner:
@@ -13,8 +15,14 @@ class RuleBasedPlanner:
 
     name = "rule"
 
-    def __init__(self, registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        repository: BankingRepository | None = None,
+    ) -> None:
         self.registry = registry
+        self.repository = repository
+        self.scenario_rules = collect_intent_rules()
 
     def plan(self, request: PlanningRequest) -> ExecutionPlan:
         if request.tool_name:
@@ -37,7 +45,25 @@ class RuleBasedPlanner:
             ],
         )
 
+    def _scenario_plan(self, request: PlanningRequest) -> ExecutionPlan | None:
+        if not self.scenario_rules:
+            return None
+        context = IntentContext(
+            request=request,
+            registry=self.registry,
+            repository=self.repository,
+        )
+        for rule in self.scenario_rules:
+            plan = rule.build(context)
+            if plan is not None:
+                return plan
+        return None
+
     def _infer_plan(self, request: PlanningRequest) -> ExecutionPlan:
+        scenario = self._scenario_plan(request)
+        if scenario is not None:
+            return scenario
+
         text = request.instruction.lower()
         accounts = re.findall(r"ACC-\d{3,}", request.instruction, re.IGNORECASE)
         card_match = re.search(r"CARD-\d{3,}", request.instruction, re.IGNORECASE)
@@ -96,14 +122,7 @@ class RuleBasedPlanner:
 
     @staticmethod
     def _amounts(instruction: str) -> list[float]:
-        values = re.findall(
-            r"(\d+(?:\.\d+)?)\s*(?:元|rmb|cny)", instruction, re.IGNORECASE
-        )
-        if values:
-            return [float(item) for item in values]
-        # Also accept "调整到 12000" when the unit is implied by the field.
-        implied = re.findall(r"(?:到|至|为|改成)\s*(\d+(?:\.\d+)?)", instruction)
-        return [float(item) for item in implied]
+        return extract_amounts(instruction)
 
     @staticmethod
     def _is_cross_scenario_subscription_flow(text: str) -> bool:

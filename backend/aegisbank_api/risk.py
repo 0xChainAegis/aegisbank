@@ -12,6 +12,7 @@ from typing import Any
 
 from .banking.repository import BankingRepository
 from .domain import RiskLevel
+from .risk_rules import RiskContext, RiskRule, collect_risk_rules
 
 _RISK_ORDER = {RiskLevel.GREEN: 0, RiskLevel.YELLOW: 1, RiskLevel.RED: 2}
 
@@ -35,8 +36,14 @@ class RiskAssessment:
 
 
 class DynamicRiskEngine:
-    def __init__(self, repository: BankingRepository) -> None:
+    def __init__(
+        self,
+        repository: BankingRepository,
+        rules: list[RiskRule] | None = None,
+    ) -> None:
         self.repository = repository
+        # Scenario modules contribute deterministic rules for their own tools.
+        self.rules: list[RiskRule] = collect_risk_rules() if rules is None else list(rules)
 
     @staticmethod
     def max_level(*levels: RiskLevel) -> RiskLevel:
@@ -59,6 +66,37 @@ class DynamicRiskEngine:
             requires_reauth=final_level is RiskLevel.RED,
         )
 
+    def _scenario_assessment(
+        self,
+        *,
+        user_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        base_risk: RiskLevel,
+        instruction: str,
+    ) -> RiskAssessment | None:
+        """Let scenario modules score their own tools; core tools are untouched."""
+        if not self.rules:
+            return None
+        context = RiskContext(
+            user_id=user_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            base_risk=base_risk,
+            instruction=instruction,
+            repository=self.repository,
+        )
+        for rule in self.rules:
+            guess = rule.assess(context)
+            if guess is not None:
+                return self._assessment(
+                    level=guess.level,
+                    base_risk=base_risk,
+                    reasons=list(guess.reasons),
+                    score=guess.score,
+                )
+        return None
+
     def assess(
         self,
         *,
@@ -68,6 +106,16 @@ class DynamicRiskEngine:
         base_risk: RiskLevel,
         instruction: str = "",
     ) -> RiskAssessment:
+        scenario = self._scenario_assessment(
+            user_id=user_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            base_risk=base_risk,
+            instruction=instruction,
+        )
+        if scenario is not None:
+            return scenario
+
         if tool_name == "transfer":
             amount = float(arguments.get("amount_cny") or 0)
             daily = self.repository.daily_transfer_total_cny(user_id)

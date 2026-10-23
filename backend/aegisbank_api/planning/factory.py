@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..banking.repository import BankingRepository
 from ..config import Settings
 from ..registry import ToolRegistry
 from .contracts import ExecutionPlan, Planner, PlanningRequest
@@ -34,9 +35,13 @@ class FallbackPlanner:
             return plan
 
 
-def build_planner(settings: Settings, registry: ToolRegistry) -> Planner:
+def build_planner(
+    settings: Settings,
+    registry: ToolRegistry,
+    repository: BankingRepository | None = None,
+) -> Planner:
     mode = settings.planner_mode
-    rule = RuleBasedPlanner(registry)
+    rule = RuleBasedPlanner(registry, repository)
     if mode == "rule":
         return rule
     if mode not in {"llm", "auto"}:

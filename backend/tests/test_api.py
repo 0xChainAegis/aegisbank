@@ -18,7 +18,7 @@ def test_health_and_tool_catalog(tmp_path):
         tools = client.get("/api/tools")
         assert tools.status_code == 200
         catalog = {item["name"]: item for item in tools.json()["tools"]}
-        assert set(catalog) == {
+        core_tools = {
             "query_bill",
             "transfer",
             "adjust_repayment_date",
@@ -29,6 +29,7 @@ def test_health_and_tool_catalog(tmp_path):
             "list_subscriptions",
             "cancel_subscription",
         }
+        assert core_tools <= set(catalog)
         assert catalog["query_bill"]["risk_level"] == "green"
         assert catalog["transfer"]["risk_level"] == "yellow"
         assert catalog["report_card_lost"]["risk_level"] == "red"

@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = ""
     llm_timeout_seconds: float = 20.0
+    automation_enabled: bool = False
+    automation_interval_seconds: int = 30
 
     @property
     def cors_origin_list(self) -> list[str]:
