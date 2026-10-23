@@ -96,7 +96,7 @@ AegisBank 不把大模型直接接上几个银行函数，而是给 Agent 增加
 | 项 | 值 |
 |---|---|
 | 默认分支 | `main` |
-| 已提交基线 | `3512b82 refactor: 引入场景模块自动发现与统一扩展基座`；本轮阶段 1/2B 实现尚未提交（工作树） |
+| 已提交基线 | `50b1325 feat: 阶段一信任工程与六场景完整覆盖`（已推送，`main == origin/main`） |
 | 归档分支 | `archive/upstream-plan-provenance`（含 `upstream-pr/` 4 个文件） |
 | 许可证 | MIT（Copyright (c) 2026 LQZ5885） |
 | 代码规模 | 后端 `aegisbank_api/` 38 个 Python 文件 / 约 11.9k 行；测试 9 个文件 / 约 2.7k 行；前端 17 个文件 / 约 4.9k 行 |
@@ -140,8 +140,8 @@ AegisBank 不把大模型直接接上几个银行函数，而是给 Agent 增加
 | `cd frontend && pnpm test` | **14 个** Vitest 用例通过（2 个测试文件） |
 | HTTP 接口枚举（OpenAPI） | **29 个** `/api` 接口（核心 16 + 场景 13） |
 | 工具目录 | **34 个**（核心 9 + 场景 25；权限种子 34 行一致） |
-| `bash scripts/lint.sh` / `build.sh` / `smoke.sh` | 阶段 0 时通过；阶段 1/2B 实现后本轮未重跑，交付前需补跑一次 |
-| DSH `gate.ps1` | 纯文档改动走 docs 快速通道（encoding / lint / build / test skip / security） |
+| `bash scripts/lint.sh` / `build.sh` / `smoke.sh` | 全部通过；smoke 实测 34 个工具、审计链 `valid=true` |
+| DSH `gate.ps1` | 全量门禁 **PASS**（encoding / lint / build / test / security；扫描 108 个文件 HIGH=0 MEDIUM=0） |
 
 > 数字必须以代码或测试输出为准；实现变更后需重新核对。前端 14 项为本次实测值，若前端继续扩展需更新。
 
@@ -673,7 +673,7 @@ detail:            人类可读说明
 
 | 风险 | 影响 | 当前状态 / 应对 |
 |---|---|---|
-| 本轮实现尚未提交（工作树） | 演示/回滚风险 | 交付前经门禁 + `checkpoint.ps1` 提交；本轮文档同步只改 docs/README/AGENTS |
+| 本轮实现提交前存在工作树 | 演示/回滚风险 | 已解除：门禁 PASS 后提交 `50b1325` 并推送 `origin/main` |
 | 2B 场景扩张挤压信任工程 | 评审核心亮点来不及做 | 已解除：阶段 1 与 2B 均完成 |
 | 定时能力引入两套状态机 | 返工与审计割裂 | 已规避：按 D8/D10 复用同一状态机、幂等与审计 |
 | 沙箱、回退补偿、MFA Provider、IM 未做 | 阶段 2A 延期 | 下一步集中攻坚；先做最小演示实现，不追求生产级隔离 |

@@ -53,7 +53,7 @@ pnpm lock: frontend/pnpm-lock.yaml
 | `cd frontend && pnpm test` | 前端 **14 个** Vitest 用例通过（2 个测试文件） |
 | HTTP 接口枚举 | **29 个** `/api` 接口（核心 16 + 场景 13） |
 | 工具目录 | **34 个**（核心 9 + 场景 25） |
-| `bash scripts/lint.sh` / `build.sh` / `smoke.sh` | 本轮文档同步未重跑；交付前需补跑完整门禁 |
+| `bash scripts/lint.sh` / `build.sh` / `smoke.sh` | 全部通过；`smoke.sh` 实测 34 个工具、审计链 `valid=true` |
 | `gate.ps1`（WSL 内调用） | 纯文档改动走 docs 快速通道（encoding / lint / build / test skip / security），提交会带「纯文档改动」标记 |
 | 依赖安装 | 依赖来自此前 `bash scripts/bootstrap.sh` 的锁定安装，`uv.lock` 与 `pnpm-lock.yaml` 未变 |
 
