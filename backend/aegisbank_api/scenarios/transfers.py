@@ -449,6 +449,8 @@ class TransferToContactTool(BaseTool):
         ),
         risk_level=RiskLevel.YELLOW,
         permission="transfer:execute",
+        compensable=True,
+        compensation_tool="reverse_transfer",
         input_schema=TransferToContactArgs.model_json_schema(),
         output_schema={},
     )

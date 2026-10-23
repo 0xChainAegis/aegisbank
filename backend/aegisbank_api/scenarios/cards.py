@@ -236,6 +236,8 @@ class ApplyVirtualCardTool(BaseTool):
         description="创建一张虚拟卡的申请单，初始状态为 applying，属于账户开立类黄色操作。",
         risk_level=RiskLevel.YELLOW,
         permission="card:manage",
+        compensable=True,
+        compensation_tool="cancel_virtual_card_application",
         input_schema=ApplyVirtualCardArgs.model_json_schema(),
         output_schema=ApplyVirtualCardOutput.model_json_schema(),
     )
@@ -422,6 +424,8 @@ class UnlockTransactionLimitTool(BaseTool):
         ),
         risk_level=RiskLevel.YELLOW,
         permission="card:manage",
+        compensable=True,
+        compensation_tool="restore_transaction_limit",
         input_schema=UnlockTransactionLimitArgs.model_json_schema(),
         output_schema=UnlockTransactionLimitOutput.model_json_schema(),
     )

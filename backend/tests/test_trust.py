@@ -685,7 +685,10 @@ def test_circuit_breaker_opens_after_consecutive_failures(tmp_path: Path) -> Non
         assert blocked["status"] == "blocked"
         assert "熔断" in blocked["reason"]
 
-        reset = client.post("/api/trust/circuit-breaker/reset").json()
+        reset = client.post(
+            "/api/trust/circuit-breaker/reset",
+            headers={"X-Aegis-Role": "operator"},
+        ).json()
         assert reset["open"] is False
 
         recovered = client.post(

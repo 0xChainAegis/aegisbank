@@ -22,6 +22,7 @@ class ActionState(StrEnum):
     AWAITING_REAUTH = "AWAITING_REAUTH"
     APPROVED = "APPROVED"
     EXECUTING = "EXECUTING"
+    PAUSED = "PAUSED"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     REJECTED = "REJECTED"
@@ -59,11 +60,25 @@ ALLOWED_TRANSITIONS: dict[ActionState, frozenset[ActionState]] = {
     ),
     ActionState.APPROVED: frozenset({ActionState.EXECUTING, ActionState.FAILED}),
     ActionState.EXECUTING: frozenset(
-        {ActionState.COMPLETED, ActionState.FAILED, ActionState.UNKNOWN}
+        {
+            ActionState.COMPLETED,
+            ActionState.FAILED,
+            ActionState.UNKNOWN,
+            ActionState.PAUSED,
+            ActionState.ROLLED_BACK,
+        }
+    ),
+    ActionState.PAUSED: frozenset(
+        {
+            ActionState.EXECUTING,
+            ActionState.ROLLED_BACK,
+            ActionState.FAILED,
+            ActionState.UNKNOWN,
+        }
     ),
     ActionState.UNKNOWN: frozenset({ActionState.RECONCILED, ActionState.ROLLED_BACK}),
-    ActionState.COMPLETED: frozenset(),
-    ActionState.FAILED: frozenset(),
+    ActionState.COMPLETED: frozenset({ActionState.ROLLED_BACK, ActionState.UNKNOWN}),
+    ActionState.FAILED: frozenset({ActionState.ROLLED_BACK, ActionState.UNKNOWN}),
     ActionState.REJECTED: frozenset(),
     ActionState.EXPIRED: frozenset(),
     ActionState.RECONCILED: frozenset(),

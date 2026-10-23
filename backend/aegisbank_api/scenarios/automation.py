@@ -655,6 +655,8 @@ class LockBudgetFundsTool(BaseTool):
         ),
         risk_level=RiskLevel.YELLOW,
         permission="automation:manage",
+        compensable=True,
+        compensation_tool="unlock_budget_funds",
         input_schema=LockBudgetFundsArgs.model_json_schema(),
         output_schema={},
     )
@@ -913,6 +915,8 @@ class ScheduleFlowerOrderTool(_GiftOrderTool):
         ),
         risk_level=RiskLevel.YELLOW,
         permission="automation:manage",
+        compensable=True,
+        compensation_tool="cancel_scheduled_task",
         input_schema=GiftOrderArgs.model_json_schema(),
         output_schema={},
     )
@@ -933,6 +937,8 @@ class ScheduleCakeOrderTool(_GiftOrderTool):
         ),
         risk_level=RiskLevel.YELLOW,
         permission="automation:manage",
+        compensable=True,
+        compensation_tool="cancel_scheduled_task",
         input_schema=GiftOrderArgs.model_json_schema(),
         output_schema={},
     )
@@ -951,6 +957,8 @@ class ScheduleTransferTool(BaseTool):
         ),
         risk_level=RiskLevel.YELLOW,
         permission="transfer:execute",
+        compensable=True,
+        compensation_tool="cancel_scheduled_task",
         input_schema=ScheduleTransferArgs.model_json_schema(),
         output_schema={},
     )

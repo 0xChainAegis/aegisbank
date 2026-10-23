@@ -454,6 +454,8 @@ class AssessWealthRiskTool(BaseTool):
         description="记录用户的风险偏好（R1-R5），用于申购时的风险匹配提示。",
         risk_level=RiskLevel.GREEN,
         permission="wealth:read",
+        compensable=True,
+        compensation_tool="restore_wealth_risk",
         input_schema=AssessWealthRiskArgs.model_json_schema(),
         output_schema=AssessWealthRiskOutput.model_json_schema(),
     )
@@ -494,6 +496,8 @@ class PurchaseWealthTool(BaseTool):
         ),
         risk_level=RiskLevel.RED,
         permission="wealth:execute",
+        compensable=True,
+        compensation_tool="reverse_purchase_wealth",
         input_schema=PurchaseWealthArgs.model_json_schema(),
         output_schema=PurchaseWealthOutput.model_json_schema(),
     )

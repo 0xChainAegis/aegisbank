@@ -7,6 +7,7 @@ readiness fail-closed gating, and a persisted circuit breaker.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
@@ -41,6 +42,7 @@ from .trust.evidence import (
     tool_result_evidence,
 )
 from .trust.mfa import MfaError, MfaResult, MfaService, OtpProvider
+from .trust.pause import ActionJournal, PauseRegistry
 from .trust.state_machine import (
     ActionState,
     ExecutionOutcomeUnknown,
@@ -59,6 +61,24 @@ class ReauthError(ValueError):
 
 class ExecutionFailedError(ValueError):
     """A predictable execution-time business failure (HTTP 422, not 500)."""
+
+
+class ExecutionPaused(RuntimeError):
+    """Raised between DAG nodes when the action has a pending pause flag."""
+
+    def __init__(
+        self,
+        *,
+        results: list[dict[str, Any]],
+        next_index: int,
+        pause: dict[str, Any],
+        nodes: list[PlanNode],
+    ) -> None:
+        super().__init__(f"执行已暂停：下一个待执行节点索引 {next_index}")
+        self.results = results
+        self.next_index = next_index
+        self.pause = pause
+        self.nodes = nodes
 
 
 class DagScheduler:
@@ -91,7 +111,12 @@ class DagScheduler:
         self.demo_otp = demo_otp
         self.mfa = mfa or MfaService([OtpProvider(demo_otp)])
         self.executor = executor or ToolExecutor()
-        self.compensation = compensation or CompensationRegistry()
+        # ``CompensationRegistry`` defines ``__len__``; an empty registry is
+        # falsy, so never use ``or`` here or specs registered later by the
+        # compensation extension would land on a different object.
+        self.compensation = (
+            compensation if compensation is not None else CompensationRegistry()
+        )
         self.envelopes = EnvelopeService(db)
         self.breaker = CircuitBreaker(
             db,
@@ -99,6 +124,9 @@ class DagScheduler:
             window_seconds=circuit_breaker_window_seconds,
             lock_seconds=circuit_breaker_lock_seconds,
         )
+        # Stage 2A: step-level pause flags and the per-action execution journal.
+        self.pause = PauseRegistry(db)
+        self.journal = ActionJournal(db)
 
     # ---------- shared helpers ----------
     def _propose(self, request: PlanningRequest) -> ExecutionPlan:
@@ -653,36 +681,119 @@ class DagScheduler:
                 instruction=instruction,
                 run_id=run_id,
                 confirmation_state="not_required",
+                action_id=run_id,
+                plan=plan_payload,
+                risk_level=risk_level.value,
+                role=role,
             )
+        except ExecutionPaused as paused:
+            response = self._paused_response(
+                action_id=run_id,
+                user_id=user_id,
+                instruction=instruction,
+                plan=plan_payload,
+                risk_level=risk_level.value,
+                results=paused.results,
+                pause=paused.pause,
+                next_index=paused.next_index,
+                nodes=paused.nodes,
+                risk=risk,
+            )
+            self.journal.update_status(
+                run_id,
+                "paused",
+                reason=paused.pause.get("reason") or "用户请求暂停",
+                response=response,
+            )
+            return response
         except ExecutionOutcomeUnknown as exc:
             evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
-            return {
+            reason = f"执行结果不确定：{exc}；不得自动重复执行，需人工对账。"
+            response = {
                 "status": ExecutionStatus.UNKNOWN.value,
                 "run_id": run_id,
                 "risk_level": risk_level.value,
                 "risk": risk,
-                "reason": f"执行结果不确定：{exc}；不得自动重复执行，需人工对账。",
+                "reason": reason,
                 "plan": plan_payload,
                 "evidence": evidence,
                 "evidence_list": evidence,
             }
-        except Exception as exc:  # noqa: BLE001 - tool errors become a failed response
+            self.journal.update_status(
+                run_id, "unknown", reason=reason, response=response
+            )
+            return response
+        except Exception as exc:  # noqa: BLE001 - tool errors trigger compensation
+            rollback = self._compensate(
+                action_id=run_id,
+                user_id=user_id,
+                instruction=instruction,
+                role=role,
+            )
+            executed = self._executed_results(run_id)
+            if rollback["status"] == "blocked":
+                reason = f"执行失败：{exc}；回滚被阻止：存在不可撤销步骤，需人工对账。"
+                response = self._rollback_response(
+                    action_id=run_id,
+                    plan=plan_payload,
+                    risk_level=risk_level.value,
+                    results=executed,
+                    rollback=rollback,
+                    status=ExecutionStatus.UNKNOWN.value,
+                    reason=reason,
+                    risk=risk,
+                )
+                self.journal.update_status(
+                    run_id, "unknown", reason=reason, response=response
+                )
+                return response
+            if rollback["status"] in {"completed", "partial", "failed"}:
+                rolled_back = rollback["status"] == "completed"
+                status = (
+                    ExecutionStatus.ROLLED_BACK.value
+                    if rolled_back
+                    else ExecutionStatus.UNKNOWN.value
+                )
+                reason = (
+                    f"执行失败后已自动回滚：{rollback['reason']}"
+                    if rolled_back
+                    else f"执行失败后补偿未全部成功：{rollback['reason']}"
+                )
+                response = self._rollback_response(
+                    action_id=run_id,
+                    plan=plan_payload,
+                    risk_level=risk_level.value,
+                    results=executed,
+                    rollback=rollback,
+                    status=status,
+                    reason=reason,
+                    risk=risk,
+                )
+                self.journal.update_status(
+                    run_id, status, reason=reason, response=response
+                )
+                return response
             evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
-            return {
+            response = {
                 "status": ExecutionStatus.FAILED.value,
                 "run_id": run_id,
                 "risk_level": risk_level.value,
                 "risk": risk,
                 "reason": f"工具执行失败：{exc}",
                 "plan": plan_payload,
+                "results": executed,
                 "evidence": evidence,
                 "evidence_list": evidence,
             }
+            self.journal.update_status(
+                run_id, "failed", reason=f"工具执行失败：{exc}", response=response
+            )
+            return response
         evidence = merge_evidence(
             self._execution_evidence(confirmation_state="not_required"),
             self._chain_evidence(),
         )
-        return {
+        response = {
             "status": ExecutionStatus.COMPLETED.value,
             "run_id": run_id,
             "risk_level": risk_level.value,
@@ -693,6 +804,10 @@ class DagScheduler:
             "evidence": evidence,
             "evidence_list": evidence,
         }
+        self.journal.update_status(
+            run_id, "completed", reason="全部节点执行完成", response=response
+        )
+        return response
 
     # ---------- confirmation ----------
     def _recompute_plan(
@@ -1005,6 +1120,15 @@ class DagScheduler:
         )
         machine.transition(ActionState.EXECUTING, reason="开始执行已确认动作")
         results: list[dict[str, Any]] = []
+        current_risk_payload = {
+            "level": current_risk.value,
+            "reasons": [
+                reason
+                for assessment in assessments.values()
+                for reason in assessment.reasons
+            ],
+            "requires_reauth": requires_reauth,
+        }
         try:
             results = self._execute_nodes(
                 nodes=nodes,
@@ -1012,7 +1136,30 @@ class DagScheduler:
                 instruction=pending["instruction"],
                 run_id=action_id,
                 confirmation_state="approved",
+                action_id=action_id,
+                plan=plan_payload,
+                risk_level=current_risk.value,
+                role=role,
             )
+        except ExecutionPaused as paused:
+            machine.transition(
+                ActionState.PAUSED,
+                reason=f"执行已暂停：{paused.pause.get('reason') or '用户请求暂停'}",
+            )
+            response = self._paused_response(
+                action_id=action_id,
+                user_id=user_id,
+                instruction=pending["instruction"],
+                plan=plan_payload,
+                risk_level=current_risk.value,
+                results=paused.results,
+                pause=paused.pause,
+                next_index=paused.next_index,
+                nodes=paused.nodes,
+                risk=current_risk_payload,
+            )
+            self._finish(action_id, "paused", response)
+            return response
         except ExecutionOutcomeUnknown as exc:
             machine.transition(ActionState.UNKNOWN, reason=f"执行结果不确定：{exc}")
             evidence = merge_evidence(
@@ -1024,24 +1171,76 @@ class DagScheduler:
                 "status": ExecutionStatus.UNKNOWN.value,
                 "run_id": action_id,
                 "risk_level": current_risk.value,
-                "risk": {
-                    "level": current_risk.value,
-                    "reasons": [
-                        reason
-                        for assessment in assessments.values()
-                        for reason in assessment.reasons
-                    ],
-                    "requires_reauth": requires_reauth,
-                },
+                "risk": current_risk_payload,
                 "reason": f"执行结果不确定：{exc}；不得自动重复下单，请先对账。",
                 "plan": plan_payload,
                 "audit_id": audit_entry["id"],
                 "evidence": evidence,
                 "evidence_list": evidence,
             }
+            self.journal.update_status(
+                action_id,
+                "unknown",
+                reason=f"执行结果不确定：{exc}",
+                response=response,
+            )
             self._finish(action_id, ExecutionStatus.UNKNOWN.value, response)
             return response
-        except Exception as exc:  # noqa: BLE001 - predictable tool failure -> 422
+        except Exception as exc:  # noqa: BLE001 - failure triggers reverse compensation
+            rollback = self._compensate(
+                action_id=action_id,
+                user_id=user_id,
+                instruction=pending["instruction"],
+                role=role,
+            )
+            executed = self._executed_results(action_id)
+            if rollback["status"] == "blocked":
+                machine.transition(
+                    ActionState.UNKNOWN, reason="回滚被阻止：存在不可撤销步骤"
+                )
+                reason = f"执行失败：{exc}；回滚被阻止：存在不可撤销步骤，需人工对账。"
+                response = self._rollback_response(
+                    action_id=action_id,
+                    plan=plan_payload,
+                    risk_level=current_risk.value,
+                    results=executed,
+                    rollback=rollback,
+                    status=ExecutionStatus.UNKNOWN.value,
+                    reason=reason,
+                    risk=current_risk_payload,
+                )
+                response["audit_id"] = audit_entry["id"]
+                self._finish(action_id, "unknown", response)
+                return response
+            if rollback["status"] in {"completed", "partial", "failed"}:
+                rolled_back = rollback["status"] == "completed"
+                status = (
+                    ExecutionStatus.ROLLED_BACK.value
+                    if rolled_back
+                    else ExecutionStatus.UNKNOWN.value
+                )
+                machine.transition(
+                    ActionState.ROLLED_BACK if rolled_back else ActionState.UNKNOWN,
+                    reason=rollback["reason"],
+                )
+                reason = (
+                    f"执行失败后已自动回滚：{rollback['reason']}"
+                    if rolled_back
+                    else f"执行失败后补偿未全部成功：{rollback['reason']}"
+                )
+                response = self._rollback_response(
+                    action_id=action_id,
+                    plan=plan_payload,
+                    risk_level=current_risk.value,
+                    results=executed,
+                    rollback=rollback,
+                    status=status,
+                    reason=reason,
+                    risk=current_risk_payload,
+                )
+                response["audit_id"] = audit_entry["id"]
+                self._finish(action_id, status, response)
+                return response
             machine.transition(ActionState.FAILED, reason=f"执行失败：{exc}")
             self.audit.record(
                 event="action_failed",
@@ -1054,6 +1253,9 @@ class DagScheduler:
                 confirmation_state="failed",
                 risk_level=pending["risk_level"],
                 evidence=self._failure_evidence(exc),
+            )
+            self.journal.update_status(
+                action_id, "failed", reason=f"执行失败：{exc}"
             )
             self.db.resolve_pending(action_id, "failed")
             raise ExecutionFailedError(f"确认后执行失败：{exc}") from exc
@@ -1084,6 +1286,9 @@ class DagScheduler:
             "evidence": evidence,
             "evidence_list": evidence,
         }
+        self.journal.update_status(
+            action_id, "completed", reason="全部节点执行完成", response=response
+        )
         self._finish(action_id, "completed", response)
         return response
 
@@ -1096,12 +1301,58 @@ class DagScheduler:
         instruction: str,
         run_id: str,
         confirmation_state: str,
+        action_id: str | None = None,
+        plan: dict[str, Any] | None = None,
+        risk_level: str = "green",
+        role: str = "user",
+        start_index: int = 0,
+        prior_results: list[dict[str, Any]] | None = None,
+        count_failures: bool = True,
     ) -> list[dict[str, Any]]:
         dag_path = self._dag_path(nodes)
         results: list[dict[str, Any]] = []
         results_by_id: dict[str, dict[str, Any]] = {}
-        for node in nodes:
+        for item in prior_results or []:
+            stored_node = str(item.get("node_id") or "")
+            stored_result = item.get("result")
+            if stored_node and isinstance(stored_result, dict):
+                results.append(stored_result)
+                results_by_id[stored_node] = stored_result
+        if action_id and start_index == 0:
+            self.journal.begin(
+                action_id,
+                user_id=user_id,
+                instruction=instruction,
+                role=role,
+                nodes=nodes,
+                plan=plan,
+                risk_level=risk_level,
+            )
+        for index, node in enumerate(nodes):
+            if index < start_index:
+                continue
             tool = self.registry.get(node.tool_name)
+            if action_id:
+                pause = self.pause.status(action_id)
+                if pause["paused"]:
+                    reason = pause["reason"] or "用户请求暂停"
+                    self.journal.append_entry(
+                        action_id,
+                        node_id=node.id,
+                        tool_name=node.tool_name,
+                        phase="paused",
+                        status="paused",
+                        arguments=node.arguments,
+                        result={"reason": reason, "next_index": index},
+                        risk_level=tool.metadata.risk_level.value,
+                    )
+                    self.journal.update_status(action_id, "paused", reason=reason)
+                    raise ExecutionPaused(
+                        results=list(results),
+                        next_index=index,
+                        pause=pause,
+                        nodes=list(nodes),
+                    )
             context = ExecutionContext(
                 user_id=user_id,
                 instruction=instruction,
@@ -1151,7 +1402,8 @@ class DagScheduler:
                 )
                 raise
             except Exception as exc:  # noqa: BLE001 - tool errors become audited failures
-                self.breaker.record_failure()
+                if count_failures:
+                    self.breaker.record_failure()
                 self.audit.record(
                     event="tool_failed",
                     user_id=user_id,
@@ -1181,7 +1433,1206 @@ class DagScheduler:
             )
             results_by_id[node.id] = result
             results.append(result)
+            if action_id:
+                self.journal.record_execution(
+                    action_id,
+                    index=index + 1,
+                    results=results,
+                    node=node,
+                    arguments=resolved_args,
+                    result=result,
+                    risk_level=assessment.level.value,
+                )
         return results
+
+    # ---------- pause / resume / compensation ----------
+    def _executed_results(self, action_id: str) -> list[dict[str, Any]]:
+        return [entry["result"] for entry in self.journal.executed_entries(action_id)]
+
+    @staticmethod
+    def _compensation_arguments(entry: dict[str, Any]) -> dict[str, Any]:
+        result = entry.get("result") if isinstance(entry.get("result"), dict) else {}
+        data = result.get("data") if isinstance(result.get("data"), dict) else {}
+        arguments: dict[str, Any] = dict(data) if isinstance(data, dict) else {}
+        arguments["original_arguments"] = entry.get("arguments") or {}
+        arguments["original_result"] = result
+        arguments["compensating_node_id"] = entry.get("node_id")
+        return arguments
+
+    def _blocked_compensation_steps(
+        self, entries: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        blocked: list[dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
+        for entry in entries:
+            tool_name = str(entry["tool_name"])
+            base = {
+                "node_id": str(entry["node_id"]),
+                "tool_name": tool_name,
+                "risk_level": str(entry.get("risk_level") or "green"),
+            }
+            try:
+                tool = self.registry.get(tool_name)
+            except KeyError:
+                blocked.append({**base, "reason": "工具已不在注册表中，无法确认可逆性。"})
+                continue
+            spec = self.compensation.spec_for(tool_name)
+            if spec is None:
+                if tool.metadata.risk_level is RiskLevel.GREEN:
+                    # Read-only steps need no compensation.
+                    continue
+                blocked.append(
+                    {**base, "reason": "工具未登记补偿规格，无法确认其可逆性。"}
+                )
+            elif spec.irreversible:
+                detail = spec.description or "该工具声明为不可逆操作。"
+                blocked.append({**base, "reason": f"不可撤销：{detail}"})
+            else:
+                candidates.append(entry)
+        return blocked, candidates
+
+    @staticmethod
+    def _annotate_plan(
+        plan: dict[str, Any] | None,
+        blocked_steps: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if not plan:
+            return {}
+        if not blocked_steps:
+            return plan
+        payload = json.loads(json.dumps(plan, ensure_ascii=False))
+        by_node = {str(step["node_id"]): step for step in blocked_steps}
+        payload["irreversible"] = True
+        payload["rollback_blocked"] = True
+        payload["rollback_blocked_reason"] = (
+            "计划包含不可撤销步骤，自动回滚已被阻止，需人工对账处理。"
+        )
+        for step in payload.get("steps", []):
+            blocked = by_node.get(str(step.get("id")))
+            if blocked:
+                step["irreversible"] = True
+                step["irreversible_reason"] = blocked.get("reason", "")
+        return payload
+
+    def _rollback_response(
+        self,
+        *,
+        action_id: str,
+        plan: dict[str, Any] | None,
+        risk_level: str,
+        results: list[dict[str, Any]],
+        rollback: dict[str, Any],
+        status: str,
+        reason: str,
+        risk: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        plan_payload = self._annotate_plan(plan, rollback.get("irreversible_steps") or [])
+        evidence = merge_evidence(
+            evidence_payload(
+                tool_result_evidence(
+                    status == ExecutionStatus.ROLLED_BACK.value,
+                    reason,
+                ),
+                policy_decision_evidence(
+                    True, "补偿工具执行前已通过统一权限网关与动态风险复检"
+                ),
+            ),
+            self._chain_evidence(),
+        )
+        response: dict[str, Any] = {
+            "status": status,
+            "run_id": action_id,
+            "risk_level": risk_level,
+            "reason": reason,
+            "plan": plan_payload,
+            "results": results,
+            "rollback": rollback,
+            "rolled_back": status == ExecutionStatus.ROLLED_BACK.value,
+            "evidence": evidence,
+            "evidence_list": evidence,
+        }
+        if risk is not None:
+            response["risk"] = risk
+        return response
+
+    def _paused_response(
+        self,
+        *,
+        action_id: str,
+        user_id: str,
+        instruction: str,
+        plan: dict[str, Any] | None,
+        risk_level: str,
+        results: list[dict[str, Any]],
+        pause: dict[str, Any],
+        next_index: int,
+        nodes: list[PlanNode],
+        risk: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        pause_reason = pause.get("reason") or "用户请求暂停"
+        remaining = [
+            {"id": node.id, "tool_name": node.tool_name, "arguments": node.arguments}
+            for node in nodes[next_index:]
+        ]
+        evidence = merge_evidence(
+            evidence_payload(
+                tool_result_evidence(True, f"已在第 {next_index} 个节点后暂停执行"),
+                policy_decision_evidence(True, "暂停在步骤之间生效，剩余节点未执行"),
+            ),
+            self._chain_evidence(),
+        )
+        audit_entry = self.audit.record(
+            event="action_paused",
+            user_id=user_id,
+            instruction=instruction,
+            dag_path=self._dag_path(nodes),
+            tool_name="action_pause",
+            arguments={"action_id": action_id, "next_index": next_index},
+            result={
+                "reason": pause_reason,
+                "remaining_steps": [node.id for node in nodes[next_index:]],
+            },
+            confirmation_state="paused",
+            risk_level=risk_level,
+            evidence=evidence,
+        )
+        response: dict[str, Any] = {
+            "status": "paused",
+            "run_id": action_id,
+            "risk_level": risk_level,
+            "reason": f"执行已暂停：{pause_reason}；剩余 {len(remaining)} 个步骤未执行。",
+            "plan": plan or {},
+            "results": results,
+            "paused": pause,
+            "resume": {
+                "endpoint": f"/api/actions/{action_id}/resume",
+                "method": "POST",
+                "next_index": next_index,
+                "executed_steps": next_index,
+                "remaining_steps": remaining,
+                "guidance": "确认暂停原因后调用恢复端点继续执行；已执行步骤不会重复执行。",
+            },
+            "audit_id": audit_entry["id"],
+            "evidence": evidence,
+            "evidence_list": evidence,
+        }
+        if risk is not None:
+            response["risk"] = risk
+        return response
+
+    def _record_compensation_failure(
+        self,
+        *,
+        action_id: str,
+        user_id: str,
+        instruction: str,
+        entry: dict[str, Any],
+        compensation_tool: str,
+        error: str,
+        risk_level: str,
+        gateway_reason: str = "",
+    ) -> None:
+        node_id = str(entry["node_id"])
+        tool_name = str(entry["tool_name"])
+        self.journal.append_entry(
+            action_id,
+            node_id=node_id,
+            tool_name=tool_name,
+            phase="compensation_failed",
+            status="failed",
+            arguments=entry.get("arguments") or {},
+            result={"error": error, "compensation_tool": compensation_tool},
+            risk_level=risk_level,
+        )
+        self.audit.record(
+            event="compensation_failed",
+            user_id=user_id,
+            instruction=instruction,
+            dag_path=f"compensate:{node_id}:{tool_name}",
+            tool_name=compensation_tool or tool_name,
+            arguments=entry.get("arguments") or {},
+            result={
+                "node_id": node_id,
+                "compensated_tool": tool_name,
+                "compensation_tool": compensation_tool,
+                "error": error,
+                "gateway_reason": gateway_reason,
+            },
+            confirmation_state="compensation_failed",
+            risk_level=risk_level,
+            evidence=evidence_payload(
+                tool_result_evidence(False, f"补偿失败：{error}"),
+                policy_decision_evidence(True, "补偿失败已记录，需人工对账处理"),
+            ),
+        )
+
+    def _compensate(
+        self,
+        *,
+        action_id: str,
+        user_id: str,
+        instruction: str,
+        role: str,
+    ) -> dict[str, Any]:
+        compensated_ids = self.journal.compensated_node_ids(action_id)
+        entries = [
+            entry
+            for entry in self.journal.executed_entries(action_id)
+            if str(entry["node_id"]) not in compensated_ids
+        ]
+        if not entries:
+            return {
+                "status": "not_needed",
+                "compensated": [],
+                "failed": [],
+                "irreversible_steps": [],
+                "reason": "没有已执行且待补偿的步骤。",
+            }
+        blocked, candidates = self._blocked_compensation_steps(entries)
+        if blocked:
+            reason = (
+                "回滚被阻止：已执行步骤中存在不可撤销的操作，"
+                "自动补偿未执行，需人工对账处理。"
+            )
+            self.journal.update_status(action_id, "rollback_blocked", reason=reason)
+            for step in blocked:
+                self.journal.append_entry(
+                    action_id,
+                    node_id=str(step["node_id"]),
+                    tool_name=str(step["tool_name"]),
+                    phase="rollback_blocked",
+                    status="blocked",
+                    arguments={},
+                    result={"reason": step["reason"]},
+                    risk_level=str(step.get("risk_level") or "green"),
+                )
+            self.audit.record(
+                event="compensation_blocked",
+                user_id=user_id,
+                instruction=instruction,
+                dag_path="compensation",
+                tool_name="compensation",
+                arguments={"action_id": action_id},
+                result={
+                    "reason": reason,
+                    "irreversible_steps": blocked,
+                },
+                confirmation_state="rollback_blocked",
+                risk_level="yellow",
+                evidence=evidence_payload(
+                    tool_result_evidence(False, reason),
+                    policy_decision_evidence(True, "不可撤销步骤阻止自动回滚"),
+                ),
+            )
+            return {
+                "status": "blocked",
+                "compensated": [],
+                "failed": [],
+                "irreversible_steps": blocked,
+                "reason": reason,
+            }
+
+        compensated: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        for entry in reversed(candidates):
+            tool_name = str(entry["tool_name"])
+            node_id = str(entry["node_id"])
+            spec = self.compensation.spec_for(tool_name)
+            compensation_tool_name = spec.compensation_tool if spec is not None else ""
+            base = {
+                "node_id": node_id,
+                "tool_name": tool_name,
+                "compensation_tool": compensation_tool_name,
+            }
+            try:
+                compensation_tool = self.registry.get(compensation_tool_name)
+            except KeyError:
+                error = f"补偿工具未注册：{compensation_tool_name or '<empty>'}"
+                failed.append({**base, "error": error})
+                self._record_compensation_failure(
+                    action_id=action_id,
+                    user_id=user_id,
+                    instruction=instruction,
+                    entry=entry,
+                    compensation_tool=compensation_tool_name,
+                    error=error,
+                    risk_level=str(entry.get("risk_level") or "yellow"),
+                )
+                continue
+            arguments = self._compensation_arguments(entry)
+            context = ExecutionContext(
+                user_id=user_id,
+                instruction=instruction,
+                run_id=action_id,
+                dag_path=f"compensate:{node_id}:{tool_name}->{compensation_tool_name}",
+            )
+            assessment = self.risk_engine.assess(
+                user_id=user_id,
+                tool_name=compensation_tool.metadata.name,
+                arguments=arguments,
+                base_risk=compensation_tool.metadata.risk_level,
+                instruction=instruction,
+            )
+            decision = self.gateway.evaluate(
+                user_id=user_id,
+                tool_name=compensation_tool.metadata.name,
+                risk_level=assessment.level,
+                permission=compensation_tool.metadata.permission,
+                instruction=instruction,
+                arguments=arguments,
+                role=role,
+            )
+            if decision.denied or decision.requires_reauth:
+                error = (
+                    f"补偿被权限网关拒绝：{decision.reason}"
+                    if decision.denied
+                    else "补偿工具需要二次身份校验，自动补偿拒绝执行。"
+                )
+                failed.append(
+                    {
+                        **base,
+                        "error": error,
+                        "gateway": {
+                            "outcome": decision.outcome,
+                            "reason": decision.reason,
+                        },
+                    }
+                )
+                self._record_compensation_failure(
+                    action_id=action_id,
+                    user_id=user_id,
+                    instruction=instruction,
+                    entry=entry,
+                    compensation_tool=compensation_tool_name,
+                    error=error,
+                    risk_level=assessment.level.value,
+                    gateway_reason=decision.reason,
+                )
+                continue
+            try:
+                result = self.executor.execute(compensation_tool, arguments, context)
+            except Exception as exc:  # noqa: BLE001 - compensation failures are recorded
+                error = f"{type(exc).__name__}: {exc}"
+                failed.append({**base, "error": error})
+                self._record_compensation_failure(
+                    action_id=action_id,
+                    user_id=user_id,
+                    instruction=instruction,
+                    entry=entry,
+                    compensation_tool=compensation_tool_name,
+                    error=error,
+                    risk_level=assessment.level.value,
+                )
+                continue
+            compensated.append(
+                {
+                    **base,
+                    "gateway_outcome": decision.outcome,
+                    "risk_level": assessment.level.value,
+                    "result": result,
+                }
+            )
+            self.journal.append_entry(
+                action_id,
+                node_id=node_id,
+                tool_name=tool_name,
+                phase="compensated",
+                status="succeeded",
+                arguments=arguments,
+                result=result,
+                risk_level=assessment.level.value,
+            )
+            self.audit.record(
+                event="compensation_executed",
+                user_id=user_id,
+                instruction=instruction,
+                dag_path=f"compensate:{node_id}:{tool_name}",
+                tool_name=compensation_tool.metadata.name,
+                arguments=arguments,
+                result={
+                    "node_id": node_id,
+                    "compensated_tool": tool_name,
+                    "compensation_tool": compensation_tool.metadata.name,
+                    "gateway": {
+                        "outcome": decision.outcome,
+                        "reason": decision.reason,
+                    },
+                    "risk": assessment.as_dict(),
+                    "result": result,
+                },
+                confirmation_state="compensated",
+                risk_level=assessment.level.value,
+                evidence=evidence_payload(
+                    tool_result_evidence(
+                        True,
+                        f"{tool_name} 已由 {compensation_tool.metadata.name} 补偿",
+                    ),
+                    policy_decision_evidence(
+                        True, "补偿执行前经统一权限网关复检通过"
+                    ),
+                ),
+            )
+
+        if failed:
+            status = "partial" if compensated else "failed"
+            reason = (
+                f"部分补偿失败：成功 {len(compensated)} 个、失败 {len(failed)} 个，"
+                "需人工对账处理。"
+                if compensated
+                else "补偿全部失败，需人工对账处理。"
+            )
+            self.journal.update_status(action_id, "unknown", reason=reason)
+        else:
+            status = "completed"
+            reason = f"已按相反顺序成功补偿 {len(compensated)} 个已执行步骤。"
+            self.journal.update_status(action_id, "rolled_back", reason=reason)
+        return {
+            "status": status,
+            "compensated": compensated,
+            "failed": failed,
+            "irreversible_steps": [],
+            "reason": reason,
+        }
+
+    @staticmethod
+    def _advance(
+        machine: StateMachine | None,
+        target: ActionState,
+        reason: str,
+    ) -> None:
+        if machine is None:
+            return
+        try:
+            machine.transition(target, reason=reason)
+        except IllegalTransition:
+            return
+
+    def run_dag(
+        self,
+        *,
+        user_id: str,
+        instruction: str,
+        nodes: list[PlanNode],
+        role: str = "user",
+        intent: str = "demo_dag",
+        action_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Execute an extension-provided DAG through the shared gateway path.
+
+        Used by the compensation demo: every node still goes through the
+        permission gateway, the risk engine, the tool executor and the audit
+        chain. Only nodes that are allowed immediately (green) are accepted.
+        """
+        if not nodes:
+            raise IntentError("DAG 至少需要一个工具节点。")
+        action_id = action_id or f"dag_{uuid4().hex}"
+        assessments = self._assess_nodes(nodes, user_id, instruction)
+        risk_level = self._max_assessed_risk(assessments)
+        plan_payload: dict[str, Any] = {
+            "intent": intent,
+            "planner": "extension",
+            "confidence": 1.0,
+            "assumptions": ["演示用可控失败 DAG：所有节点经统一网关、执行器与审计链。"],
+            "plan_hash": "",
+            "dag_path": self._dag_path(nodes),
+            "steps": [node.as_dict() for node in nodes],
+        }
+        plan_payload = self._decorate_plan(plan_payload, assessments)
+        for step, node in zip(plan_payload["steps"], nodes, strict=True):
+            tool = self.registry.get(node.tool_name)
+            step["title"] = tool.metadata.title
+            step["permission"] = tool.metadata.permission
+        plan_payload["plan_hash"] = hashlib.sha256(
+            json.dumps(
+                {"intent": intent, "steps": [node.as_dict() for node in nodes]},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        risk = {
+            "level": risk_level.value,
+            "reasons": [
+                reason
+                for assessment in assessments.values()
+                for reason in assessment.reasons
+            ],
+            "requires_reauth": any(
+                assessment.requires_reauth for assessment in assessments.values()
+            ),
+        }
+        for node in nodes:
+            tool = self.registry.get(node.tool_name)
+            decision = self.gateway.evaluate(
+                user_id=user_id,
+                tool_name=tool.metadata.name,
+                risk_level=assessments[node.id].level,
+                permission=tool.metadata.permission,
+                instruction=instruction,
+                arguments=node.arguments,
+                role=role,
+            )
+            if decision.denied:
+                audit_entry = self.audit.record(
+                    event="gateway_blocked",
+                    user_id=user_id,
+                    instruction=instruction,
+                    dag_path=self._dag_path(nodes),
+                    tool_name=node.tool_name,
+                    arguments=node.arguments,
+                    result={
+                        "reason": decision.reason,
+                        "plan_hash": plan_payload["plan_hash"],
+                    },
+                    confirmation_state="blocked",
+                    risk_level=assessments[node.id].level.value,
+                    evidence=evidence_payload(
+                        policy_decision_evidence(True, decision.reason)
+                    ),
+                )
+                return {
+                    "status": ExecutionStatus.BLOCKED.value,
+                    "run_id": action_id,
+                    "risk_level": assessments[node.id].level.value,
+                    "risk": risk,
+                    "reason": decision.reason,
+                    "plan": plan_payload,
+                    "audit_id": audit_entry["id"],
+                    "evidence": evidence_payload(
+                        policy_decision_evidence(True, decision.reason)
+                    ),
+                }
+            if not decision.allowed_now:
+                raise IntentError("演示 DAG 只允许包含无需人工确认的绿色节点。")
+        try:
+            results = self._execute_nodes(
+                nodes=nodes,
+                user_id=user_id,
+                instruction=instruction,
+                run_id=action_id,
+                confirmation_state="demo",
+                action_id=action_id,
+                plan=plan_payload,
+                risk_level=risk_level.value,
+                role=role,
+                # Controlled demo failures must not trip the shared breaker.
+                count_failures=False,
+            )
+        except ExecutionPaused as paused:
+            response = self._paused_response(
+                action_id=action_id,
+                user_id=user_id,
+                instruction=instruction,
+                plan=plan_payload,
+                risk_level=risk_level.value,
+                results=paused.results,
+                pause=paused.pause,
+                next_index=paused.next_index,
+                nodes=paused.nodes,
+                risk=risk,
+            )
+            self.journal.update_status(
+                action_id,
+                "paused",
+                reason=paused.pause.get("reason") or "用户请求暂停",
+                response=response,
+            )
+            return response
+        except ExecutionOutcomeUnknown as exc:
+            reason = f"执行结果不确定：{exc}；不得自动重复执行，需人工对账。"
+            evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
+            response = {
+                "status": ExecutionStatus.UNKNOWN.value,
+                "run_id": action_id,
+                "risk_level": risk_level.value,
+                "risk": risk,
+                "reason": reason,
+                "plan": plan_payload,
+                "results": self._executed_results(action_id),
+                "evidence": evidence,
+                "evidence_list": evidence,
+            }
+            self.journal.update_status(action_id, "unknown", reason=reason, response=response)
+            return response
+        except Exception as exc:  # noqa: BLE001 - compensation handles partial execution
+            rollback = self._compensate(
+                action_id=action_id,
+                user_id=user_id,
+                instruction=instruction,
+                role=role,
+            )
+            executed = self._executed_results(action_id)
+            if rollback["status"] == "blocked":
+                reason = f"执行失败：{exc}；回滚被阻止：存在不可撤销步骤，需人工对账。"
+                response = self._rollback_response(
+                    action_id=action_id,
+                    plan=plan_payload,
+                    risk_level=risk_level.value,
+                    results=executed,
+                    rollback=rollback,
+                    status=ExecutionStatus.UNKNOWN.value,
+                    reason=reason,
+                    risk=risk,
+                )
+                self.journal.update_status(
+                    action_id, "unknown", reason=reason, response=response
+                )
+                return response
+            if rollback["status"] in {"completed", "partial", "failed"}:
+                rolled_back = rollback["status"] == "completed"
+                status = (
+                    ExecutionStatus.ROLLED_BACK.value
+                    if rolled_back
+                    else ExecutionStatus.UNKNOWN.value
+                )
+                reason = (
+                    f"执行失败后已自动回滚：{rollback['reason']}"
+                    if rolled_back
+                    else f"执行失败后补偿未全部成功：{rollback['reason']}"
+                )
+                response = self._rollback_response(
+                    action_id=action_id,
+                    plan=plan_payload,
+                    risk_level=risk_level.value,
+                    results=executed,
+                    rollback=rollback,
+                    status=status,
+                    reason=reason,
+                    risk=risk,
+                )
+                self.journal.update_status(
+                    action_id, status, reason=reason, response=response
+                )
+                return response
+            reason = f"工具执行失败：{exc}"
+            evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
+            response = {
+                "status": ExecutionStatus.FAILED.value,
+                "run_id": action_id,
+                "risk_level": risk_level.value,
+                "risk": risk,
+                "reason": reason,
+                "plan": plan_payload,
+                "results": executed,
+                "evidence": evidence,
+                "evidence_list": evidence,
+            }
+            self.journal.update_status(action_id, "failed", reason=reason, response=response)
+            return response
+        evidence = merge_evidence(
+            self._execution_evidence(confirmation_state="demo"),
+            self._chain_evidence(),
+        )
+        response = {
+            "status": ExecutionStatus.COMPLETED.value,
+            "run_id": action_id,
+            "risk_level": risk_level.value,
+            "risk": risk,
+            "reason": "演示 DAG 全部节点执行完成。",
+            "plan": plan_payload,
+            "results": results,
+            "evidence": evidence,
+            "evidence_list": evidence,
+        }
+        self.journal.update_status(
+            action_id, "completed", reason="全部节点执行完成", response=response
+        )
+        return response
+
+    def pause_action(
+        self,
+        *,
+        action_id: str,
+        reason: str = "用户请求暂停",
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        record = self.journal.get(action_id)
+        if record is not None and user_id is not None and record["user_id"] != user_id:
+            raise IntentError("执行日志不属于当前用户。")
+        pause = self.pause.pause(action_id, reason=reason)
+        owner = user_id or (str(record["user_id"]) if record is not None else "demo-user")
+        instruction = (
+            str(record["instruction"]) if record is not None else "暂停指定动作"
+        )
+        audit_entry = self.audit.record(
+            event="action_paused",
+            user_id=owner,
+            instruction=instruction,
+            dag_path="pause",
+            tool_name="action_pause",
+            arguments={"action_id": action_id, "reason": reason},
+            result={"pause": pause},
+            confirmation_state="paused",
+            risk_level="green",
+            evidence=evidence_payload(
+                policy_decision_evidence(True, "用户在步骤之间请求暂停")
+            ),
+        )
+        response: dict[str, Any] = {
+            "status": "paused",
+            "action_id": action_id,
+            "pause": pause,
+            "audit_id": audit_entry["id"],
+            "note": "暂停在下一个节点执行前生效；调用 resume 端点继续执行。",
+        }
+        if record is not None:
+            response["journal"] = {
+                "status": record["status"],
+                "next_index": record["next_index"],
+            }
+        return response
+
+    def _pending_journal_view(
+        self, action_id: str, pending: dict[str, Any]
+    ) -> dict[str, Any]:
+        nodes = json.loads(pending.get("dag_json") or "[]")
+        plan = json.loads(pending.get("plan_json") or "{}")
+        pause = self.pause.status(action_id)
+        status = "paused" if pause["paused"] else str(pending["status"])
+        response: dict[str, Any] = {
+            "action_id": action_id,
+            "user_id": pending["user_id"],
+            "instruction": pending["instruction"],
+            "role": "user",
+            "status": status,
+            "state": pending["state"],
+            "pending_status": pending["status"],
+            "risk_level": pending["risk_level"],
+            "next_index": 0,
+            "created_at": pending["created_at"],
+            "updated_at": pending["created_at"],
+            "reason": "动作尚未开始执行，执行日志为空。",
+            "nodes": nodes,
+            "results": [],
+            "plan": plan,
+            "pause": pause,
+            "entries": [],
+            "executed": [],
+            "compensations": [],
+            "not_started": True,
+        }
+        if pause["paused"]:
+            response["resume"] = {
+                "endpoint": f"/api/actions/{action_id}/resume",
+                "method": "POST",
+                "next_index": 0,
+                "remaining_steps": [
+                    {"id": node.get("id"), "tool_name": node.get("tool_name")}
+                    for node in nodes
+                ],
+                "guidance": "动作尚未执行；确认暂停原因后可恢复，或直接继续确认流程。",
+            }
+        return response
+
+    def journal_view(self, action_id: str) -> dict[str, Any]:
+        record = self.journal.get(action_id)
+        if record is None:
+            pending = self.db.get_pending(action_id)
+            if pending is None:
+                raise IntentError("执行日志不存在。")
+            return self._pending_journal_view(action_id, pending)
+        entries = self.journal.entries(action_id)
+        pause = self.pause.status(action_id)
+        nodes = record["nodes"]
+        next_index = int(record["next_index"] or 0)
+        response: dict[str, Any] = {
+            "action_id": action_id,
+            "user_id": record["user_id"],
+            "instruction": record["instruction"],
+            "role": record["role"],
+            "status": record["status"],
+            "state": None,
+            "risk_level": record["risk_level"],
+            "next_index": next_index,
+            "created_at": record["created_at"],
+            "updated_at": record["updated_at"],
+            "reason": record["reason"],
+            "nodes": nodes,
+            "results": record["results"],
+            "plan": record["plan"],
+            "pause": pause,
+            "entries": entries,
+            "executed": [entry for entry in entries if entry["phase"] == "executed"],
+            "compensations": [
+                entry
+                for entry in entries
+                if entry["phase"]
+                in {"compensated", "compensation_failed", "rollback_blocked"}
+            ],
+        }
+        pending = self.db.get_pending(action_id)
+        if pending is not None:
+            response["state"] = pending["state"]
+            response["pending_status"] = pending["status"]
+        if pause["paused"]:
+            remaining = nodes[next_index:]
+            response["resume"] = {
+                "endpoint": f"/api/actions/{action_id}/resume",
+                "method": "POST",
+                "next_index": next_index,
+                "remaining_steps": [
+                    {"id": node.get("id"), "tool_name": node.get("tool_name")}
+                    for node in remaining
+                ],
+                "guidance": "确认暂停原因后调用恢复端点；已执行步骤不会重复执行。",
+            }
+        return response
+
+    def resume_action(
+        self,
+        *,
+        action_id: str,
+        user_id: str | None = None,
+        role: str = "user",
+    ) -> dict[str, Any]:
+        record = self.journal.get(action_id)
+        if record is None:
+            pending = self.db.get_pending(action_id)
+            if pending is None:
+                raise IntentError("执行日志不存在，无法恢复暂停的动作。")
+            pause = self.pause.resume(action_id)
+            return {
+                "status": pending["status"],
+                "action_id": action_id,
+                "state": pending["state"],
+                "pause": pause,
+                "reason": "动作尚未开始执行，暂停标记已清除；请继续确认或重新发起。",
+                "resumed": False,
+                "not_started": True,
+            }
+        if user_id is not None and record["user_id"] != user_id:
+            raise IntentError("执行日志不属于当前用户。")
+        if record["status"] != "paused":
+            stored = record.get("response")
+            if isinstance(stored, dict):
+                return stored
+            raise IntentError(
+                f"动作当前状态为 {record['status']}，不在暂停状态，无法恢复。"
+            )
+        nodes = [PlanNode.from_dict(item) for item in record["nodes"]]
+        if not nodes:
+            raise IntentError("执行日志缺少节点定义，无法恢复。")
+        self.pause.resume(action_id)
+        start_index = int(record["next_index"] or 0)
+        entries = self.journal.executed_entries(action_id)
+        prior = [
+            {"node_id": entry["node_id"], "result": result}
+            for entry, result in zip(entries, record["results"], strict=False)
+            if isinstance(result, dict)
+        ]
+        plan = record["plan"] if isinstance(record["plan"], dict) else {}
+        risk_level = str(record["risk_level"] or "green")
+        instruction = str(record["instruction"] or "")
+        owner = str(record["user_id"])
+        risk = {
+            "level": risk_level,
+            "reasons": ["恢复暂停的执行：仅执行剩余节点"],
+            "requires_reauth": False,
+        }
+        pending = self.db.get_pending(action_id)
+        machine: StateMachine | None = None
+        if pending is not None:
+            machine = self._load_machine(
+                pending,
+                dag_path=self._dag_path(nodes),
+                tool_name=nodes[0].tool_name,
+                arguments=nodes[0].arguments,
+            )
+            if machine.state is ActionState.PAUSED:
+                machine.transition(ActionState.EXECUTING, reason="恢复暂停的执行")
+        self.journal.mark_running(action_id)
+        try:
+            results = self._execute_nodes(
+                nodes=nodes,
+                user_id=owner,
+                instruction=instruction,
+                run_id=action_id,
+                confirmation_state="resumed",
+                action_id=action_id,
+                plan=plan,
+                risk_level=risk_level,
+                role=str(record["role"] or role),
+                start_index=start_index,
+                prior_results=prior,
+            )
+        except ExecutionPaused as paused:
+            self._advance(machine, ActionState.PAUSED, "恢复后再次暂停")
+            response = self._paused_response(
+                action_id=action_id,
+                user_id=owner,
+                instruction=instruction,
+                plan=plan,
+                risk_level=risk_level,
+                results=paused.results,
+                pause=paused.pause,
+                next_index=paused.next_index,
+                nodes=paused.nodes,
+                risk=risk,
+            )
+            self.journal.update_status(
+                action_id,
+                "paused",
+                reason=paused.pause.get("reason") or "用户请求暂停",
+                response=response,
+            )
+            if pending is not None:
+                self._finish(action_id, "paused", response)
+            return response
+        except ExecutionOutcomeUnknown as exc:
+            self._advance(machine, ActionState.UNKNOWN, f"执行结果不确定：{exc}")
+            reason = f"执行结果不确定：{exc}；不得自动重复执行，需人工对账。"
+            evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
+            response = {
+                "status": ExecutionStatus.UNKNOWN.value,
+                "run_id": action_id,
+                "risk_level": risk_level,
+                "risk": risk,
+                "reason": reason,
+                "plan": plan,
+                "results": self._executed_results(action_id),
+                "evidence": evidence,
+                "evidence_list": evidence,
+            }
+            self.journal.update_status(
+                action_id, "unknown", reason=reason, response=response
+            )
+            if pending is not None:
+                self._finish(action_id, "unknown", response)
+            return response
+        except Exception as exc:  # noqa: BLE001 - compensation path
+            rollback = self._compensate(
+                action_id=action_id,
+                user_id=owner,
+                instruction=instruction,
+                role=str(record["role"] or role),
+            )
+            executed = self._executed_results(action_id)
+            if rollback["status"] == "blocked":
+                self._advance(
+                    machine, ActionState.UNKNOWN, "回滚被阻止：存在不可撤销步骤"
+                )
+                reason = f"执行失败：{exc}；回滚被阻止：存在不可撤销步骤，需人工对账。"
+                response = self._rollback_response(
+                    action_id=action_id,
+                    plan=plan,
+                    risk_level=risk_level,
+                    results=executed,
+                    rollback=rollback,
+                    status=ExecutionStatus.UNKNOWN.value,
+                    reason=reason,
+                    risk=risk,
+                )
+                self.journal.update_status(
+                    action_id, "unknown", reason=reason, response=response
+                )
+                if pending is not None:
+                    self._finish(action_id, "unknown", response)
+                return response
+            if rollback["status"] in {"completed", "partial", "failed"}:
+                rolled_back = rollback["status"] == "completed"
+                status = (
+                    ExecutionStatus.ROLLED_BACK.value
+                    if rolled_back
+                    else ExecutionStatus.UNKNOWN.value
+                )
+                self._advance(
+                    machine,
+                    ActionState.ROLLED_BACK if rolled_back else ActionState.UNKNOWN,
+                    rollback["reason"],
+                )
+                reason = (
+                    f"执行失败后已自动回滚：{rollback['reason']}"
+                    if rolled_back
+                    else f"执行失败后补偿未全部成功：{rollback['reason']}"
+                )
+                response = self._rollback_response(
+                    action_id=action_id,
+                    plan=plan,
+                    risk_level=risk_level,
+                    results=executed,
+                    rollback=rollback,
+                    status=status,
+                    reason=reason,
+                    risk=risk,
+                )
+                self.journal.update_status(
+                    action_id, status, reason=reason, response=response
+                )
+                if pending is not None:
+                    self._finish(action_id, status, response)
+                return response
+            self._advance(machine, ActionState.FAILED, f"执行失败：{exc}")
+            reason = f"工具执行失败：{exc}"
+            evidence = merge_evidence(self._failure_evidence(exc), self._chain_evidence())
+            response = {
+                "status": ExecutionStatus.FAILED.value,
+                "run_id": action_id,
+                "risk_level": risk_level,
+                "risk": risk,
+                "reason": reason,
+                "plan": plan,
+                "results": executed,
+                "evidence": evidence,
+                "evidence_list": evidence,
+            }
+            self.journal.update_status(
+                action_id, "failed", reason=reason, response=response
+            )
+            if pending is not None:
+                self._finish(action_id, "failed", response)
+            return response
+        self._advance(machine, ActionState.COMPLETED, "恢复后全部节点执行完成")
+        evidence = merge_evidence(
+            self._execution_evidence(confirmation_state="resumed"),
+            self._chain_evidence(),
+        )
+        response = {
+            "status": ExecutionStatus.COMPLETED.value,
+            "run_id": action_id,
+            "risk_level": risk_level,
+            "risk": risk,
+            "reason": "恢复后剩余节点已执行完成。",
+            "plan": plan,
+            "results": results,
+            "resumed_from_index": start_index,
+            "evidence": evidence,
+            "evidence_list": evidence,
+        }
+        self.journal.update_status(
+            action_id, "completed", reason="恢复后执行完成", response=response
+        )
+        if pending is not None:
+            self._finish(action_id, "completed", response)
+        return response
+
+    def rollback_action(
+        self,
+        *,
+        action_id: str,
+        user_id: str | None = None,
+        role: str = "user",
+        reason: str = "",
+    ) -> dict[str, Any]:
+        record = self.journal.get(action_id)
+        if record is None:
+            raise IntentError("执行日志不存在，无法回退。")
+        if user_id is not None and record["user_id"] != user_id:
+            raise IntentError("执行日志不属于当前用户。")
+        stored = record.get("response")
+        if record["status"] in {"rolled_back", "rollback_blocked"} and isinstance(
+            stored, dict
+        ):
+            return stored
+        owner = str(record["user_id"])
+        instruction = str(record["instruction"] or "")
+        plan = record["plan"] if isinstance(record["plan"], dict) else {}
+        risk_level = str(record["risk_level"] or "green")
+        nodes = [PlanNode.from_dict(item) for item in record["nodes"]]
+        if self.pause.is_paused(action_id):
+            self.pause.resume(action_id)
+        pending = self.db.get_pending(action_id)
+        machine: StateMachine | None = None
+        if pending is not None and nodes:
+            machine = self._load_machine(
+                pending,
+                dag_path=self._dag_path(nodes),
+                tool_name=nodes[0].tool_name,
+                arguments=nodes[0].arguments,
+            )
+        rollback = self._compensate(
+            action_id=action_id,
+            user_id=owner,
+            instruction=instruction or reason or "人工回退",
+            role=role,
+        )
+        executed = self._executed_results(action_id)
+        risk = {
+            "level": risk_level,
+            "reasons": ["人工回退：按相反顺序补偿已执行步骤"],
+            "requires_reauth": False,
+        }
+        if rollback["status"] == "blocked":
+            detail = reason or rollback["reason"]
+            response = self._rollback_response(
+                action_id=action_id,
+                plan=plan,
+                risk_level=risk_level,
+                results=executed,
+                rollback=rollback,
+                status=ExecutionStatus.BLOCKED.value,
+                reason=f"回滚被阻止：存在不可撤销步骤（{detail}）。",
+                risk=risk,
+            )
+            self.journal.update_status(
+                action_id,
+                "rollback_blocked",
+                reason=rollback["reason"],
+                response=response,
+            )
+            self.audit.record(
+                event="rollback_blocked",
+                user_id=owner,
+                instruction=instruction or "人工回退",
+                dag_path="compensation",
+                tool_name="rollback",
+                arguments={"action_id": action_id},
+                result={
+                    "reason": rollback["reason"],
+                    "irreversible_steps": rollback["irreversible_steps"],
+                },
+                confirmation_state="rollback_blocked",
+                risk_level=risk_level,
+                evidence=evidence_payload(
+                    tool_result_evidence(False, rollback["reason"]),
+                    policy_decision_evidence(True, "不可撤销步骤阻止人工回滚"),
+                ),
+            )
+            return response
+        if rollback["status"] in {"completed", "partial", "failed"}:
+            rolled_back = rollback["status"] == "completed"
+            status = (
+                ExecutionStatus.ROLLED_BACK.value
+                if rolled_back
+                else ExecutionStatus.UNKNOWN.value
+            )
+            if machine is not None:
+                self._advance(
+                    machine,
+                    ActionState.ROLLED_BACK if rolled_back else ActionState.UNKNOWN,
+                    rollback["reason"],
+                )
+            detail = reason or rollback["reason"]
+            response = self._rollback_response(
+                action_id=action_id,
+                plan=plan,
+                risk_level=risk_level,
+                results=executed,
+                rollback=rollback,
+                status=status,
+                reason=(
+                    f"人工回退完成：{detail}"
+                    if rolled_back
+                    else f"人工回退未全部成功：{detail}"
+                ),
+                risk=risk,
+            )
+            self.journal.update_status(
+                action_id, status, reason=rollback["reason"], response=response
+            )
+            if pending is not None:
+                self._finish(action_id, status, response)
+            return response
+        response = self._rollback_response(
+            action_id=action_id,
+            plan=plan,
+            risk_level=risk_level,
+            results=executed,
+            rollback=rollback,
+            status=ExecutionStatus.BLOCKED.value,
+            reason="没有已执行且可补偿的步骤，无需回退。",
+            risk=risk,
+        )
+        return response
 
     # ---------- trust inspection and recovery ----------
     def action_view(self, action_id: str, *, user_id: str | None = None) -> dict[str, Any]:

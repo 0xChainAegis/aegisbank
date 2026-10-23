@@ -6,8 +6,11 @@ Three demo roles are supported: ``user`` (the customer who owns the data),
 an operator or auditor role reaching a write endpoint is rejected by the
 gateway before any tool runs.
 
-阶段 2A 的收尾工作会进一步收紧矩阵（例如把 ``ops:manage`` 从 ``user`` 移除），
-当前矩阵保持向后兼容，避免既有演示与测试失效。
+Stage 2A hardening: ``ops:manage`` has been removed from ``user`` -- a customer
+may manage tool grants but must never reset the circuit breaker. ``operator``
+keeps ``permission:manage`` for emergency revocation but has no
+``tool:execute``. This matrix is the single source of truth for both the API
+role header (``X-Aegis-Role``) and the permission gateway.
 """
 
 from __future__ import annotations
@@ -37,7 +40,6 @@ DEFAULT_MATRIX: dict[str, set[str]] = {
         "permission:manage",
         "audit:read",
         "trust:inspect",
-        "ops:manage",
     },
     Role.OPERATOR.value: {
         "ops:manage",
@@ -51,10 +53,16 @@ DEFAULT_MATRIX: dict[str, set[str]] = {
     },
 }
 
+ROLE_LABELS: dict[str, str] = {
+    Role.USER.value: "普通用户（账户持有人，唯一可发起银行操作的角色）",
+    Role.OPERATOR.value: "运维操作员（熔断重置与信任运维，不执行银行操作）",
+    Role.AUDITOR.value: "审计员（只读审计与信任核查）",
+}
+
 CAPABILITY_LABELS: dict[str, str] = {
     "tool:execute": "发起银行工具执行",
-    "permission:manage": "管理工具授权",
-    "audit:read": "查看操作审计",
+    "permission:manage": "管理工具授权（授予/撤回）",
+    "audit:read": "查看操作审计与哈希链校验",
     "ops:manage": "运维操作（熔断重置、锁库）",
     "trust:inspect": "查看信任状态与任务对账",
 }
@@ -88,15 +96,24 @@ class AuthzService:
         if not self.allowed(role, capability):
             raise AuthzError(role, capability)
 
+    def roles_with(self, capability: str) -> list[str]:
+        """Return the roles holding *capability*, sorted for stable output."""
+        return [role for role in sorted(self.matrix) if self.allowed(role, capability)]
+
+    def label(self, role: str) -> str:
+        return ROLE_LABELS.get(role, role)
+
+    def describe(self, role: str) -> dict[str, Any]:
+        capabilities = self.capabilities(role)
+        return {
+            "role": role,
+            "label": self.label(role),
+            "capabilities": capabilities,
+            "capability_labels": {
+                capability: CAPABILITY_LABELS.get(capability, capability)
+                for capability in capabilities
+            },
+        }
+
     def roles(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "role": role,
-                "capabilities": sorted(capabilities),
-                "capability_labels": {
-                    capability: CAPABILITY_LABELS.get(capability, capability)
-                    for capability in sorted(capabilities)
-                },
-            }
-            for role, capabilities in sorted(self.matrix.items())
-        ]
+        return [self.describe(role) for role in sorted(self.matrix)]

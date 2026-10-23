@@ -83,6 +83,8 @@ class TransferTool(BaseTool):
         description="从本人账户向指定账户转账；金额和日累计决定最终风险等级。",
         risk_level=RiskLevel.YELLOW,
         permission="transfer:execute",
+        compensable=True,
+        compensation_tool="reverse_transfer",
         input_schema=TransferArgs.model_json_schema(),
         output_schema=TransferOutput.model_json_schema(),
     )
@@ -120,6 +122,8 @@ class AdjustRepaymentDateTool(BaseTool):
         description="调整信用卡每月还款日，属于会修改账户设置的黄色操作。",
         risk_level=RiskLevel.YELLOW,
         permission="card:manage",
+        compensable=True,
+        compensation_tool="restore_repayment_date",
         input_schema=AdjustRepaymentDateArgs.model_json_schema(),
         output_schema={},
     )
@@ -146,6 +150,8 @@ class AdjustCardLimitTool(BaseTool):
         description="调整信用卡额度；超过 5000 元会升级为红色强验证。",
         risk_level=RiskLevel.YELLOW,
         permission="card:manage",
+        compensable=True,
+        compensation_tool="restore_card_limit",
         input_schema=AdjustCardLimitArgs.model_json_schema(),
         output_schema={},
     )
@@ -276,6 +282,8 @@ class CancelSubscriptionTool(BaseTool):
         description="取消指定订阅，属于会改变扣费状态的黄色操作。",
         risk_level=RiskLevel.YELLOW,
         permission="subscription:manage",
+        compensable=True,
+        compensation_tool="reactivate_subscription",
         input_schema=CancelSubscriptionArgs.model_json_schema(),
         output_schema={},
     )
