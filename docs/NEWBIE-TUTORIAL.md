@@ -35,6 +35,10 @@
 wsl -d Ubuntu-24.04 -- bash -lc 'cd /home/lqz5885/aegisbank/dev/aegisbank && bash scripts/dev.sh'
 ```
 
+> 注意：`scripts/dev.sh` 默认使用 `backend/data/aegisbank.db`，**不含** 3000 元虚拟卡。
+> 要使用带虚拟卡的演示数据，请按 1.2：先停后端 → `bash scripts/seed-demo.sh` →
+> 用 `AEGIS_DATABASE_PATH=<仓库绝对路径>/backend/data/dogfood.db` 启动后端。
+
 或者分开两个终端：
 
 ```bash

@@ -440,6 +440,10 @@ bash scripts/bootstrap.sh
 bash scripts/dev.sh
 ```
 
+> 演示数据（含 3000 元虚拟卡 `ACC-3003` / `CARD-9001`）需先执行 `bash scripts/seed-demo.sh`，
+> 并让后端指向 `backend/data/dogfood.db`（绝对路径）；`scripts/dev.sh` 默认使用 `backend/data/aegisbank.db`。
+> 详见 [`deliverables/06-部署说明.md`](deliverables/06-部署说明.md) §3。
+
 打开：
 
 - 前端控制台：<http://127.0.0.1:5173>

@@ -27,14 +27,22 @@
 ## 2. 30 秒上手（评审现场）
 
 ```powershell
-# 1) 启动（WSL Ubuntu 内）
-cd /home/lqz5885/aegisbank/dev/aegisbank
-bash scripts/dev.sh
-# UI: http://127.0.0.1:5173   API: http://127.0.0.1:8000/docs
+# 0) 先停掉正在运行的后端（重置数据库前必须停）
+#    pkill -f "uvicorn aegisbank_api.main"
 
-# 2) 重置演示数据（含 3000 元虚拟卡 ACC-3003 / CARD-9001）
-#    注意：重置前先停后端
+# 1) 重置演示数据（含 3000 元虚拟卡 ACC-3003 / CARD-9001）
+cd /home/lqz5885/aegisbank/dev/aegisbank
 bash scripts/seed-demo.sh
+
+# 2) 启动后端：必须显式指向 dogfood.db
+#    （scripts/dev.sh 默认使用 backend/data/aegisbank.db，看不到 3000 元虚拟卡）
+cd backend
+AEGIS_DATABASE_PATH=/home/lqz5885/aegisbank/dev/aegisbank/backend/data/dogfood.db \
+  uv run uvicorn aegisbank_api.main:app --host 0.0.0.0 --port 8000
+
+# 3) 另开一个终端启动前端
+cd /home/lqz5885/aegisbank/dev/aegisbank/frontend && pnpm dev
+# UI: http://127.0.0.1:5173   API: http://127.0.0.1:8000/docs
 ```
 
 演示账号与凭据：用户 `demo-user`；红色操作 OTP `246810`；模拟生物识别 `FACE-888888`；
