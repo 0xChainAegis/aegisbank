@@ -9,6 +9,17 @@ from ..registry import ToolRegistry
 from .contracts import ExecutionPlan, PlanningRequest, PlanStep
 from .intents import IntentContext, collect_intent_rules, extract_amounts
 
+_CANCEL_WORDS = ("取消", "关闭", "关掉", "退订", "停掉", "cancel", "unsubscribe")
+_SUBSCRIPTION_WORDS = (
+    "订阅",
+    "代扣",
+    "自动扣费",
+    "会员",
+    "月卡",
+    "续费",
+    "subscription",
+)
+
 
 class RuleBasedPlanner:
     """A safe, deterministic planner that never calls a tool by itself."""
@@ -101,16 +112,8 @@ class RuleBasedPlanner:
                 "adjust_repayment_date",
                 {"card_id": card_id, "new_day": int(day_match.group(1))},
             )
-        if any(word in text for word in ("取消订阅", "关闭订阅", "cancel subscription")):
-            sub_match = re.search(r"SUB-\d{3,}", request.instruction, re.IGNORECASE)
-            return self._single_plan(
-                "cancel_subscription",
-                "cancel_subscription",
-                {"subscription_id": sub_match.group(0) if sub_match else "SUB-3002"},
-                assumptions=(
-                    [] if sub_match else ["未指定订阅编号，默认处理演示异常订阅 SUB-3002。"]
-                ),
-            )
+        if self._is_subscription_cancel_request(request, text):
+            return self._cancel_subscription_plan(request, text)
         if any(word in text for word in ("订阅", "subscription")):
             return self._single_plan("list_subscriptions", "list_subscriptions", {})
         if any(word in text for word in ("账单", "余额", "bill", "statement")):
@@ -197,6 +200,95 @@ class RuleBasedPlanner:
             },
             assumptions=[] if accounts else ["未指定账户，默认查询演示账户 ACC-1001。"],
             description="查询并分析指定账户的本月账单。",
+        )
+
+    def _is_subscription_cancel_request(
+        self, request: PlanningRequest, text: str
+    ) -> bool:
+        if not any(word in text for word in _CANCEL_WORDS):
+            return False
+        if any(word in text for word in _SUBSCRIPTION_WORDS):
+            return True
+        if self.repository is None:
+            return False
+        try:
+            return any(
+                sub.merchant.lower() in text
+                for sub in self.repository.subscriptions(request.user_id)
+                if sub.status == "active"
+            )
+        except Exception:  # noqa: BLE001 - repository is a local mock adapter
+            return False
+
+    def _cancel_subscription_plan(
+        self, request: PlanningRequest, text: str
+    ) -> ExecutionPlan:
+        explicit = re.search(r"SUB-\d{3,}", request.instruction, re.IGNORECASE)
+        if explicit:
+            return self._single_plan(
+                "cancel_subscription",
+                "cancel_subscription",
+                {"subscription_id": explicit.group(0).upper()},
+            )
+
+        subscriptions = []
+        if self.repository is not None:
+            try:
+                subscriptions = [
+                    sub
+                    for sub in self.repository.subscriptions(request.user_id)
+                    if sub.status == "active"
+                ]
+            except Exception:  # noqa: BLE001 - repository is a local mock adapter
+                subscriptions = []
+
+        matched = [sub for sub in subscriptions if sub.merchant.lower() in text]
+        if len(matched) == 1:
+            sub = matched[0]
+            return self._single_plan(
+                "cancel_subscription",
+                "cancel_subscription",
+                {"subscription_id": sub.subscription_id},
+                description=f"取消订阅：{sub.merchant}（{sub.subscription_id}）",
+            )
+        if len(matched) > 1:
+            names = "、".join(
+                f"{sub.merchant}（{sub.subscription_id}）" for sub in matched
+            )
+            return self._clarification(
+                f"匹配到多个订阅：{names}，请补充要取消哪一个的订阅编号。",
+                "cancel_subscription",
+            )
+
+        suspicious = next((sub for sub in subscriptions if sub.risk_flag), None)
+        abnormal_hint = "异常" in request.instruction or "可疑" in request.instruction
+        if suspicious is not None and abnormal_hint:
+            return self._single_plan(
+                "cancel_subscription",
+                "cancel_subscription",
+                {"subscription_id": suspicious.subscription_id},
+                assumptions=[
+                    f"按异常标记定位到 {suspicious.merchant}"
+                    f"（{suspicious.subscription_id}）。"
+                ],
+                description=f"取消异常订阅：{suspicious.merchant}"
+                f"（{suspicious.subscription_id}）",
+            )
+
+        if subscriptions:
+            candidates = "、".join(
+                f"{sub.merchant}（{sub.subscription_id}）" for sub in subscriptions
+            )
+            return self._clarification(
+                f"请指定要取消的订阅编号，例如：取消订阅 "
+                f"{subscriptions[0].subscription_id}。当前订阅：{candidates}",
+                "cancel_subscription",
+            )
+        return self._single_plan(
+            "cancel_subscription",
+            "cancel_subscription",
+            {"subscription_id": "SUB-3002"},
+            assumptions=["未读取到订阅列表，回退到演示订阅 SUB-3002。"],
         )
 
     def _single_plan(
