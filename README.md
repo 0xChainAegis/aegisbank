@@ -570,6 +570,7 @@ aegisbank/
 - [开发环境与验收记录](docs/DEVELOPMENT-ENVIRONMENT.md)
 - [产品路线图](docs/ROADMAP.md)
 - [人工用户体验（Dogfooding）](docs/UX-DOGFOODING.md)
+- [新手教程（第一次使用）](docs/NEWBIE-TUTORIAL.md)
 - [上游设计参考说明](docs/UPSTREAM-NOTES.md)
 - [单文件产品介绍页](docs/product-overview.html)
 - [产品介绍页渲染图](docs/screenshots/product-overview.png)
