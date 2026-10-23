@@ -1,7 +1,7 @@
 # AegisBank 产品路线图
 
 > 总规划与阶段详细设计见 [MASTER-PLAN.md](MASTER-PLAN.md)。
-> 最近更新：2026-10-23（阶段 2A 六项硬要求完成；阶段 3 交付材料已产出到 `deliverables/`，视频待人工录制；阶段 2.5 人工体验推迟，后续重新进行）。
+> 最近更新：2026-10-23（阶段 2.5 第一轮完成：36 项 UX 缺陷报告与批 1/2/3 前端修复已合入 `25027d8`；阶段 3 交付材料已产出，视频待人工录制）。
 
 ## 状态速览
 
@@ -11,8 +11,8 @@
 | 1 | 信任工程（ActionEnvelope / 幂等 / 状态机 / readiness / 证据分层 / 注入整条拒绝 / 模型候选白名单） | ✅ 已完成 |
 | 2A | 比赛硬要求（回退补偿、MFA Provider、IM、沙箱、多角色） | ✅ 已完成 |
 | 2B | 六场景完整覆盖（理财 / 转账形态 / 账单深度 / 卡片补齐 / 订阅深度 / 生日联动） | ✅ 已完成 |
-| 2.5 | 人工用户体验（开发者 Dogfooding） | 计划中 |
-| 3 | 比赛交付（简介、PPT、视频、安全自评、部署说明） | 计划中 |
+| 2.5 | 人工用户体验（开发者 Dogfooding） | 🔄 进行中（第一轮完成，见 `docs/UX-RECORD.md`） |
+| 3 | 比赛交付（简介、PPT、视频、安全自评、部署说明） | ✅ 材料已产出（视频待录制、截图待更新） |
 
 ### 当前验证基线（2026-10-23）
 
@@ -21,7 +21,7 @@
 | 后端测试 | **144 项** pytest 全部通过（15 个测试文件；2A 新增 51 条 + 回归 8 条） | `cd backend && uv run pytest -p no:warnings` |
 | 其中信任层 | **17 条** | `backend/tests/test_trust.py` |
 | 其中 2A | **51 条**（authz 9 / breaker 7 / compensation 10 / im 7 / mfa 10 / sandbox 8） | `backend/tests/test_{authz,breaker,compensation,im_channel,mfa,sandbox}.py` |
-| 前端测试 | **22 项** Vitest 全部通过（3 个测试文件） | `frontend/src/**/*.test.ts` |
+| 前端测试 | **38 项** Vitest 全部通过（5 个测试文件；阶段 2.5 新增 16 条） | `frontend/src/**/*.test.ts` |
 | 银行工具 | **48 个**（核心 9 + 场景 25 + 2A 扩展 14；compensable=15） | `GET /api/tools` |
 | 补偿规格 | **27 条**（15 可补偿 + 12 不可逆） | `GET /api/compensation/specs` |
 | HTTP 接口 | **49 个**（2A 新增 20 个） | `create_app().openapi()` paths |
@@ -43,7 +43,7 @@
 - 环境记录更新为 Linux ext4 主线（`docs/DEVELOPMENT-ENVIRONMENT.md`）；
 - 新增 `docs/MASTER-PLAN.md` 作为项目总规划。
 
-阶段 0 验收（2026-10-23）：`main` 不包含 `upstream-pr/`；lint / build / test 全绿；文档与实现一致。当时基线为后端 20 项 pytest、前端 7 项 Vitest，已被本轮后端 144 / 前端 22 的新基线取代。
+阶段 0 验收（2026-10-23）：`main` 不包含 `upstream-pr/`；lint / build / test 全绿；文档与实现一致。当时基线为后端 20 项 pytest、前端 7 项 Vitest，已被本轮后端 144 / 前端 38 的新基线取代。
 
 ## 阶段 1：信任工程（已完成）
 
@@ -130,6 +130,13 @@
 
 详细执行清单见 [UX-DOGFOODING.md](UX-DOGFOODING.md)。
 
+### 第一轮执行结果（2026-10-23）
+
+- 人工测试 + 静态审计 + 无头浏览器量测，产出 **36 项**分级缺陷（P0×7 / P1×17 / P2×10 / P3×2），记录在 [UX-RECORD.md](UX-RECORD.md)。
+- 已合入批 1（止血）+ 批 2（闭环）+ 批 3 前端项：首屏入口、确认弹窗人话摘要与可退出、回执三层、hash 路由、刷新恢复、幂等键、错误码映射、移动端溢出、可读性与焦点、ErrorBoundary；`docs/UX-RECORD.md` §10 有逐条映射与验证证据。
+- 验证：前端 **38 项** Vitest、`tsc --noEmit`、`vite build` 通过；全量 gate（encoding / lint / build / test / security）PASS，提交 `25027d8`。
+- 尚未完成：第二轮安全/异常路径狗粮、第三轮截图与外部试用；推迟项见 UX-RECORD §10.2（UX-05/21/24/26/32/34 等）。
+
 ## 阶段 3：比赛交付
 
 | 交付物 | 状态 | 文件 |
@@ -141,4 +148,4 @@
 | 安全自评报告 | ✅ 完成 | `deliverables/05-安全自评报告.md` |
 | 部署说明 | ✅ 完成 | `deliverables/06-部署说明.md` |
 | 测试用例与复现 | ✅ 完成 | `deliverables/07-测试与复现.md` |
-| 最终截图与演示数据 | ⏳ 依赖阶段 2.5（推迟） | 截图目录 / `scripts/seed-demo.sh` |
+| 最终截图与演示数据 | ⏳ 界面已按阶段 2.5 修复，截图待第三轮统一更新 | 截图目录 / `scripts/seed-demo.sh` |

@@ -1,15 +1,15 @@
-# AegisBank · 可信银行 AI 智能体
+# AegisBank · 可信行行 AI 智能体
 
 > 让每一次金融操作，都经过可解释的动态风险判断、最小权限和可验证的审计。
 
-AegisBank 是一个面向银行场景的安全自治智能体原型：用户用自然语言发起账户、卡片、转账、理财或订阅任务，系统将意图编译为结构化 DAG 计划，在执行前经过动态风险引擎与统一权限网关，高风险动作进入确认/MFA 流程，执行过程和结果同步写入 SHA-256 审计哈希链。
+AegisBank 是一个面向行行场景的安全自治智能体原型：用户用自然语言发起账户、卡片、转账、理财或订阅任务，系统将意图编译为结构化 DAG 计划，在执行前经过动态风险引擎与统一权限网关，高风险动作进入确认/MFA 流程，执行过程和结果同步写入 SHA-256 审计哈希链。
 
 > [!IMPORTANT]
-> **本项目是本地可运行的演示原型。** 所有账户、卡片、账单、交易、订阅、理财与转账结果均来自确定性的 Mock Bank Core 模拟数据，不连接任何真实银行系统、支付网络或客户数据。演示 OTP `246810` 与模拟生物识别 token `FACE-888888` 仅用于本地流程展示，不代表生产级身份认证或 MFA 能力；`X-Aegis-Role` 是演示请求头，不是真实认证；工具沙箱是进程内演示级，不是 OS 容器。理财内容不构成任何投资建议。
+> **本项目是本地可运行的演示原型。** 所有账户、卡片、账单、交易、订阅、理财与转账结果均来自确定性的 Mock Bank Core 模拟数据，不连接任何真实行行系统、支付网络或客户数据。演示 OTP `246810` 与模拟生物识别 token `FACE-888888` 仅用于本地流程展示，不代表生产级身份认证或 MFA 能力；`X-Aegis-Role` 是演示请求头，不是真实认证；工具沙箱是进程内演示级，不是 OS 容器。理财内容不构成任何投资建议。
 
 ## 产品定位
 
-AegisBank 不是把大模型直接接上几个银行函数，而是为 Agent 增加一层可审计的「金融操作控制平面」：
+AegisBank 不是把大模型直接接上几个行行函数，而是为 Agent 增加一层可审计的「金融操作控制平面」：
 
 ```text
 自然语言意图
@@ -23,15 +23,15 @@ AegisBank 不是把大模型直接接上几个银行函数，而是为 Agent 增
   → 证据分层 + SHA-256 审计哈希链
 ```
 
-它适合用作银行 Agent 原型的安全控制面参考实现、多工具 DAG 与人机确认的可运行 Demo，以及「Agent 如何被治理」的端到端样例；它**不**替代核心银行系统、真实风控决策引擎或生产身份认证系统。
+它适合用作行行 Agent 原型的安全控制面参考实现、多工具 DAG 与人机确认的可运行 Demo，以及「Agent 如何被治理」的端到端样例；它**不**替代核心行行系统、真实风控决策引擎或生产身份认证系统。
 
 ## 界面预览
 
 以下图片均来自本地运行中的真实控制台，存放于 `docs/screenshots/`。
 
-### 银行概览
+### 行行概览
 
-![AegisBank 银行概览](docs/screenshots/banking-overview.png)
+![AegisBank 行行概览](docs/screenshots/banking-overview.png)
 
 ### 任务控制台
 
@@ -41,13 +41,13 @@ AegisBank 不是把大模型直接接上几个银行函数，而是为 Agent 增
 
 ![AegisBank 操作审计](docs/screenshots/audit.png)
 
-更多真实界面：[确认/MFA 弹窗](docs/screenshots/confirmation-modal.png) · [权限控制台](docs/screenshots/permissions.png) · [银行概览移动端](docs/screenshots/banking-overview-mobile.png)。截图规范见 [docs/screenshots/README.md](docs/screenshots/README.md)。
+更多真实界面：[确认/MFA 弹窗](docs/screenshots/confirmation-modal.png) · [权限控制台](docs/screenshots/permissions.png) · [行行概览移动端](docs/screenshots/banking-overview-mobile.png)。截图规范见 [docs/screenshots/README.md](docs/screenshots/README.md)。
 
 ## 核心能力
 
 | 能力 | 说明 |
 |---|---|
-| **Mock Bank Core** | SQLite 驱动的确定性银行数据层，提供账户、卡片、交易、订阅与账单分析；所有余额、流水和订阅事实来自仓库，Planner 与 LLM 不能编造金融数据。 |
+| **Mock Bank Core** | SQLite 驱动的确定性行行数据层，提供账户、卡片、交易、订阅与账单分析；所有余额、流水和订阅事实来自仓库，Planner 与 LLM 不能编造金融数据。 |
 | **可插拔 Planner** | 规则 Planner 为默认与安全兜底；可配置 OpenAI-compatible LLM Planner；统一输出 `ExecutionPlan/v1`，不直接调用工具；模型输出经过字段白名单与冲突校验。 |
 | **确定性 Plan Compiler** | 校验工具注册、参数 Schema、步骤 ID、依赖关系与环，完成拓扑排序并生成 `plan_hash`。 |
 | **动态风险引擎** | 基于单笔金额、当日累计转账、产品风险等级、操作类型等确定性事实，输出绿/黄/红风险、评分与可解释原因；只能保持或上调工具基线风险。 |
@@ -62,9 +62,9 @@ AegisBank 不是把大模型直接接上几个银行函数，而是为 Agent 增
 | **可插拔 MFA Provider** | OTP + 模拟人脸/设备确认；红色操作可选择 provider，审计记录验证方式与结果；策略按风险等级/敏感工具给出提示。 |
 | **IM 渠道适配器** | `im / cli / webhook` 复用同一 Planner、风险、网关、MFA 与审计链；`message_id` 幂等回放，重复投递不会二次执行。 |
 | **进程内工具沙箱** | 所有工具经 `ToolExecutor` + `ExecutionGuard`；限制超时、网络、入参/出参与工具白名单，违规先写审计再拒绝。 |
-| **多角色与撤权** | `user / operator / auditor` 能力矩阵；operator 可解锁熔断与紧急撤权但不能执行银行操作；auditor 只读；撤权立即阻断并留痕。 |
+| **多角色与撤权** | `user / operator / auditor` 能力矩阵；operator 可解锁熔断与紧急撤权但不能执行行行操作；auditor 只读；撤权立即阻断并留痕。 |
 | **可插拔场景模块** | `scenarios/` 下每个模块自带 schema、种子、工具、意图、风险规则与只读路由，自动发现装配，新增场景不改核心。 |
-| **React 控制台** | 银行概览、场景数据（只读）、任务控制台、权限控制台、2A 能力、运维面板、操作审计七个页面，展示计划、风险原因、确认状态、就绪状态与审计证据。 |
+| **React 控制台** | 行行概览、场景数据（只读）、任务控制台、权限控制台、2A 能力、运维面板、操作审计七个页面，展示计划、风险原因、确认状态、就绪状态与审计证据。 |
 
 ## 六场景闭环
 
@@ -311,7 +311,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │ React 19 + TypeScript + Vite 控制台                          │
-│ 银行概览 │ 六场景面板 │ 任务控制台 │ 权限控制台 │ 操作审计      │
+│ 行行概览 │ 六场景面板 │ 任务控制台 │ 权限控制台 │ 操作审计      │
 └────────────────────────────┬────────────────────────────────┘
                              │ /api（readiness 未就绪时禁用写操作）
 ┌────────────────────────────▼────────────────────────────────┐
@@ -333,7 +333,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 │  ToolExecutor + ExecutionGuard（进程内沙箱：超时/网络/体积）  │
 │      │                                                      │
 │      ▼                                                      │
-│  48 个银行工具（核心 9 + 场景 25 + 2A 扩展 14）               │
+│  48 个行行工具（核心 9 + 场景 25 + 2A 扩展 14）               │
 │      │      scenario：wealth / transfers / bills /          │
 │      │                cards / automation（自动发现）          │
 │      │      extensions：compensation / authz / breaker /     │
@@ -347,7 +347,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 └─────────────────────────────────────────────────────────────┘
 ```
 
-完整模块边界、数据流与计划契约见 [架构说明](docs/ARCHITECTURE.md)、[银行领域模型与六场景闭环](docs/BANKING-DOMAIN.md) 和 [完整架构图 PNG](docs/architecture/aegisbank-architecture.png)。
+完整模块边界、数据流与计划契约见 [架构说明](docs/ARCHITECTURE.md)、[行行领域模型与六场景闭环](docs/BANKING-DOMAIN.md) 和 [完整架构图 PNG](docs/architecture/aegisbank-architecture.png)。
 
 ### 工具目录
 
@@ -372,7 +372,7 @@ curl -s -X POST http://127.0.0.1:8000/api/authz/revoke/transfer
 后端当前共 **49 个** `/api` 路径（`create_app().openapi()` 实测），以下为关键入口：
 
 ```text
-GET  /api/banking/overview          银行概览：账户、卡片、订阅与异常提示
+GET  /api/banking/overview          行行概览：账户、卡片、订阅与异常提示
 GET  /api/tools                     工具目录与当前授权状态（48 个工具）
 GET  /api/planner/info              Planner 模式、工具与计划契约
 POST /api/planner/plan              仅预览结构化计划，不执行工具
@@ -418,8 +418,8 @@ POST /api/trust/breaker/unlock      运维解锁（仅 operator）
 | 后端 | Python 3.11+ · FastAPI · Pydantic | API、工具 SDK、动态风险、权限网关、信任层与 DAG 调度 |
 | Planner | Rule + OpenAI-compatible LLM | 结构化 `ExecutionPlan/v1`，可插拔、可回退、可校验 |
 | 持久化 | SQLite（stdlib） | 本地零依赖；保存 Mock Bank Core、授权、待确认动作、信任状态与审计链 |
-| 前端 | React 19 · TypeScript · Vite | 银行概览、六场景面板、2A 能力、运维面板、任务控制台、权限控制台、操作审计 |
-| 测试 | pytest · httpx · Vitest | 后端 144 项、前端 22 项 |
+| 前端 | React 19 · TypeScript · Vite | 行行概览、六场景面板、2A 能力、运维面板、任务控制台、权限控制台、操作审计 |
+| 测试 | pytest · httpx · Vitest | 后端 144 项、前端 38 项 |
 
 ## 快速开始
 
@@ -488,7 +488,7 @@ AEGIS_CIRCUIT_BREAKER_LOCK_SECONDS=60
 ```bash
 bash scripts/lint.sh    # 后端 ruff + 前端 TypeScript 类型检查
 bash scripts/build.sh   # 后端 compileall + 前端 Vite 生产构建
-bash scripts/test.sh    # pytest（144 项）+ Vitest（22 项）
+bash scripts/test.sh    # pytest（144 项）+ Vitest（38 项）
 cd backend && uv run python ../scripts/scenario-check.py   # 六场景端到端回归（29 项检查）
 bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 ```
@@ -499,7 +499,7 @@ bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 
 建议按以下顺序体验 Demo：
 
-1. 打开银行概览，查看账户、卡片、订阅和异常标记；顶部就绪横幅显示四个组件 OK；
+1. 打开行行概览，查看账户、卡片、订阅和异常标记；顶部就绪横幅显示四个组件 OK；
 2. 任务控制台执行「分析我的本月账单」，观察分类与异常订阅；
 3. 执行「分析我的账单并取消异常订阅」，查看两步 DAG 和变量解析结果；
 4. 执行「向 ACC-2002 转账 880 元」完成黄色确认；同日再转 500 元，观察累计风险升级为红色并输入演示 OTP `246810`；
@@ -526,7 +526,7 @@ bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 | 2.5 | 人工用户体验（开发者 Dogfooding） | 计划中 |
 | 3 | PPT、视频、安全自评和最终交付 | 材料已产出（`deliverables/`）；视频待录制、截图待 2.5 |
 
-阶段 2A 的六项产物与证据见 [产品路线图](docs/ROADMAP.md)；当前验证基线与生产化剩余项见 [总规划](docs/MASTER-PLAN.md) §4/§7。阶段 3 交付材料已产出到 [`deliverables/`](deliverables/README.md)（视频待人工录制）；阶段 2.5 人工体验推迟，后续重新进行。
+阶段 2A 的六项产物与证据见 [产品路线图](docs/ROADMAP.md)；当前验证基线与生产化剩余项见 [总规划](docs/MASTER-PLAN.md) §4/§7。阶段 3 交付材料已产出到 [`deliverables/`](deliverables/README.md)（视频待人工录制）；阶段 2.5 第一轮已完成，问题清单与修复记录见 [`docs/UX-RECORD.md`](docs/UX-RECORD.md)（第二轮安全/异常路径与截图更新待做）。
 
 ## 目录结构
 
@@ -540,7 +540,7 @@ aegisbank/
 │  │  ├─ scenarios/        # 5 个自动发现场景模块（25 个工具）与模块契约
 │  │  ├─ extensions/       # 2A 横切能力（authz/breaker/compensation/im/mfa/sandbox）
 │  │  ├─ channels/         # IM / CLI / webhook 适配层
-│  │  ├─ tools/finance.py  # 9 个核心银行工具与 Manifest
+│  │  ├─ tools/finance.py  # 9 个核心行行工具与 Manifest
 │  │  ├─ executor.py       # ToolExecutor + ExecutionGuard 执行链
 │  │  ├─ compensation.py   # 补偿规格注册表
 │  │  ├─ risk.py           # 动态风险引擎与可解释原因
@@ -572,7 +572,7 @@ aegisbank/
 
 - [项目总规划（Master Plan）](docs/MASTER-PLAN.md)
 - [阶段 3 参赛交付包（简介/技术文档/PPT/视频脚本/安全自评/部署/测试复现）](deliverables/README.md)
-- [银行领域模型与六场景闭环](docs/BANKING-DOMAIN.md)
+- [行行领域模型与六场景闭环](docs/BANKING-DOMAIN.md)
 - [架构说明（含信任层与场景扩展契约）](docs/ARCHITECTURE.md)
 - [完整架构图（PNG）](docs/architecture/aegisbank-architecture.png)
 - [当前架构图（Mermaid 源文件）](docs/architecture/aegisbank-architecture-v2.mmd)
@@ -591,7 +591,7 @@ aegisbank/
 
 AegisBank 是**安全自治 Agent 的可运行原型**，以下边界是刻意保留的：
 
-- **模拟银行数据**：所有账户、卡片、交易、账单、订阅、理财、余额与转账结果均为 Mock Bank Core 数据，不连接真实银行接口，不产生真实资金变动；理财内容不构成投资建议；
+- **模拟行行数据**：所有账户、卡片、交易、账单、订阅、理财、余额与转账结果均为 Mock Bank Core 数据，不连接真实行行接口，不产生真实资金变动；理财内容不构成投资建议；
 - **固定演示用户**：使用 `demo-user`，未接入登录、会话、设备指纹或真实身份认证；
 - **演示 OTP / MFA**：默认验证码 `246810`、模拟生物识别 token `FACE-888888` 与演示确认令牌仅用于本地演示，不是生产 MFA；
 - **演示风险规则**：动态风险引擎是确定性规则，不是生产反欺诈/信用决策模型；
@@ -600,11 +600,11 @@ AegisBank 是**安全自治 Agent 的可运行原型**，以下边界是刻意�
 - **角色头不是认证**：`X-Aegis-Role` 由客户端自报，服务端不验证身份；生产必须由真实认证后的会话/Token 推导角色；
 - **补偿有边界**：只覆盖已登记规格的 27 条（15 可补偿 / 12 不可逆，其余为只读工具或反向工具）；不可逆步骤阻止自动回滚；红色补偿若需二次校验会转人工对账；
 - **时间维度为演示实现**：`scheduled_tasks` + `POST /api/automation/run-due` 时间快进 + 可选后台轮询，不是真实常驻 cron，也未实现跨进程分布式调度；
-- **单机持久化**：SQLite 适合本地原型，不满足银行级高可用、隔离、容灾和 WORM 审计要求；幂等键、`used_nonces` 与 `im_messages` 无 TTL 清理；熔断为系统级计数；
+- **单机持久化**：SQLite 适合本地原型，不满足行行级高可用、隔离、容灾和 WORM 审计要求；幂等键、`used_nonces` 与 `im_messages` 无 TTL 清理；熔断为系统级计数；
 - **有限安全防护**：注入检测、权限网关、ActionEnvelope、幂等与哈希链是基线，不替代专门的安全策略引擎、OS 沙箱、限流、CSRF/mTLS 与渗透测试；
 - **LLM 可选**：规则 Planner 无模型依赖；接入 OpenAI-compatible 模型时仍需经过同一 Compiler、候选白名单、风险引擎和权限网关。
 
-这些边界被隔离在 Mock Bank Core、Planner、Risk、Gateway、Trust、Audit 等模块中，后续可替换为银行级实现而不改变 Agent 主流程。
+这些边界被隔离在 Mock Bank Core、Planner、Risk、Gateway、Trust、Audit 等模块中，后续可替换为行行级实现而不改变 Agent 主流程。
 
 ## License
 

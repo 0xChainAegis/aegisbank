@@ -50,7 +50,7 @@ pnpm lock: frontend/pnpm-lock.yaml
 | 命令 | 结果 |
 |---|---|
 | `cd backend && uv run pytest -p no:warnings` | 后端 **144 项** pytest 全部通过（15 个测试文件；其中 `test_trust.py` 17 条，2A 新增 51 条 + 回归 8 条） |
-| `cd frontend && pnpm test` | **22 项** Vitest 全部通过（3 个测试文件） |
+| `cd frontend && pnpm test` | **38 项** Vitest 全部通过（5 个测试文件） |
 | HTTP 接口枚举 | **49 个** `/api` 路径（核心 16 + 场景 13 + 2A 20） |
 | 工具目录 | **48 个**（核心 9 + 场景 25 + 2A 扩展 14；compensable=15） |
 | 补偿规格 | **27 条**（15 可补偿 + 12 不可逆） |
@@ -58,7 +58,7 @@ pnpm lock: frontend/pnpm-lock.yaml
 | `gate.ps1`（WSL 内调用） | 本轮未运行完整门禁；纯文档改动按约定走 docs 快速通道，交付前需补跑 |
 | 依赖安装 | 依赖来自此前 `bash scripts/bootstrap.sh` 的锁定安装，`uv.lock` 与 `pnpm-lock.yaml` 未变 |
 
-补充说明：阶段 2A 在 `bf36895` 合入回退补偿、可疑熔断、MFA Provider、IM 渠道、工具沙箱与多角色撤权；后端测试数字来自实际 `pytest` 输出，前端 22 项 Vitest 通过。本轮为 2A 文档同步，纯文档提交按约定走门禁 docs 快速通道，交付前需补跑一次完整门禁。
+补充说明：阶段 2A 在 `bf36895` 合入回退补偿、可疑熔断、MFA Provider、IM 渠道、工具沙箱与多角色撤权；后端测试数字来自实际 `pytest` 输出，前端 38 项 Vitest 通过。本轮为 2A 文档同步，纯文档提交按约定走门禁 docs 快速通道，交付前需补跑一次完整门禁。
 
 ## 5. 本地启动
 

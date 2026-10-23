@@ -366,7 +366,7 @@ cd frontend && pnpm dev
 
 #### UX-35 [P1] README 演示路径与实现不符
 
-- **现象**：README 第 5 步要求“六场景面板：执行「买 1000 元稳健短债A」；执行「给妈妈转 500 元」”，但 02 页是只读视图（仅有刷新与时间快进）；README 第 67 行仍写“五个页面”，实际 7 个。
+- **现象**：README 第 5 步要求“六场景面板：执行「买 1000 元稳健短债A」；执行「给妈妈转 500 元」”，但 02 页是只读视图（仅有刷新与时间快进）；README 第 67 行仍写“七个页面”，实际 7 个。
 - **证据**：`README.md:506` 与 `frontend/src/components/ScenariosPage.tsx:272`（`READ ONLY + TIME TRAVEL`）；`README.md:67`。
 - **影响**：评委照文档操作会卡住，暴露文档与实现漂移。
 - **修复**：把第 5 步动作改到任务控制台；或给 02 加动作入口（成本高，建议改文档）；同步页面数量。
@@ -532,7 +532,7 @@ type PendingSnapshot = {
 ### 6.6 风险与回退
 
 - **App.tsx 状态集中**：批 3 改动前先抽 `usePendingAction()` / `useRefreshAll()` 两个 hook，避免 610 行组件内继续膨胀。
-- **文案与测试**：前端已有 22 项 Vitest 覆盖 `viewModel` / `risk` / `twoA`，改状态映射与文案时同步更新夹具，避免“文案单测”变成空转。
+- **文案与测试**：前端已有 38 项 Vitest 覆盖 `viewModel` / `risk` / `twoA`，改状态映射与文案时同步更新夹具，避免“文案单测”变成空转。
 - **演示冻结窗口**：批 2 完成后冻结 UI，仅修 bug；截图与视频按 `docs/screenshots/README.md` 重新生成。
 - **后端小改单独 PR**：reject 角色复检、readiness 覆盖、demo reset、pending 列表分别提交，避免与前端混在一个变更里；每项补一条 pytest。
 

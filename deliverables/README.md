@@ -55,7 +55,7 @@ cd /home/lqz5885/aegisbank/dev/aegisbank/frontend && pnpm dev
 | 指标 | 数值 | 验证方式 |
 |---|---|---|
 | 后端测试 | **144 passed**（15 个测试文件） | `cd backend && uv run pytest -p no:warnings` |
-| 前端测试 | **22 passed**（3 个文件） | `cd frontend && pnpm test` |
+| 前端测试 | **38 passed**（5 个文件） | `cd frontend && pnpm test` |
 | 六场景端到端回归 | **29/29 PASS** | `cd backend && uv run python ../scripts/scenario-check.py` |
 | 工具 / 接口 | **48 个工具 / 49 个 HTTP 接口** | `GET /api/tools`、`GET /api/planner/info`、`/docs` |
 | 审计链 | `{"valid": true, "checked": N}` | `GET /api/audit/verify` |
