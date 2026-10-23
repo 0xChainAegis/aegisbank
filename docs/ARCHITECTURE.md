@@ -1,7 +1,7 @@
 # 架构说明
 
-> 最近更新：2026-10-23（阶段 1 信任工程与阶段 2B 六场景模块落地后）。
-> 文中数字与实现一致：34 个工具、29 个 `/api` 接口、5 个可自动发现场景模块、后端 85 项 pytest。
+> 最近更新：2026-10-23（阶段 2A 六项硬要求落地后，基线 `bf36895`）。
+> 文中数字与实现一致：48 个工具、49 个 `/api` 接口、5 个场景模块 + 6 个 2A 扩展模块、后端 136 项 pytest（14 个测试文件）。
 
 ## 1. 设计目标
 
@@ -11,7 +11,7 @@ AegisBank 要证明的不是「能调用银行函数」，而是：**一笔金�
 
 1. Planner 只产出结构化计划，不能直接访问数据库或执行工具；
 2. 计划必须通过确定性的 Schema、工具注册和 DAG 依赖校验；
-3. 所有工具调用只有一个入口：统一权限网关；
+3. 所有工具调用先经统一权限网关决策，再经 `ToolExecutor` 的 `ExecutionGuard` 链执行；
 4. 用户确认绑定 `ActionEnvelope`（计划哈希、参数、风险、权限、nonce、过期时间），执行前重新校验；
 5. 高风险操作分级确认，写操作受幂等键与状态机保护；
 6. 审计证据在操作链路中同步产生，并按来源分层，而不是事后补写；
@@ -33,7 +33,7 @@ AegisBank 要证明的不是「能调用银行函数」，而是：**一笔金�
 API（FastAPI）── /api/health/ready（readiness，未就绪则写操作 503）
   │  PlanningRequest
   ▼
-注入扫描（gateway.scan_injection：指令 + 参数，命中整条拒绝）
+注入扫描（gateway.scan_injection：指令 + 参数，命中整条拒绝并累计熔断）
   │
   ▼
 Planner Interface
@@ -47,20 +47,26 @@ Deterministic Plan Compiler
   └── plan_hash
   │  CompiledPlan
   ▼
-DAG Scheduler（幂等键 + 熔断检查）
+DAG Scheduler（幂等键 + 熔断检查 + 节点间暂停标记 + 执行 journal）
   │  preflight every node
   ▼
 Permission Gateway
   ├── Permission + Scope
   ├── Injection / Overreach Guard
+  ├── Role capability（tool:execute）
   └── Decision: allow / confirm / reauth / deny
   │
-  ├── allow   → Tool Runtime → Evidence → Audit（SHA-256 链）
+  ├── allow   → ToolExecutor（ExecutionGuard 链：SandboxGuard）→ Tool
+  │              → Evidence → Audit（SHA-256 链）
   ├── confirm → pending_actions + ActionEnvelope →
-  │             用户确认/OTP → 执行前复核 envelope/权限/风险 →
-  │             StateMachine（APPROVED→EXECUTING→COMPLETED/FAILED/UNKNOWN）→ Audit
-  └── deny    → Audit（blocked）
+  │             用户确认 / MFA Provider（otp | biometric）→ 执行前复核 envelope/权限/风险 →
+  │             StateMachine（APPROVED→EXECUTING→PAUSED/COMPLETED/FAILED/UNKNOWN）→
+  │             ToolExecutor → Audit
+  ├── deny    → Audit（blocked）
+  └── failure → 逆序补偿（补偿工具经网关复检）→ ROLLED_BACK / 人工对账
 ```
+
+IM / CLI / webhook（`channels/im.py`）不是第二条执行路径：适配器解析确认语法后调用同一个 `DagScheduler.run/confirm`，因此复用上图的 Planner、风险、网关、MFA 与审计链。
 
 ## 3. 结构化计划契约
 
@@ -151,49 +157,136 @@ AEGIS_LLM_TIMEOUT_SECONDS=20
 
 ### 5.1 Tool SDK
 
-`registry.py` 定义 `BaseTool` 与 `ToolRegistry`。每个工具声明 `name / title / description / risk_level / permission / input_schema / output_schema / arguments_model`。当前注册 **34** 个工具：核心 9 个 + 五个场景模块 25 个。
+`registry.py` 定义 `BaseTool` 与 `ToolRegistry`。每个工具声明 `name / title / description / risk_level / permission / input_schema / output_schema / arguments_model`，阶段 2A 增加 `compensable / compensation_tool`。当前注册 **48** 个工具：核心 9 + 五个场景模块 25 + 2A 扩展 14（8 个反向工具 + 6 个演示工具）。权限种子在装配时按注册表重新生成。
 
-### 5.2 权限网关
+### 5.2 ToolExecutor / ExecutionGuard 执行链
+
+阶段 2A 起，scheduler 不再直接调用 `tool.execute`，统一经 `executor.py`：
+
+```text
+DagScheduler._execute_nodes
+  → tool_executor.execute(tool, arguments, context)
+      for guard in guards: guard.before_execute(...)
+      result = tool.execute(arguments, context)
+      for guard in reversed(guards): guard.after_execute(..., result)
+  → result.as_dict()
+  → journal.record_execution / audit.record(tool_executed)
+```
+
+- `ExecutionGuard` 是协议：`name`、`before_execute`、`after_execute`；默认配置下 guard 是 `SandboxGuard`；
+- `ToolExecutor` 按注册顺序执行前置钩子、逆序执行后置钩子；任一前置钩子抛 `SandboxViolation` 即阻止工具执行；
+- `SandboxedToolExecutor` 在 guard 链外再包一层墙钟超时（`ThreadPoolExecutor` + `future.result(timeout)`）；超时后 force-release 网络阻断并写 `sandbox_timeout`；
+- 沙箱违规先写审计再抛错；scheduler 记录 `tool_failed` 与熔断失败计数，不会把违规伪装成业务成功；
+- 补偿工具同样经该执行器，不存在「回滚绕过沙箱」的旁路。
+
+### 5.3 权限网关与角色能力校验
 
 `gateway.py` 在 DAG 执行前统一校验：
 
-1. `scan_injection(instruction, arguments)`：命中即整条请求拒绝；
-2. 用户对工具的最小权限判断（撤权立即生效）；
-3. 绿色放行；黄色生成待确认动作；红色生成待确认动作并要求二次校验。
+1. `scan_injection(instruction, arguments)`：命中即整条请求拒绝（scheduler 随后累计注入熔断）；
+2. **角色能力**：`AuthzService.allowed(role, "tool:execute")`；operator/auditor 不能执行银行工具；
+3. 用户对工具的最小权限判断（撤权立即生效）；
+4. 绿色放行；黄色生成待确认动作；红色生成待确认动作并要求二次校验。
 
-确认执行前会再次调用网关复检权限与风险，防止等待期间撤权。
+确认执行前会再次调用网关复检权限、角色与风险，防止等待期间撤权或角色变化。
 
-### 5.3 信任层 `trust/`
+角色矩阵是单一真源（`trust/authz.py`）：`user` 持 `tool:execute / permission:manage / audit:read / trust:inspect`；`operator` 持 `ops:manage / permission:manage / audit:read / trust:inspect`；`auditor` 只持 `audit:read / trust:inspect`。API 层按端点检查能力，执行层由网关再检查一次。演示期角色来自 `X-Aegis-Role` 请求头（缺省 `user`，未知 403），**不是认证机制**。
+
+### 5.4 信任层 `trust/`
 
 | 模块 | 职责 | 关键接口/数据 |
 |---|---|---|
 | `action_envelope.py` | 计划/参数/风险/权限/身份/一次性 nonce 的一次性确认绑定 | `ActionEnvelope`、`EnvelopeService.verify/approve`、`build_envelopes` |
 | `idempotency.py` | 请求幂等键与首次结果重放 | `IdempotencyStore.begin/complete/release`、`idempotency_keys` 表 |
-| `state_machine.py` | 12 状态任务生命周期与审计化迁移 | `ActionState`、`ALLOWED_TRANSITIONS`、`UNKNOWN → RECONCILED/ROLLED_BACK` |
+| `state_machine.py` | 13 状态任务生命周期与审计化迁移（含 `PAUSED`） | `ActionState`、`ALLOWED_TRANSITIONS`、`UNKNOWN → RECONCILED/ROLLED_BACK` |
 | `evidence.py` | 证据分层（mock/人工/策略/审计链） | `EvidenceSource`、`VerificationKind`、`merge_evidence` |
 | `readiness.py` | 就绪探针与写操作 fail-closed | `GET /api/health/ready`、`require_ready()` |
-| `circuit_breaker.py` | 连续失败熔断（持久化，可重置） | `threshold/window/lock`、`GET/POST /api/trust/circuit-breaker[/reset]` |
+| `circuit_breaker.py` | 三类规则熔断（连续失败 / 红色 / 注入），共享 open 状态 | `threshold/window/lock`、`breaker_events` |
+| `authz.py` | 角色能力矩阵 | `AuthzService.normalize/require/describe` |
+| `mfa.py` | MFA Provider 与提示性策略 | `MfaService.verify`、`OtpProvider`、`SimulatedBiometricProvider` |
+| `pause.py` | 暂停标记 + 执行 journal | `PauseRegistry`、`ActionJournal`、`action_pauses` / `action_journal*` |
+| `sandbox.py` | 进程内沙箱 Guard / 沙箱执行器 | `SandboxPolicy`、`SandboxGuard`、`SandboxedToolExecutor` |
 
-接线位置：`main.py`（路由与 503 门禁）、`scheduler.py`（envelope 发放/复核、状态机、熔断、证据）、`db.py`（持久化表）、`audit.py`（证据进审计链）、`gateway.py`（注入扫描）、`planning/llm.py`（候选白名单）、`config.py`（TTL、OTP、熔断阈值）、`domain.py`（`ExecutionStatus.UNKNOWN/RECONCILED/ROLLED_BACK`）。
+接线位置：`main.py`（路由、503 门禁、角色解析）、`scheduler.py`（envelope、状态机、熔断、暂停、补偿、证据）、`db.py`（持久化表）、`audit.py`（证据进审计链）、`gateway.py`（注入/权限/角色）、`planning/llm.py`（候选白名单）、`config.py`（TTL、OTP、熔断、沙箱）、`domain.py`（`ExecutionStatus.UNKNOWN/RECONCILED/ROLLED_BACK`）。
 
-### 5.4 DAG 调度与确认状态机
+### 5.5 DAG 调度、暂停与补偿数据流
 
 调度器先对全部节点做 preflight：任一节点被拒绝则整条任务阻断；任一节点需要确认则整条任务进入 `pending_actions`，避免只执行一半再弹窗。
 
+**暂停/恢复**
+
+- 每个 action 在 `action_pauses` 有暂停标记；`_execute_nodes` 在**节点之间**检查标记，命中即停，记录 `action_paused` 审计并返回 `status=paused` + 已执行结果 + `next_index` + 剩余步骤；
+- `POST /api/actions/{id}/resume` 清除标记，从 `next_index` 继续，`prior_results` 由 journal 恢复，已执行节点不重复；
+- `GET /api/actions/{id}/journal` 返回节点、结果、暂停状态与 `executed / compensations` 分组。
+
+**执行 journal**
+
 ```text
-DRAFT → AWAITING_CONFIRMATION → AWAITING_REAUTH → APPROVED → EXECUTING → COMPLETED
-   │            │                    │                        ├→ FAILED
-   ├→ REJECTED  ├→ REJECTED          └→ EXPIRED               └→ UNKNOWN
-   └→ EXPIRED   └→ EXPIRED                                      ├→ RECONCILED
-                                                                └→ ROLLED_BACK
+action_journal        action_id / status / next_index / nodes_json / results_json / plan_json
+action_journal_entries id / action_id / node_id / tool_name / phase / status / arguments_json / result_json
 ```
 
-- 待确认记录同时保存 `dag_json`、`plan_json`、`envelopes_json`、`state` 与 `state_history_json`；
-- 确认时重新编译计划并复核 envelope（`plan_hash`、`arguments_hash`、风险、权限、nonce、expiry）；
-- 执行结果未知时进入 `UNKNOWN`，`result_json` 保存首次结果，后续确认请求返回同一结果而不会重复执行；
-- 人工对账：`POST /api/trust/actions/{action_id}/reconcile`；查询：`GET /api/trust/actions/{action_id}`。
+`phase` 取值包括 `executed / paused / compensated / compensation_failed / rollback_blocked`；journal 是回滚的事实来源。
 
-### 5.5 场景模块自动发现契约
+**补偿/回滚**
+
+```text
+执行失败
+  → 取 journal 中 phase=executed 且未补偿的节点
+  → 检查每条补偿规格：不可逆 → 整条回滚 blocked（写 compensation_blocked）
+  → 否则按相反顺序：
+       动态风险评估 → PermissionGateway.evaluate（role/权限/注入）
+       → denied 或 requires_reauth → compensation_failed（转人工）
+       → ToolExecutor.execute(补偿工具) → compensation_executed
+  → 全部成功 ROLLED_BACK；部分/全部失败 UNKNOWN（人工对账）
+```
+
+- 失败不会「自动重试原操作」；`UNKNOWN` 只能对账或回滚；
+- `POST /api/actions/{id}/rollback` 供人工触发同一补偿流程；`POST /api/actions/{id}/pause|resume` 控制暂停；
+- `run_dag` 是扩展演示 DAG 的公共入口：仍逐节点走网关、风险、执行器与审计，只接受可立即执行的绿色节点。
+
+### 5.6 2A 扩展自动发现契约与装配顺序
+
+`extensions/__init__.py` 扫描包内所有非 `_` 开头的 `.py`，按文件名排序加载（`authz → breaker → compensation → im → mfa → sandbox`）。模块契约（详见 `extensions/README.md`）：
+
+| 导出 | 类型 | 调用时机 | 说明 |
+|---|---|---|---|
+| `NAME` | `str` | — | 扩展标识 |
+| `SCHEMA_SQL` | `str` | 启动 | 幂等建表，可为空 |
+| `seed(db, user_id)` | 函数 | 启动 | 幂等演示数据（可选） |
+| `activate(services)` | 函数 | scheduler 构造后 | 替换熔断器、登记补偿规格、挂 IM 适配器、注册 MFA provider、包装执行器 |
+| `tools(services)` | 函数 | 注册表构造 | 额外工具节点（进权限种子） |
+| `router(services)` | 函数 | 应用装配 | 返回 `APIRouter` 或 `None` |
+| `start_background(services)` / `stop_background()` | 函数 | lifespan | 可选后台线程 |
+
+装配顺序（`main.py`）：
+
+```text
+Schema/seed（scenarios + extensions）
+  → 核心工具注册 → 场景工具注册 → 扩展工具注册
+  → 权限种子
+  → gateway / risk / audit / planner / scheduler（注入 authz/mfa/executor/compensation）
+  → activate_extensions（breaker 替换、compensation 登记、im 挂载、mfa 注册、sandbox 包装）
+  → include_scenario_routers / include_extension_routers
+  → lifespan: start_scenario_background / start_extension_background
+```
+
+并行开发开关：`AEGIS_EXTENSION_ALLOW=a,b`、`AEGIS_EXTENSION_ALLOW=none`、`AEGIS_EXTENSION_STRICT=0`（开发期容忍加载失败）。
+
+### 5.7 IM 渠道适配层
+
+`channels/im.py` 是薄适配器：
+
+- `ImMessage(channel, sender_id, text, message_id)` 做长度/枚举校验；
+- 命中 `确认 <action_id> [验证码] <otp>` 则调用 `scheduler.confirm`，否则调用 `scheduler.run`；
+- 结果渲染成人类可读回执，同时保留原始 `structured` 结果；
+- 每个入站消息写 `im_message_executed / im_message_rejected` 审计；
+- `message_id` 命中 `im_messages` 时直接回放首次回执；写入使用 `INSERT OR IGNORE`，重复投递不会二次执行；
+- `extensions/im.py` 提供 `POST /api/channels/im/message`（readiness 503 门禁）与 `GET /api/channels/im/help`。
+
+适配器不实现 Planner、不做权限判断、不持有 MFA 逻辑，也不另建审计链。
+
+### 5.8 场景模块自动发现契约
 
 `scenarios/__init__.py` 在 `create_app()` 装配阶段扫描包内所有非 `_` 开头的 `.py`，按文件名排序加载，并依次调用模块契约（详见 `scenarios/README.md`）：
 
@@ -223,24 +316,24 @@ DRAFT → AWAITING_CONFIRMATION → AWAITING_REAUTH → APPROVED → EXECUTING �
 | `cards.py` | 虚拟卡申请/发卡、密码重置、限额解锁 | 4 | `/api/cards/applications` |
 | `automation.py` | 定时任务、预算锁定、生日 DAG、时间快进 | 9 | `/api/automation/schedules`、`/goals`、`/orders`、`POST /run-due` |
 
-### 5.6 时间维度
+### 5.9 时间维度
 
 需求不做真实常驻 cron，而是「持久化任务表 + 按需/可选轮询触发」：
 
 - 任务表 `scheduled_tasks(task_id, kind, payload_json, run_at, recurrence, status, last_run_at, last_result_json, ...)`；
 - 创建：`schedule_transfer`（一次性/每月/每年）与生日场景的 `schedule_flower_order` / `schedule_cake_order`（到期前 2 天）；
-- 执行：`run_due_tasks` 工具按 `run_at <= now` 取到期任务；`POST /api/automation/run-due` 提供**演示时间快进**（可传 `now` 覆盖当前时间），到期执行前重新调用网关复检权限，审计写入 `trigger_source="scheduled"`；
+- 执行：`run_due_tasks` 工具按 `run_at <= now` 取到期任务；`POST /api/automation/run-due` 提供**演示时间快进**（可传 `now` 覆盖当前时间），到期执行前重新调用网关复检权限，审计写入 `trigger_source="scheduled"`；该端点已接 readiness 503 门禁；
 - 幂等：先用条件 UPDATE 原子抢占任务（`pending → done`）再执行，重复调用不会重复扣款；
 - 可选后台线程：`AEGIS_AUTOMATION_ENABLED=true` 时启动守护线程按 `AEGIS_AUTOMATION_INTERVAL_SECONDS` 轮询 `run_due`；默认关闭，测试与演示均可用快进接口触发。
 
-### 5.7 证据流与审计链
+### 5.10 证据流与审计链
 
-- 证据在响应生成时同步产生：工具结果（`mock_bank`）、网关/风险判断（`policy_engine`）、人工确认（`human_confirmation`）、哈希链校验（`audit_chain`）；
-- 每个审计事件（规划、确认、执行、失败、状态迁移、熔断、注入拒绝）把 `evidence` 写入 `audit_log.result_json` 的 `{"result": ..., "evidence": [...]}`；
+- 证据在响应生成时同步产生：工具结果（`mock_bank`）、网关/风险/角色判断（`policy_engine`）、人工确认与 MFA（`human_confirmation`）、哈希链校验（`audit_chain`）；
+- 每个审计事件（规划、确认、执行、失败、状态迁移、熔断、注入拒绝、暂停、补偿、沙箱拦截、IM 消息）把 `evidence` 写入 `audit_log.result_json` 的 `{"result": ..., "evidence": [...]}`；
 - 哈希链：`entry_hash = SHA256(prev_hash + canonical(entry))`，证据参与计算；`GET /api/audit/verify` 全链校验，readiness 也调用同一校验；
 - 证据只存「来源 + 是否验证 + 验证方式 + 说明」，不存原始敏感数据。
 
-### 5.8 前端
+### 5.11 前端
 
 React 控制台（`frontend/src/`）五个页面：
 
@@ -250,7 +343,7 @@ React 控制台（`frontend/src/`）五个页面：
 - **权限控制台**：查看/授予/撤回每个工具的最小权限；
 - **操作审计**：审计字段、证据分层与哈希链校验。
 
-全局 `ReadinessBanner` 展示就绪组件，非 `ready` 时禁用写操作。
+全局 `ReadinessBanner` 展示就绪组件，非 `ready` 时禁用写操作。`roles.ts` 已镜像后端角色矩阵作为展示基础；2A 的补偿/熔断/沙箱/IM 面板由前端同事并行扩展，合入前以后端 OpenAPI 与测试为准。
 
 ## 6. 数据模型
 
@@ -261,7 +354,13 @@ React 控制台（`frontend/src/`）五个页面：
 | 核心 | `audit_log` | 追加式审计记录与哈希链字段 |
 | 信任 | `idempotency_keys` | 幂等键与首次响应 |
 | 信任 | `used_nonces` | ActionEnvelope 一次性 nonce |
-| 信任 | `circuit_breaker` | 连续失败熔断状态 |
+| 信任 | `circuit_breaker` | 熔断 open 状态与失败计数（三类规则共享） |
+| 信任 | `breaker_events` | 规则事件（red_operation / injection_hit / circuit_open / reset 等）；解锁另写 `circuit_breaker_unlock` 审计 |
+| 2A | `action_pauses` | 每个 action 的暂停标记、原因与恢复时间 |
+| 2A | `action_journal` | 执行进度、`next_index`、节点/结果/计划快照 |
+| 2A | `action_journal_entries` | 节点级 `executed / paused / compensated / compensation_failed / rollback_blocked` |
+| 2A | `im_messages` | IM `message_id` 幂等回执 |
+| 2A | `compensation_demo_ledger` | 补偿演示账本（仅演示数据） |
 | Mock Bank | `bank_accounts` / `bank_cards` / `bank_transactions` / `bank_subscriptions` | 确定性银行事实 |
 | 理财 | `wealth_products` / `wealth_holdings` / `wealth_orders` / `wealth_profile` | 模拟产品、持仓、订单与风险偏好 |
 | 转账 | `contacts` | 联系人簿（姓名/别名/手机号/生日） |
@@ -271,7 +370,7 @@ React 控制台（`frontend/src/`）五个页面：
 
 ## 7. HTTP 接口总览
 
-共 **29** 个 `/api` 接口（核心 16 + 场景 13）：
+共 **49** 个 `/api` 路径（核心 16 + 场景 13 + 2A 20）：
 
 ```text
 健康/规划      GET  /api/health
@@ -279,14 +378,16 @@ React 控制台（`frontend/src/`）五个页面：
               GET  /api/planner/info
               POST /api/planner/plan
               GET  /api/tools
-执行/确认      POST /api/agent/run                     （支持 Idempotency-Key）
-              POST /api/confirmations/{action_id}      （支持 Idempotency-Key）
+执行/确认      POST /api/agent/run                     （支持 Idempotency-Key + X-Aegis-Role）
+              POST /api/confirmations/{action_id}      （支持 Idempotency-Key + mfa_provider）
 权限           GET  /api/permissions
               PUT  /api/permissions/{tool_name}
 信任           GET  /api/trust/actions/{action_id}
               POST /api/trust/actions/{action_id}/reconcile
               GET  /api/trust/circuit-breaker
               POST /api/trust/circuit-breaker/reset
+              GET  /api/trust/breaker/events | /policy
+              POST /api/trust/breaker/unlock           （operator）
 审计           GET  /api/audit
               GET  /api/audit/verify
 银行           GET  /api/banking/overview
@@ -296,10 +397,24 @@ React 控制台（`frontend/src/`）五个页面：
               GET  /api/subscriptions/charges | /api/subscriptions/reminders
               GET  /api/cards/applications
               GET  /api/automation/schedules | /goals | /orders
-              POST /api/automation/run-due             （演示时间快进）
+              POST /api/automation/run-due             （演示时间快进，readiness 503）
+2A 动作        GET  /api/actions/{action_id}/journal
+              POST /api/actions/{action_id}/pause | /resume | /rollback
+2A 补偿        GET  /api/compensation/specs
+              POST /api/compensation/demo/run          （reversible / irreversible /
+                                                        compensation_failure / success）
+2A MFA         GET  /api/mfa/providers | /policy
+              POST /api/mfa/demo/challenge
+2A 沙箱        GET  /api/sandbox/policy
+              POST /api/sandbox/demo/run               （network / slow / oversize）
+2A IM          GET  /api/channels/im/help
+              POST /api/channels/im/message
+2A 角色        GET  /api/authz/roles | /me
+              POST /api/authz/revoke/{tool_name}
+              GET  /api/authz/audit/policy
 ```
 
-确认链路状态码约定：`409`（envelope 不匹配/过期/nonce 复用、幂等键冲突）、`422`（可预期业务错误，如余额不足）、`403`（二次校验失败）、`503`（readiness 未就绪）、`400`（请求不合法/未知动作）。
+确认链路状态码约定：`409`（envelope 不匹配/过期/nonce 复用、幂等键冲突）、`422`（可预期业务错误，如余额不足/沙箱输出超限）、`403`（二次校验失败、角色能力不足、未知 MFA provider）、`503`（readiness 未就绪/沙箱执行器未装配）、`400`（请求不合法/未知动作/未知演示模式）。
 
 ## 8. 当前落地范围
 
@@ -314,13 +429,21 @@ React 控制台（`frontend/src/`）五个页面：
 - ✅ 注入整条拒绝、模型候选白名单
 - ✅ 连续失败熔断与运维接口
 - ✅ 场景模块自动发现 + 六场景 6/6（25 个场景工具）
-- ✅ 时间维度（任务表 + run-due + 可选后台线程）
+- ✅ 时间维度（任务表 + run-due + 可选后台线程；readiness 503 门禁）
+- ✅ 步骤级暂停/恢复、执行 journal、逆序补偿与人工回退（15 可补偿 / 12 不可逆）
+- ✅ 可疑行为熔断（短时多次红色、注入命中累计）与 operator 解锁
+- ✅ 演示 MFA Provider（OTP + 模拟生物识别）与提示性策略
+- ✅ IM / CLI / webhook 渠道适配器（复用同一网关、MFA 与审计链）
+- ✅ `ToolExecutor` + `ExecutionGuard` 执行链与进程内沙箱（超时/网络/体积/白名单）
+- ✅ 多角色能力矩阵与撤权（`X-Aegis-Role` 演示头）
+- ✅ 2A 扩展自动发现（authz / breaker / compensation / im / mfa / sandbox）
 
-尚未落地（阶段 2A）：
+尚未落地（生产化，不阻塞比赛演示）：
 
-- ⏳ 步骤级暂停/回退/补偿
-- ⏳ 演示 MFA Provider（OTP + 模拟人脸/设备）
-- ⏳ IM 渠道适配器
-- ⏳ 工具执行沙箱
-- ⏳ 多角色权限与撤权演示
-- ⏳ 可疑行为熔断规则、幂等/nonce 过期清理、`run-due` readiness 门禁
+- ⏳ 幂等键 / `used_nonces` / `im_messages` TTL 清理
+- ⏳ 熔断按用户/租户隔离
+- ⏳ OS 级容器/命名空间/资源配额隔离（替换进程内沙箱）
+- ⏳ 真实身份认证、真实 MFA、真实 IM 平台签名与用户映射
+- ⏳ 工具执行中途强停
+- ✅ 前端 2A 面板（角色切换 / MFA 选择 / 步骤日志与回滚 / 按角色禁写 / 2A 能力页 / 运维面板）
+- ⏳ WORM/合规审计存储、速率限制、CSRF/mTLS、CSP

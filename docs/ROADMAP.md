@@ -1,7 +1,7 @@
 # AegisBank 产品路线图
 
 > 总规划与阶段详细设计见 [MASTER-PLAN.md](MASTER-PLAN.md)。
-> 最近更新：2026-10-23（阶段 1 信任工程与阶段 2B 六场景覆盖完成并合入 `main`）。
+> 最近更新：2026-10-23（阶段 2A 六项硬要求（后端/API + 前端面板）完成并合入 `main` @ `bf36895`，前端合入与文档同步见本次提交；下一步阶段 2.5 / 3）。
 
 ## 状态速览
 
@@ -9,7 +9,7 @@
 |---|---|---|
 | 0 | 产品边界与仓库定型 | ✅ 已完成 |
 | 1 | 信任工程（ActionEnvelope / 幂等 / 状态机 / readiness / 证据分层 / 注入整条拒绝 / 模型候选白名单） | ✅ 已完成 |
-| 2A | 比赛硬要求（回退补偿、MFA Provider、IM、沙箱、多角色） | 计划中（下一步） |
+| 2A | 比赛硬要求（回退补偿、MFA Provider、IM、沙箱、多角色） | ✅ 已完成 |
 | 2B | 六场景完整覆盖（理财 / 转账形态 / 账单深度 / 卡片补齐 / 订阅深度 / 生日联动） | ✅ 已完成 |
 | 2.5 | 人工用户体验（开发者 Dogfooding） | 计划中 |
 | 3 | 比赛交付（简介、PPT、视频、安全自评、部署说明） | 计划中 |
@@ -18,11 +18,13 @@
 
 | 指标 | 数值 | 来源 |
 |---|---|---|
-| 后端测试 | **85 项** pytest 全部通过（8 个测试文件） | `cd backend && uv run pytest` |
+| 后端测试 | **136 项** pytest 全部通过（14 个测试文件；2A 新增 51 条） | `cd backend && uv run pytest -p no:warnings` |
 | 其中信任层 | **17 条** | `backend/tests/test_trust.py` |
-| 前端测试 | **14 个** Vitest 用例（2 个测试文件） | `frontend/src/*.test.ts` |
-| 银行工具 | **34 个**（核心 9 + 场景 25） | `GET /api/tools` / 权限种子行数 |
-| HTTP 接口 | **29 个**（核心 16 + 场景 13） | FastAPI OpenAPI paths |
+| 其中 2A | **51 条**（authz 9 / breaker 7 / compensation 10 / im 7 / mfa 10 / sandbox 8） | `backend/tests/test_{authz,breaker,compensation,im_channel,mfa,sandbox}.py` |
+| 前端测试 | **22 项** Vitest 全部通过（3 个测试文件） | `frontend/src/**/*.test.ts` |
+| 银行工具 | **48 个**（核心 9 + 场景 25 + 2A 扩展 14；compensable=15） | `GET /api/tools` |
+| 补偿规格 | **27 条**（15 可补偿 + 12 不可逆） | `GET /api/compensation/specs` |
+| HTTP 接口 | **49 个**（2A 新增 20 个） | `create_app().openapi()` paths |
 | 六场景覆盖 | **6/6** | [MASTER-PLAN.md](MASTER-PLAN.md) §4.6 |
 
 > 工具数、测试数、接口数必须以代码或测试输出为准；变更实现后需重新核对。
@@ -41,7 +43,7 @@
 - 环境记录更新为 Linux ext4 主线（`docs/DEVELOPMENT-ENVIRONMENT.md`）；
 - 新增 `docs/MASTER-PLAN.md` 作为项目总规划。
 
-阶段 0 验收（2026-10-23）：`main` 不包含 `upstream-pr/`；lint / build / test 全绿；文档与实现一致。当时基线为后端 20 项 pytest、前端 7 项 Vitest，已被本轮 85 / 14 的新基线取代。
+阶段 0 验收（2026-10-23）：`main` 不包含 `upstream-pr/`；lint / build / test 全绿；文档与实现一致。当时基线为后端 20 项 pytest、前端 7 项 Vitest，已被本轮后端 136 / 前端 22 的新基线取代。
 
 ## 阶段 1：信任工程（已完成）
 
@@ -74,7 +76,7 @@
 | `transfers.py` | 智能转账形态 | `list_contacts`(绿)、`add_contact`(黄)、`transfer_to_contact`(黄/动态升红)；AA 拆分为并行 DAG | `GET /api/contacts` | `test_transfers.py` 10 条 |
 | `bills.py` | 账单分析深化 | `bill_report`(绿)、`detect_bill_anomalies`(绿)、`identify_subscription_charges`(绿)、`list_renewal_reminders`(绿) | `GET /api/bills/report`、`/api/bills/anomalies`、`/api/subscriptions/charges`、`/api/subscriptions/reminders` | `test_bills.py` 8 条 |
 | `cards.py` | 卡片管理补齐 | `apply_virtual_card`(黄)、`issue_virtual_card`(黄)、`reset_card_password`(红)、`unlock_transaction_limit`(黄/升红) | `GET /api/cards/applications` | `test_cards.py` 8 条 |
-| `automation.py` | 跨场景联动与时间维度 | `query_contact_birthday`(绿)、`lock_budget_funds`(黄)、`unlock_budget_funds`(绿)、`schedule_flower_order`(黄)、`schedule_cake_order`(黄)、`schedule_transfer`(黄/升红)、`list_scheduled_tasks`(绿)、`cancel_scheduled_task`(绿)、`run_due_tasks`(绿) | `GET /api/automation/schedules`、`/goals`、`/orders`；`POST /api/automation/run-due` | `test_automation.py` 10 条 |
+| `automation.py` | 跨场景联动与时间维度 | `query_contact_birthday`(绿)、`lock_budget_funds`(黄)、`unlock_budget_funds`(绿)、`schedule_flower_order`(黄)、`schedule_cake_order`(黄)、`schedule_transfer`(黄/升红)、`list_scheduled_tasks`(绿)、`cancel_scheduled_task`(绿)、`run_due_tasks`(绿) | `GET /api/automation/schedules`、`/goals`、`/orders`；`POST /api/automation/run-due` | `test_automation.py` 11 条（含 run-due readiness 503） |
 
 配套基座与规则：
 
@@ -84,21 +86,27 @@
 - 两条真实跨场景 DAG：账单分析 → 取消异常订阅；生日场景 `query_contact_birthday → lock_budget_funds → schedule_flower_order / schedule_cake_order`；
 - 时间维度：`scheduled_tasks` + `POST /api/automation/run-due`（时间快进）+ 可选后台轮询线程（`AEGIS_AUTOMATION_ENABLED=true`），不做真实常驻 cron。
 
-阶段 2B 验收：六场景 6/6；25 个场景工具全部继承 `BaseTool`、经统一网关、风险只升不降；每个场景至少覆盖正向链路、风险分级、撤权/失败与幂等种子；后端测试由 20 项增至 85 项。
+阶段 2B 验收：六场景 6/6；25 个场景工具全部继承 `BaseTool`、经统一网关、风险只升不降；每个场景至少覆盖正向链路、风险分级、撤权/失败与幂等种子；后端测试由 20 项增至 85 项（阶段 2A 后为 136 项）。
 
-## 阶段 2A：比赛硬要求（下一步）
+## 阶段 2A：比赛硬要求（已完成，2026-10-23）
 
-阶段 1 已完成熔断骨架与 readiness 门禁，2A 剩余工作：
+阶段 2A 六项硬要求 + 收尾项与证据：
 
-1. **步骤级暂停、回退、补偿**：工具 Manifest 增加 `compensable` / `compensate` 声明；DAG 支持中途暂停与人工接管；失败按逆序补偿并写审计回退路径；
-2. **异常熔断策略完善**：在现有「连续失败」基础上增加可疑行为规则（短时间多次红色操作、注入命中累计），UI 展示锁定原因与解除方式；
-3. **工具执行沙箱**：工具运行在受限、可监控环境（超时 / 资源限制 / 无外网 / 结构化输入输出），越界调用写审计；
-4. **演示 MFA Provider**：`MfaProvider` 接口 + OTP Provider + 模拟人脸/设备确认，红色操作可选择验证方式，审计记录 provider 与结果；
-5. **IM 渠道适配器**：至少一个 IM 通道复用同一 Planner / 网关 / 确认流程；
-6. **多角色与撤权**：用户 / 运营 / 审计角色矩阵；撤权立即生效（阶段 1 已有「待确认动作执行前复检」）。
-7. **信任层收尾**：`POST /api/automation/run-due` 接入 readiness 门禁；幂等键与已用 nonce 的过期清理策略。
+| # | 产物 | 实现 | 验收证据 |
+|---|---|---|---|
+| 1 | 步骤级暂停 / 回退 / 补偿 | `trust/pause.py`；`compensation.py` + `extensions/compensation.py`；`scheduler.py` 的 `run_dag / pause_action / resume_action / rollback_action / journal_view`；端点 `/api/actions/{id}/pause / resume / rollback / journal`、`/api/compensation/specs / demo/run` | 逆序补偿为 `ROLLED_BACK`；不可逆步骤阻止回滚；暂停恢复不重复已执行节点；`test_compensation.py` 10 条 |
+| 2 | 异常熔断策略 | `trust/circuit_breaker.py` + `extensions/breaker.py`；连续失败 / 短时多次红色 / 注入命中累计共用 open 状态；端点 `/api/trust/breaker/events / policy / unlock` | 三次红色或三次注入命中触发；operator 解锁并写 `circuit_breaker_unlock`；`test_breaker.py` 7 条 |
+| 3 | 工具执行沙箱 | `executor.py`（`ToolExecutor` / `ExecutionGuard`）+ `trust/sandbox.py` + `extensions/sandbox.py`；端点 `/api/sandbox/policy`、`/api/sandbox/demo/run` | 网络、超时、超大输出、超大入参、白名单拦截并写审计；`test_sandbox.py` 8 条 |
+| 4 | 演示 MFA Provider | `trust/mfa.py` + `extensions/mfa.py`；OTP + 模拟生物识别 `FACE-XXXXXX`；端点 `/api/mfa/providers / policy / demo/challenge` | 红色确认可选 provider，审计记录方式与结果；`test_mfa.py` 10 条 |
+| 5 | IM 渠道适配器 | `channels/im.py` + `extensions/im.py`；`im / cli / webhook`；端点 `/api/channels/im/message / help` | 绿色查询、红色挂失 + OTP、错误 OTP、`message_id` 幂等；`test_im_channel.py` 7 条 |
+| 6 | 多角色与撤权 | `trust/authz.py` + `extensions/authz.py` + `gateway.py`；`X-Aegis-Role`；端点 `/api/authz/roles / me / revoke/{tool} / audit/policy` | operator/auditor 不能执行工具；撤权后重放被阻断并写 `role_revocation`；`test_authz.py` 9 条 |
+| 7 | 信任层收尾 | `scenarios/automation.py` 的 `run-due` readiness 门禁 | 未就绪时 `POST /api/automation/run-due` 返回 503；`test_automation.py` 覆盖 |
 
-2A 退出标准：赛题四项硬要求（熔断、沙箱、MFA、IM）均可在演示中一次走通，并有自动化测试或可重复脚本。
+阶段 2A 验收：后端 **136 项** pytest 通过（2A 新增 51 条）；工具 **48 个**（compensable=15）；补偿规格 **27 条**（15 可补偿 / 12 不可逆）；HTTP 接口 **49 个**；`smoke.sh` 实测审计链 `valid=true`。赛题四项硬要求（熔断、沙箱、MFA、IM）均可一次走通。→ **满足**。
+
+**仍未做（诚实标注）**：幂等 / `used_nonces` TTL 清理、熔断按用户隔离、OS 级容器隔离、真实身份认证与 MFA、真实 IM 平台签名与用户映射、工具执行中途强停。
+
+**下一步**：阶段 2.5（Dogfooding）与阶段 3（比赛材料）。
 
 ## 阶段 2.5：人工用户体验（开发者 Dogfooding）
 

@@ -26,6 +26,10 @@ export const statusLabels: Record<string, string> = {
   unknown: '结果未知（需对账）',
   reconciled: '已人工对账',
   rolled_back: '已人工回滚',
+  paused: '已暂停（可恢复）',
+  pending: '等待人工确认（尚未执行）',
+  executing: '执行中',
+  rollback_blocked: '回滚被阻止（存在不可撤销步骤）',
   planned: '计划已生成',
 };
 
@@ -39,6 +43,10 @@ export const statusDescriptions: Record<string, string> = {
   unknown: '执行结果不确定：副作用可能已经发生。请勿重复提交，需要人工对账或回滚。',
   reconciled: 'UNKNOWN 状态已由人工对账处理，结论已写入审计链。',
   rolled_back: 'UNKNOWN 状态已由人工回滚，相关变更已撤销并记录到审计链。',
+  paused: '执行在步骤之间暂停；已执行步骤不会重复执行，可恢复剩余节点或人工回退。',
+  pending: '动作尚未开始执行，步骤日志为空；完成人工确认后才会产生执行记录。',
+  executing: '动作正在执行中，步骤日志会随节点推进持续更新。',
+  rollback_blocked: '回滚被不可撤销步骤阻止：已执行步骤无法自动补偿，需要人工与银行核实后对账。',
   planned: '只生成了执行计划预览，尚未执行任何工具。',
 };
 
@@ -59,6 +67,24 @@ export const eventLabels: Record<string, string> = {
   scheduled_task_executed: '定时任务执行',
   scheduled_task_failed: '定时任务失败',
   tool_outcome_unknown: '执行结果未知',
+  compensation_executed: '补偿已执行',
+  compensation_failed: '补偿失败',
+  compensation_blocked: '补偿被阻止',
+  rollback_blocked: '回滚被阻止',
+  action_paused: '执行已暂停',
+  mfa_failed: 'MFA 验证失败',
+  mfa_challenge_issued: 'MFA 挑战签发',
+  sandbox_blocked: '沙箱拦截',
+  sandbox_timeout: '沙箱超时',
+  circuit_breaker_open: '熔断打开',
+  circuit_breaker_reset: '熔断重置',
+  circuit_breaker_unlock: '运维解除熔断',
+  im_message_executed: 'IM 消息执行',
+  im_message_rejected: 'IM 消息拒绝',
+  role_revocation: '角色撤权',
+  permission_updated: '权限变更',
+  injection_blocked: '注入拦截',
+  planning_clarification: '规划澄清',
 };
 
 export const confirmationLabels: Record<string, string> = {

@@ -1,13 +1,28 @@
 import { formatDateTime, collectRiskReasons, runRiskLevel, stepRiskLevel } from '../viewModel';
-import type { RunResponse } from '../types';
-import { EvidenceBadges, RiskBadge } from './ui';
+import type { MfaProvider, RunResponse } from '../types';
+import {
+  MFA_DEMO_TOKENS,
+  defaultMfaProvider,
+  isMfaTokenComplete,
+  mfaProviderHint,
+  mfaProviderLabel,
+  mfaTokenPlaceholder,
+  sanitizeMfaToken,
+} from '../twoA';
+import { EvidenceBadges, ResourceState, RiskBadge } from './ui';
 
 interface Props {
   pending: RunResponse;
   busy: boolean;
-  otp: string;
-  setOtp: (value: string) => void;
-  onDecision: (approved: boolean) => void;
+  mfaToken: string;
+  setMfaToken: (value: string) => void;
+  mfaProvider: string;
+  setMfaProvider: (value: string) => void;
+  mfaProviders: MfaProvider[];
+  mfaProvidersLoading: boolean;
+  mfaProvidersError: string;
+  onRefreshMfaProviders: () => void;
+  onDecision: (approved: boolean, provider?: string) => void;
   error?: string;
   writesBlocked: boolean;
   blockReason: string;
@@ -16,8 +31,14 @@ interface Props {
 export default function ConfirmationModal({
   pending,
   busy,
-  otp,
-  setOtp,
+  mfaToken,
+  setMfaToken,
+  mfaProvider,
+  setMfaProvider,
+  mfaProviders,
+  mfaProvidersLoading,
+  mfaProvidersError,
+  onRefreshMfaProviders,
   onDecision,
   error,
   writesBlocked,
@@ -26,6 +47,16 @@ export default function ConfirmationModal({
   const risk = runRiskLevel(pending);
   const needsOtp = Boolean(pending.confirmation?.requires_reauth) || risk === 'red';
   const reasons = collectRiskReasons(pending);
+  const enabledProviders = mfaProviders.filter((provider) => provider.enabled !== false);
+  const fallbackProvider: MfaProvider[] = [
+    { name: 'otp', kind: 'otp', title: '演示动态验证码', enabled: true, default: true },
+  ];
+  const providerOptions = enabledProviders.length > 0 ? enabledProviders : fallbackProvider;
+  const selectedProvider = providerOptions.some((provider) => provider.name === mfaProvider)
+    ? mfaProvider
+    : defaultMfaProvider(providerOptions);
+  const tokenComplete = isMfaTokenComplete(selectedProvider, mfaToken);
+  const providerEmpty = !mfaProvidersLoading && !mfaProvidersError && enabledProviders.length === 0;
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -46,10 +77,10 @@ export default function ConfirmationModal({
         <p>{pending.reason}</p>
 
         <div className={`mfa-banner mfa-${risk}`}>
-          <strong>{needsOtp ? 'MFA / OTP 必需' : '仅需一次明确确认'}</strong>
+          <strong>{needsOtp ? 'MFA / 二次身份校验必需' : '仅需一次明确确认'}</strong>
           <span>
             {needsOtp
-              ? '该操作命中红色风险规则，必须输入动态验证码后才能执行。'
+              ? '该操作命中红色风险规则。请选择验证方式并输入演示 token；验证失败不会执行任何工具。'
               : '该操作会修改账户设置，请在 5 分钟有效期内确认。'}
           </span>
         </div>
@@ -72,6 +103,7 @@ export default function ConfirmationModal({
                     <strong>{step.title || step.tool_name}</strong>
                     <code>{step.tool_name}</code>
                     <RiskBadge risk={stepRiskLevel(step.risk_level, pending)} />
+                    {step.irreversible && <span className="comp-badge comp-bad">不可撤销</span>}
                   </div>
                   <small>{JSON.stringify(step.arguments)}</small>
                 </li>
@@ -90,19 +122,68 @@ export default function ConfirmationModal({
         )}
 
         {needsOtp && (
-          <label className="otp-field">
-            <span>动态验证码</span>
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="输入 6 位验证码"
-              value={otp}
-              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              disabled={writesBlocked}
-              autoFocus
-            />
-            <small>本地演示验证码：246810。生产环境须接入银行真实 MFA，演示 OTP 不得用于真实业务。</small>
-          </label>
+          <div className="mfa-method">
+            <span className="eyebrow">验证方式 · GET /api/mfa/providers</span>
+            <ResourceState
+              loading={mfaProvidersLoading}
+              error={mfaProvidersError}
+              empty={providerEmpty}
+              emptyText="后端未注册 MFA provider，已回退到演示 OTP。"
+              onRetry={onRefreshMfaProviders}
+            >
+              <div className="mfa-provider-options" role="radiogroup" aria-label="MFA 验证方式">
+                {providerOptions.map((provider) => {
+                  const active = provider.name === selectedProvider;
+                  return (
+                    <button
+                      className={`mfa-provider-option ${active ? 'active' : ''}`}
+                      key={provider.name}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        setMfaProvider(provider.name);
+                        setMfaToken('');
+                      }}
+                      disabled={writesBlocked}
+                    >
+                      <span className="mfa-provider-option-top">
+                        <strong>{provider.title}</strong>
+                        <code>{provider.name}</code>
+                        {provider.default && <span className="chip chip-teal">默认</span>}
+                      </span>
+                      <small>{provider.hint || mfaProviderHint(provider.name, providerOptions)}</small>
+                      <span className="mfa-provider-demo-token">
+                        演示 token <code>{MFA_DEMO_TOKENS[provider.name] ?? '—'}</code>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </ResourceState>
+            {providerEmpty && (
+              <div className="alert alert-warn modal-alert">
+                provider 列表为空，已回退到演示 OTP；确认时仍会提交 mfa_provider=otp。
+              </div>
+            )}
+
+            <label className="otp-field">
+              <span>{mfaProviderLabel(selectedProvider, providerOptions)} 验证令牌</span>
+              <input
+                inputMode={selectedProvider === 'otp' ? 'numeric' : 'text'}
+                autoComplete={selectedProvider === 'otp' ? 'one-time-code' : 'off'}
+                placeholder={mfaTokenPlaceholder(selectedProvider)}
+                value={mfaToken}
+                onChange={(event) => setMfaToken(sanitizeMfaToken(selectedProvider, event.target.value))}
+                disabled={writesBlocked}
+                autoFocus
+              />
+              <small>
+                演示 token：{MFA_DEMO_TOKENS[selectedProvider] ?? '—'}。{mfaProviderHint(selectedProvider, providerOptions)}
+                生产环境须接入银行真实 MFA，演示 token 不得用于真实业务。
+              </small>
+            </label>
+          </div>
         )}
 
         {writesBlocked && (
@@ -123,8 +204,8 @@ export default function ConfirmationModal({
           </button>
           <button
             className="primary-button"
-            onClick={() => onDecision(true)}
-            disabled={busy || writesBlocked || (needsOtp && otp.length !== 6)}
+            onClick={() => onDecision(true, selectedProvider)}
+            disabled={busy || writesBlocked || (needsOtp && !tokenComplete)}
           >
             {busy ? '校验中…' : needsOtp ? '验证并执行' : '确认执行'}
           </button>

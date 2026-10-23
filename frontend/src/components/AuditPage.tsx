@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
+import type { AegisRole } from '../roles';
+import { isReadOnlyRole, ROLE_LABELS } from '../roles';
 import type { AuditEntry } from '../types';
+import {
+  eventDescription,
+  isTwoAEvent,
+  TWO_A_EVENT_CODES,
+} from '../twoA';
 import {
   argumentLabels,
   confirmationLabels,
@@ -11,6 +18,7 @@ import {
 import { EmptyState, EvidenceBadges, LoadingState, PageAlerts, RiskBadge } from './ui';
 
 interface Props {
+  role: AegisRole;
   audit: AuditEntry[];
   auditValid: boolean | null;
   auditChecked: number;
@@ -21,6 +29,7 @@ interface Props {
 }
 
 export default function AuditPage({
+  role,
   audit,
   auditValid,
   auditChecked,
@@ -61,6 +70,7 @@ export default function AuditPage({
           <span className="eyebrow">TAMPER-EVIDENT ACTIVITY LOG</span>
           <h1>操作审计</h1>
           <p>时间线记录每一次计划、确认、执行与拦截。原始证据保留在可展开的详情中，便于逐项复核。</p>
+          <span className="role-pill">当前角色 {ROLE_LABELS[role]} · audit:read</span>
         </div>
         <div className={`chain-seal ${auditValid === false ? 'seal-bad' : auditValid === null ? 'seal-pending' : ''}`}>
           <span>{auditValid === false ? '!' : auditValid === null ? '…' : '✓'}</span>
@@ -74,6 +84,34 @@ export default function AuditPage({
       </div>
 
       <PageAlerts error={error} notice={notice} />
+
+      {isReadOnlyRole(role) && (
+        <div className="alert alert-info auditor-banner" role="status">
+          审计员只读视角：审计日志是只追加的 SHA-256 哈希链，任何角色都不能通过 API 修改或删除已有条目；
+          本页只展示读取、校验与证据分层结果。
+        </div>
+      )}
+
+      <div className="event-legend card">
+        <div className="section-head compact-head">
+          <div>
+            <span className="eyebrow">STAGE 2A EVENT README</span>
+            <h2>2A 事件说明</h2>
+          </div>
+          <span className="muted">补偿 / MFA / 沙箱 / 熔断 / IM / 撤权</span>
+        </div>
+        <div className="event-legend-grid">
+          {TWO_A_EVENT_CODES.map((code) => (
+            <div className="event-legend-item" key={code}>
+              <div className="event-legend-head">
+                <strong>{eventLabels[code] ?? code}</strong>
+                <code>{code}</code>
+              </div>
+              <p>{eventDescription(code)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="audit-toolbar card">
         <label className="search-field">
@@ -102,7 +140,10 @@ export default function AuditPage({
                 <span className="timeline-dot" aria-hidden="true" />
                 <span className="audit-id">#{String(entry.id).padStart(3, '0')}</span>
                 <RiskBadge risk={entry.risk_level} />
-                <strong>{eventLabels[entry.event] ?? entry.event}</strong>
+                <strong title={eventDescription(entry.event)}>
+                  {eventLabels[entry.event] ?? entry.event}
+                  {isTwoAEvent(entry.event) && <span className="chip chip-teal two-a-chip">2A</span>}
+                </strong>
                 <span className="audit-tool">{entry.tool_name}</span>
                 <span className="audit-instruction-preview">{entry.instruction}</span>
                 <span className="audit-time">{formatDateTime(entry.created_at)}</span>
@@ -134,6 +175,12 @@ export default function AuditPage({
                     <dt>确认状态</dt>
                     <dd>{confirmationLabels[entry.confirmation_state] ?? entry.confirmation_state}</dd>
                   </div>
+                  {eventDescription(entry.event) && (
+                    <div className="detail-wide">
+                      <dt>事件说明</dt>
+                      <dd>{eventDescription(entry.event)}</dd>
+                    </div>
+                  )}
                   <div className="detail-wide">
                     <dt>工具入参</dt>
                     <dd>
@@ -178,7 +225,8 @@ export default function AuditPage({
         <span className="eyebrow">EVIDENCE READABILITY</span>
         <div>
           审计详情同时保留结构化字段与 raw evidence。哈希列展示前序哈希与当前条目哈希，任意条目内容变化都会导致
-          <code>/api/audit/verify</code> 校验失败。
+          <code>/api/audit/verify</code> 校验失败。证据分层徽标复用同一套 source / verified /
+          verification_kind 语义。
         </div>
       </div>
     </section>

@@ -14,6 +14,7 @@
   → 动态风险引擎（绿 / 黄 / 红 + 可解释原因）
   → 统一权限网关（最小权限 / 注入拦截 / 分级决策）
   → 分级确认与演示 MFA
+  → ToolExecutor + 执行守卫（沙箱/超时/网络/体积）
   → Mock Bank Core 工具执行
   → SHA-256 审计哈希链
 ```
@@ -24,8 +25,9 @@
 
 - **阶段 0（产品边界与仓库定型）已完成**：上游 PR 材料归档到 `archive/upstream-plan-provenance`，`main` 只保留产品内容。
 - **阶段 1（信任工程）已完成**：`backend/aegisbank_api/trust/` 落地 ActionEnvelope/v1、幂等键、状态机（含 `UNKNOWN / RECONCILED / ROLLED_BACK`）、readiness fail-closed、证据分层、注入整条拒绝与模型候选白名单；新增 `GET /api/health/ready`、`/api/trust/*` 接口；`POST /api/agent/run` 与 `POST /api/confirmations/{id}` 支持 `Idempotency-Key`，确认链路区分 409 / 422 / 503 语义；`backend/tests/test_trust.py` 共 17 条用例。
-- **阶段 2B（六场景完整覆盖）已完成**：`scenarios/` 下 5 个场景模块（`wealth` / `transfers` / `bills` / `cards` / `automation`）覆盖赛题六个参考场景 6/6，新增 25 个场景工具；加上核心 9 个工具，工具目录共 34 个。
-- 下一步：**阶段 2A** 比赛硬要求（步骤级暂停/回退/补偿、演示 MFA Provider、IM 渠道适配器、工具沙箱、多角色撤权；异常熔断已在阶段 1 落骨架），然后是**阶段 2.5**（Dogfooding）与**阶段 3**（比赛材料）。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+- **阶段 2B（六场景完整覆盖）已完成**：`scenarios/` 下 5 个场景模块（`wealth` / `transfers` / `bills` / `cards` / `automation`）覆盖赛题六个参考场景 6/6，新增 25 个场景工具。
+- **阶段 2A（六项硬要求，后端/API）已完成**（基线 `bf36895`）：步骤级暂停/恢复/回退/补偿（27 条补偿规格，15 可补偿 / 12 不可逆）、三类规则可疑行为熔断与 operator 解锁、可插拔 MFA Provider（OTP + 模拟生物识别）、IM/CLI/webhook 渠道适配器、进程内工具沙箱（超时/网络/入参出参/白名单）、多角色与撤权（`user / operator / auditor`）。工具目录共 **48 个**（核心 9 + 场景 25 + 2A 扩展 14）；后端 **136 项** pytest（14 个测试文件，2A 新增 51 条）。
+- 下一步：**阶段 2.5**（Dogfooding）与**阶段 3**（比赛材料）。生产化剩余项：幂等/nonce TTL 清理、按用户熔断、OS 级沙箱、真实身份认证与 MFA、真实 IM 平台接入。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
 ## 仓库与开发位置
 
@@ -40,8 +42,11 @@
 
 ## 不可破坏的架构约束
 
-- 所有工具调用必须经过 `backend/aegisbank_api/gateway.py`，禁止在 API 或工具内部绕过权限判断。
-- 新工具必须继承 `BaseTool` 并声明：风险等级、最小权限、输入/输出 schema。
+- 所有工具调用必须经过 `backend/aegisbank_api/gateway.py`，并统一经 `backend/aegisbank_api/executor.py` 的 `ToolExecutor` 与 `ExecutionGuard` 链执行；禁止在 API 或工具内部绕过权限判断，禁止直接调用 `tool.execute`。
+- 新工具必须继承 `BaseTool` 并声明：风险等级、最小权限、输入/输出 schema；有副作用的工具还必须声明 `compensable / compensation_tool` 并登记补偿规格（或明确声明不可逆）。
+- **补偿/回滚必须经网关与审计**：反向工具执行前必须重新做权限、角色、注入与动态风险复检；`compensation_executed / compensation_failed / compensation_blocked` 必须写入 SHA-256 审计链，不得直接调用反向工具绕过。
+- **角色能力校验必须走 `AuthzService`**：`tool:execute / permission:manage / audit:read / ops:manage / trust:inspect` 是唯一能力口径；禁止在扩展或前端硬编码角色判断；`X-Aegis-Role` 仅用于本地演示，不是认证。
+- **沙箱守卫默认开启**：不得移除或绕过 `SandboxGuard`；新增执行路径必须经过 `ToolExecutor`，沙箱拒绝必须先写审计再抛错。
 - 动态风险引擎只能保持或上调工具基线风险，**任何模型输出都不得降低风险等级**。
 - 审计日志必须包含：触发时间、原始指令、DAG 路径、工具入参、执行结果、用户确认状态，并保持 SHA-256 哈希链；证据以 `source / verified / verification_kind` 分层写入。
 - LLM 只生成计划/草稿，不得直接执行工具、决定权限、跳过确认或编造金融结果；模型输出必须通过字段白名单与冲突校验。
@@ -50,7 +55,8 @@
 - 服务未就绪（`GET /api/health/ready` 非 `ready`）时，写操作必须 fail closed 返回 `503`，不得伪装成功。
 - 前端只通过 `/api` 调用后端，不内嵌业务权限判断；服务未就绪时必须禁用写操作（fail closed）。
 - 新增业务场景必须遵守 `backend/aegisbank_api/scenarios/README.md` 的自动发现契约（`NAME / SCHEMA_SQL / seed / tools / intents / risk_rules / router / start_background / stop_background`），不得修改核心装配文件。
-- 禁止提交真实银行凭证、客户数据或 `.env`；演示 OTP `246810` 只能用于本地开发。
+- 新增 2A 横切能力必须遵守 `backend/aegisbank_api/extensions/README.md` 契约（`NAME / SCHEMA_SQL / seed / activate / tools / router / start_background / stop_background`），不得修改核心装配文件；写操作必须走工具节点 + 网关 + 审计。
+- 禁止提交真实银行凭证、客户数据或 `.env`；演示 OTP `246810` 与模拟生物识别 token `FACE-888888` 只能用于本地开发。
 
 ## 门禁与提交
 
@@ -81,10 +87,13 @@ git -C $unc push origin main
 - `backend/aegisbank_api/`：FastAPI、工具 SDK、权限网关、动态风险、DAG 调度、审计
   - `banking/`：Mock Bank Core 领域模型与 SQLite 仓库
   - `planning/`：Planner 契约、规则/LLM 实现、Plan Compiler 与模型候选校验
-  - `trust/`：ActionEnvelope、幂等、状态机、证据、readiness、熔断
+  - `trust/`：ActionEnvelope、幂等、状态机、证据、readiness、熔断、角色、MFA、暂停、沙箱
   - `scenarios/`：5 个可自动发现的业务场景模块（25 个场景工具）与模块契约
+  - `extensions/`：2A 横切能力自动发现模块（authz / breaker / compensation / im / mfa / sandbox）
+  - `channels/`：IM / CLI / webhook 渠道适配层
+  - `executor.py` / `compensation.py`：统一执行链与补偿规格注册表
   - `tools/finance.py`：9 个核心银行工具与 Manifest
-- `backend/tests/`：API 闭环、Planner 契约与信任层/六场景测试（8 个测试文件）
+- `backend/tests/`：API 闭环、Planner、信任层、六场景与 2A 测试（14 个测试文件，136 条）
 - `frontend/src/`：银行概览、六场景面板、任务控制台、权限控制台、操作审计
 - `scripts/`：依赖安装、开发启动、lint/build/test/smoke
 - `docs/`：总规划、架构、安全边界、路线图、Dogfooding、参考资料

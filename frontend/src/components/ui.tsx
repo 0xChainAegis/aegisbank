@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { riskLabels, riskShortLabels } from '../risk';
 import type { EvidenceItem, RiskLevel, RunStatus } from '../types';
+import type { CompensationBadgeInfo } from '../twoA';
 import {
   evidenceSourceLabel,
   normalizeEvidence,
@@ -18,6 +19,31 @@ export function RiskBadge({ risk, verbose = false }: { risk: RiskLevel; verbose?
 export function StatusPill({ status }: { status: RunStatus | string }) {
   return (
     <span className={`status-pill status-${status}`}>{statusLabel(status)}</span>
+  );
+}
+
+/** Stage 2A reversibility badge: 可撤销 / 不可撤销 / 只读. */
+export function CompensationBadge({ info }: { info: CompensationBadgeInfo }) {
+  return (
+    <span className={`comp-badge comp-${info.tone}`} title={info.title}>
+      {info.label}
+    </span>
+  );
+}
+
+export function ToneChip({
+  tone,
+  children,
+  title,
+}: {
+  tone: 'good' | 'warn' | 'bad' | 'neutral';
+  children: ReactNode;
+  title?: string;
+}) {
+  return (
+    <span className={`tone-chip tone-${tone}`} title={title}>
+      {children}
+    </span>
   );
 }
 

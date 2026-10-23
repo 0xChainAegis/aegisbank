@@ -19,6 +19,8 @@ export interface ToolMetadata {
   input_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
   granted: boolean;
+  compensable?: boolean;
+  compensation_tool?: string | null;
 }
 
 export interface ToolResult {
@@ -48,6 +50,8 @@ export interface PlanStep {
   risk_level?: RiskLevel;
   permission?: string;
   risk_reasons?: string[];
+  irreversible?: boolean;
+  irreversible_reason?: string;
 }
 
 export interface ExecutionPlan {
@@ -62,6 +66,9 @@ export interface ExecutionPlan {
   clarification?: string | null;
   risk_level?: RiskLevel;
   risk_reasons?: string[];
+  irreversible?: boolean;
+  rollback_blocked?: boolean;
+  rollback_blocked_reason?: string;
 }
 
 export type RunStatus =
@@ -73,7 +80,9 @@ export type RunStatus =
   | 'failed'
   | 'unknown'
   | 'reconciled'
-  | 'rolled_back';
+  | 'rolled_back'
+  | 'paused'
+  | 'rollback_blocked';
 
 /** Layered evidence returned by the trust layer. */
 export interface EvidenceItem {
@@ -93,6 +102,13 @@ export interface RunResponse {
   plan?: ExecutionPlan;
   confirmation?: Confirmation;
   results?: ToolResult[];
+  rollback?: RollbackReport;
+  rolled_back?: boolean;
+  paused?: PauseState;
+  resume?: ResumeInfo;
+  irreversible?: boolean;
+  rollback_blocked?: boolean;
+  rollback_blocked_reason?: string;
   audit_id?: number;
   evidence?: EvidenceItem[];
   evidence_list?: EvidenceItem[];
@@ -227,7 +243,7 @@ export interface BankingOverview {
 }
 
 /* ------------------------------------------------------------------ */
-/* 财富管理（模拟数据）                                                  */
+/* 璐㈠瘜绠＄悊锛堟ā鎷熸暟鎹級                                                  */
 /* ------------------------------------------------------------------ */
 
 export interface WealthProduct {
@@ -289,7 +305,7 @@ export interface WealthOrdersResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* 联系人                                                               */
+/* 鑱旂郴浜?                                                              */
 /* ------------------------------------------------------------------ */
 
 export interface Contact {
@@ -310,7 +326,7 @@ export interface ContactsResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* 账单与订阅                                                           */
+/* 璐﹀崟涓庤闃?                                                          */
 /* ------------------------------------------------------------------ */
 
 export interface BillTopMerchant {
@@ -432,7 +448,7 @@ export interface RenewalReminders {
 }
 
 /* ------------------------------------------------------------------ */
-/* 卡片申请                                                             */
+/* 鍗＄墖鐢宠                                                             */
 /* ------------------------------------------------------------------ */
 
 export interface CardApplication {
@@ -453,7 +469,7 @@ export interface CardApplicationsResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* 自动化（定时任务 / 预算目标 / 礼物订单）                              */
+/* 鑷姩鍖栵紙瀹氭椂浠诲姟 / 棰勭畻鐩爣 / 绀肩墿璁㈠崟锛?                             */
 /* ------------------------------------------------------------------ */
 
 export interface AutomationTask {
@@ -528,4 +544,271 @@ export interface AutomationRunDueResult {
   executed_count: number;
   failed_count: number;
   simulated?: boolean;
+}
+/* ------------------------------------------------------------------ */
+/* 阶段 2A：MFA Provider                                                */
+/* ------------------------------------------------------------------ */
+
+export interface MfaProvider {
+  name: string;
+  kind: string;
+  title: string;
+  enabled?: boolean;
+  simulated?: boolean;
+  demo_only?: boolean;
+  hint?: string;
+  demo_token_format?: string;
+  default?: boolean;
+}
+
+export interface MfaProvidersResponse {
+  providers: MfaProvider[];
+  enabled: string[];
+  default: string;
+  kinds: string[];
+  simulated?: boolean;
+  demo_only?: boolean;
+  note?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* 阶段 2A：步骤日志 / 暂停 / 回滚 / 补偿                               */
+/* ------------------------------------------------------------------ */
+
+export interface PauseState {
+  action_id: string;
+  paused: boolean;
+  reason: string;
+  requested_at?: string | null;
+  resumed_at?: string | null;
+  updated_at?: string | null;
+  exists?: boolean;
+}
+
+export interface ResumeStep {
+  id: string;
+  tool_name: string;
+  arguments?: Record<string, unknown>;
+}
+
+export interface ResumeInfo {
+  endpoint: string;
+  method: string;
+  next_index: number;
+  remaining_steps: ResumeStep[];
+  guidance: string;
+  executed_steps?: number;
+}
+
+export interface ActionJournalEntry {
+  id: number;
+  action_id: string;
+  node_id: string;
+  tool_name: string;
+  phase: string;
+  status: string;
+  risk_level: RiskLevel;
+  created_at: string;
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown>;
+}
+
+export interface ActionJournal {
+  action_id: string;
+  user_id: string;
+  instruction: string;
+  role?: string;
+  status: string;
+  state?: string | null;
+  pending_status?: string;
+  risk_level: RiskLevel;
+  next_index: number;
+  created_at: string;
+  updated_at: string;
+  reason: string;
+  nodes: PlanStep[];
+  results: ToolResult[];
+  plan?: ExecutionPlan;
+  pause: PauseState;
+  entries: ActionJournalEntry[];
+  executed: ActionJournalEntry[];
+  compensations: ActionJournalEntry[];
+  resume?: ResumeInfo;
+  not_started?: boolean;
+}
+
+export interface RollbackCompensation {
+  node_id: string;
+  tool_name: string;
+  compensation_tool?: string;
+  gateway_outcome?: string;
+  risk_level?: RiskLevel;
+  result?: ToolResult;
+  error?: string;
+  reason?: string;
+}
+
+export interface RollbackIrreversibleStep {
+  node_id: string;
+  tool_name: string;
+  reason: string;
+  risk_level?: RiskLevel;
+}
+
+export interface RollbackReport {
+  status: string;
+  compensated: RollbackCompensation[];
+  failed: RollbackCompensation[];
+  irreversible_steps: RollbackIrreversibleStep[];
+  reason: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* 阶段 2A：熔断                                                        */
+/* ------------------------------------------------------------------ */
+
+export interface BreakerSuspicious {
+  red_events: number;
+  red_threshold: number;
+  injection_events: number;
+  injection_threshold: number;
+  window_seconds: number;
+  window_start?: string;
+}
+
+export interface BreakerStatus {
+  name: string;
+  open: boolean;
+  trigger?: string | null;
+  trigger_label?: string | null;
+  failures: number;
+  threshold: number;
+  window_seconds: number;
+  lock_seconds: number;
+  opened_at?: string | null;
+  retry_after_seconds: number;
+  cooled_down?: boolean;
+  reason: string;
+  suspicious?: BreakerSuspicious;
+  unlocked_by?: string;
+  audit_id?: number | null;
+}
+
+export interface BreakerThreshold {
+  label: string;
+  threshold: number;
+  window_seconds: number;
+}
+
+export interface BreakerPolicy {
+  name: string;
+  mode: string;
+  shared_open_state: boolean;
+  lock_seconds: number;
+  reason_marker: string;
+  thresholds: Record<string, BreakerThreshold>;
+  rules: string[];
+  recovery: { auto: string; manual: string; legacy?: string };
+  current: BreakerStatus;
+}
+
+export interface BreakerEvent {
+  id?: number;
+  created_at: string;
+  kind: string;
+  user_id: string;
+  detail: Record<string, unknown>;
+}
+
+export interface BreakerEventsResponse {
+  events: BreakerEvent[];
+  count: number;
+  limit: number;
+  breaker_name: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* 阶段 2A：沙箱                                                        */
+/* ------------------------------------------------------------------ */
+
+export interface SandboxPolicy {
+  enabled: boolean;
+  timeout_seconds: number;
+  max_output_bytes: number;
+  max_argument_bytes: number;
+  block_network: boolean;
+  allowed_tools: string[];
+  tool_whitelist_enforced: boolean;
+}
+
+export interface SandboxPolicyResponse extends SandboxPolicy {
+  policy: SandboxPolicy;
+  executor?: string | null;
+  guards: string[];
+  network_block_active: boolean;
+  demo_kinds: string[];
+}
+
+export type SandboxDemoKind = 'network' | 'slow' | 'oversize';
+
+export interface SandboxDemoResult {
+  kind: string;
+  sandbox_enabled: boolean;
+  policy?: SandboxPolicy;
+  blocked: boolean;
+  event?: string | null;
+  violation?: string | null;
+  reason: string;
+  tool_name?: string;
+  result?: ToolResult;
+}
+
+/* ------------------------------------------------------------------ */
+/* 阶段 2A：IM 渠道                                                     */
+/* ------------------------------------------------------------------ */
+
+export interface ImHelpExample {
+  label: string;
+  payload: Record<string, unknown>;
+}
+
+export interface ImHelp {
+  name: string;
+  channel: string;
+  method: string;
+  endpoint: string;
+  channels: string[];
+  demo_user: string;
+  message_fields: Record<string, string>;
+  confirmation_syntax: string[];
+  demo_otp: string;
+  audit_events: string[];
+  idempotency: string;
+  policy: string;
+  examples: ImHelpExample[];
+  note: string;
+}
+
+export type ImChannelName = 'im' | 'cli' | 'webhook';
+
+export interface ImMessageInput {
+  channel: ImChannelName;
+  sender_id: string;
+  text: string;
+  message_id?: string | null;
+}
+
+export interface ImMessageReply {
+  channel: string;
+  sender_id: string;
+  message_id?: string | null;
+  replayed: boolean;
+  text: string;
+  status: string;
+  structured: Record<string, unknown>;
+  confirmation?: {
+    id?: string;
+    requires_reauth?: boolean;
+    expires_at?: string;
+  } | null;
 }

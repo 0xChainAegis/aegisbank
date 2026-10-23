@@ -1,12 +1,16 @@
 import { FormEvent, useMemo } from 'react';
 import { formatCny, riskDescriptions } from '../risk';
+import type { AegisRole } from '../roles';
+import { canExecuteTools, roleTaskBlockReason } from '../roles';
 import type {
+  ActionJournal,
   AgentRunInput,
   RiskLevel,
   RunResponse,
   ToolMetadata,
   TrustActionDetail,
 } from '../types';
+import { journalEligibleStatus, planStepCompensation } from '../twoA';
 import {
   argumentLabels,
   collectRiskReasons,
@@ -18,7 +22,8 @@ import {
   statusLabel,
   stepRiskLevel,
 } from '../viewModel';
-import { EvidenceBadges, PageAlerts, RiskBadge, StatusPill } from './ui';
+import StepJournalPanel from './StepJournalPanel';
+import { CompensationBadge, EvidenceBadges, PageAlerts, RiskBadge, StatusPill } from './ui';
 
 interface ScenarioAction {
   id: string;
@@ -177,6 +182,7 @@ const scenarioGroups: ScenarioGroup[] = [
 ];
 
 interface Props {
+  role: AegisRole;
   tools: ToolMetadata[];
   toolsLoading: boolean;
   instruction: string;
@@ -194,9 +200,11 @@ interface Props {
   onInspectTrustAction: () => void;
   onExecute: (input: AgentRunInput) => void;
   onRefresh: () => void;
+  onRecoveryChanged: (journal: ActionJournal, response: unknown) => void;
 }
 
 export default function TaskConsolePage({
+  role,
   tools,
   toolsLoading,
   instruction,
@@ -214,20 +222,33 @@ export default function TaskConsolePage({
   onInspectTrustAction,
   onExecute,
   onRefresh,
+  onRecoveryChanged,
 }: Props) {
   const toolNames = useMemo(() => new Set(tools.map((tool) => tool.name)), [tools]);
   const riskReasons = useMemo(() => (lastRun ? collectRiskReasons(lastRun) : []), [lastRun]);
   const overallRisk = lastRun ? runRiskLevel(lastRun) : 'green';
+  const canExecute = canExecuteTools(role);
+  const roleBlockReason = roleTaskBlockReason(role);
+  const taskBlocked = !canExecute || writesBlocked;
+  const taskBlockText = !canExecute
+    ? roleBlockReason
+    : writesBlocked
+      ? `写操作已按 fail-closed 禁用：${blockReason}`
+      : '';
+  const journalActionId =
+    lastRun && journalEligibleStatus(lastRun.status)
+      ? lastActionId ?? lastRun.run_id
+      : null;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = instruction.trim();
-    if (!value || busy || writesBlocked) return;
+    if (!value || busy || taskBlocked) return;
     onExecute({ instruction: value });
   }
 
   function trigger(action: ScenarioAction) {
-    if (busy || writesBlocked) return;
+    if (busy || taskBlocked) return;
     setInstruction(action.instruction);
     onExecute({
       instruction: action.instruction,
@@ -244,7 +265,7 @@ export default function TaskConsolePage({
           <h1>让每一次金融操作，都经过信任闸门。</h1>
           <p>
             AegisBank 将意图规划、权限校验、动态风险分级与操作审计串成一条可追溯链路。
-            绿色直接执行，黄色轻量确认，红色执行 MFA/OTP 二次校验。
+            绿色直接执行，黄色轻量确认，红色执行 MFA（OTP / 模拟生物识别）二次校验。
           </p>
         </div>
         <div className="hero-orbit" aria-hidden="true">
@@ -286,9 +307,10 @@ export default function TaskConsolePage({
           </button>
         </div>
 
-        {writesBlocked && (
+        {taskBlocked && (
           <div className="alert alert-warn command-blocked" role="alert">
-            写操作已按 fail-closed 禁用：{blockReason}。系统恢复 ready 后才能提交任务或执行确认。
+            {taskBlockText}
+            {writesBlocked ? ' 系统恢复 ready 后才能提交任务或执行确认。' : ' 请切换到 user 角色后重试。'}
           </div>
         )}
 
@@ -306,7 +328,7 @@ export default function TaskConsolePage({
           <button
             className="primary-button"
             type="submit"
-            disabled={busy || writesBlocked || !instruction.trim()}
+            disabled={busy || taskBlocked || !instruction.trim()}
           >
             {busy ? '处理中…' : '交给 Agent'}
             <span aria-hidden="true">↗</span>
@@ -340,10 +362,10 @@ export default function TaskConsolePage({
                       className="scenario-action"
                       key={action.id}
                       onClick={() => trigger(action)}
-                      disabled={busy || writesBlocked || !available}
+                      disabled={busy || taskBlocked || !available}
                       title={
-                        writesBlocked
-                          ? `写操作已禁用：${blockReason}`
+                        taskBlocked
+                          ? taskBlockText
                           : available
                             ? action.hint
                             : `缺少工具：${action.requiredTools.join(', ')}`
@@ -354,8 +376,10 @@ export default function TaskConsolePage({
                         <RiskBadge risk={actionRisk} />
                       </span>
                       <small>
-                        {writesBlocked
-                          ? '系统未就绪，写操作已禁用'
+                        {taskBlocked
+                          ? !canExecute
+                            ? roleBlockReason
+                            : '系统未就绪，写操作已禁用'
                           : available
                             ? action.description
                             : '后端尚未注册该工具'}
@@ -412,14 +436,24 @@ export default function TaskConsolePage({
 
           {(lastRun.status === 'unknown' ||
             lastRun.status === 'reconciled' ||
-            lastRun.status === 'rolled_back') && (
+            lastRun.status === 'rolled_back' ||
+            lastRun.status === 'paused' ||
+            lastRun.status === 'rollback_blocked') && (
             <div
-              className={`alert ${lastRun.status === 'unknown' ? 'alert-warn' : 'alert-info'}`}
+              className={`alert ${
+                lastRun.status === 'unknown' || lastRun.status === 'rollback_blocked'
+                  ? 'alert-warn'
+                  : 'alert-info'
+              }`}
               role="status"
             >
               {lastRun.status === 'unknown'
                 ? '结果未知不等于失败：副作用可能已发生，系统不会自动重试。请人工对账（reconciled）或回滚（rolled_back）。'
-                : '任务状态已由人工处理，结论已写入审计哈希链。'}
+                : lastRun.status === 'paused'
+                  ? '执行已在步骤之间暂停：剩余节点未执行，已执行步骤不会重复执行；可在步骤日志中恢复或回滚。'
+                  : lastRun.status === 'rollback_blocked'
+                    ? '回滚被阻止：已执行步骤中存在不可撤销操作，需要人工与银行核实后对账。'
+                    : '任务状态已由人工处理，结论已写入审计哈希链。'}
             </div>
           )}
 
@@ -464,12 +498,18 @@ export default function TaskConsolePage({
                     {lastRun.plan.plan_hash.slice(0, 16)}…
                   </code>
                 )}
+                {lastRun.plan.irreversible && (
+                  <span className="comp-badge comp-bad">计划含不可撤销步骤</span>
+                )}
               </div>
               {lastRun.plan.dag_path && (
                 <p className="dag-path">
                   <span>DAG 路径</span>
                   <code>{lastRun.plan.dag_path}</code>
                 </p>
+              )}
+              {lastRun.plan.rollback_blocked_reason && (
+                <p className="plan-rollback-note">{lastRun.plan.rollback_blocked_reason}</p>
               )}
               {lastRun.plan.steps.length > 0 && (
                 <ol className="plan-steps">
@@ -481,6 +521,7 @@ export default function TaskConsolePage({
                           <span className="plan-step-id">{step.id}</span>
                           <strong>{step.title || step.tool_name}</strong>
                           <RiskBadge risk={stepRisk} />
+                          <CompensationBadge info={planStepCompensation(step, tools)} />
                           {step.depends_on.length > 0 && (
                             <span className="depends-pill">依赖 {step.depends_on.join(', ')}</span>
                           )}
@@ -652,6 +693,17 @@ export default function TaskConsolePage({
                 </>
               )}
             </div>
+          )}
+
+          {journalActionId && (
+            <StepJournalPanel
+              actionId={journalActionId}
+              role={role}
+              run={lastRun}
+              writesBlocked={writesBlocked}
+              blockReason={blockReason}
+              onChanged={onRecoveryChanged}
+            />
           )}
         </div>
       )}

@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { AegisRole } from '../roles';
+import { canManagePermissions, rolePermissionBlockReason } from '../roles';
 import type { ToolMetadata } from '../types';
+import { compensationBadge } from '../twoA';
 import { paginate } from '../viewModel';
-import { LoadingState, PageAlerts, RiskBadge } from './ui';
+import { CompensationBadge, LoadingState, PageAlerts, RiskBadge } from './ui';
 
 interface Props {
+  role: AegisRole;
   tools: ToolMetadata[];
   loading: boolean;
   error: string;
@@ -16,6 +20,7 @@ interface Props {
 const PAGE_SIZE = 6;
 
 export default function PermissionsPage({
+  role,
   tools,
   loading,
   error,
@@ -26,6 +31,7 @@ export default function PermissionsPage({
 }: Props) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const canManage = canManagePermissions(role);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -72,6 +78,12 @@ export default function PermissionsPage({
 
       <PageAlerts error={error} notice={notice} />
 
+      {!canManage && (
+        <div className="alert alert-warn" role="status">
+          {rolePermissionBlockReason(role)} 当前角色：{role}。
+        </div>
+      )}
+
       <div className="permission-toolbar card">
         <div>
           <span className="eyebrow">TOOL REGISTRY</span>
@@ -103,6 +115,7 @@ export default function PermissionsPage({
                 <th>工具节点</th>
                 <th>动态风险</th>
                 <th>最小权限</th>
+                <th>可撤销性</th>
                 <th>当前状态</th>
                 <th aria-label="操作" />
               </tr>
@@ -118,6 +131,15 @@ export default function PermissionsPage({
                   <td><RiskBadge risk={tool.risk_level} verbose /></td>
                   <td><code>{tool.permission}</code></td>
                   <td>
+                    <CompensationBadge
+                      info={compensationBadge(
+                        tool.compensable === true,
+                        tool.risk_level,
+                        tool.compensation_tool,
+                      )}
+                    />
+                  </td>
+                  <td>
                     <span className={tool.granted ? 'grant-on' : 'grant-off'}>
                       {tool.granted ? '已授权' : '已撤回'}
                     </span>
@@ -126,7 +148,8 @@ export default function PermissionsPage({
                     <button
                       className={tool.granted ? 'danger-button' : 'primary-button small-button'}
                       onClick={() => onToggle(tool)}
-                      disabled={Boolean(busyTool)}
+                      disabled={Boolean(busyTool) || !canManage}
+                      title={canManage ? undefined : '审计员只读：不能修改工具授权'}
                     >
                       {busyTool === tool.name ? '处理中…' : tool.granted ? '撤回' : '授予'}
                     </button>

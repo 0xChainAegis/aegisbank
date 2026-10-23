@@ -1,6 +1,6 @@
 # 银行领域模型与六场景闭环
 
-> 最近更新：2026-10-23（阶段 2B 六场景完整覆盖完成后）。
+> 最近更新：2026-10-23（阶段 2A 六项硬要求完成后，基线 `bf36895`）。
 > 所有银行数据都来自确定性的 Mock Bank Core（SQLite），LLM 与 Planner 不得编造余额、账单、交易、联系人、持仓或理财收益。
 
 ## 1. 目标与范围
@@ -36,9 +36,20 @@
 | `audit_log` | `event / instruction / dag_path / tool_name / arguments_json / result_json(含 evidence) / confirmation_state / risk_level / prev_hash / entry_hash` | 追加式审计与 SHA-256 哈希链 |
 | `idempotency_keys` | `(scope, key, request_hash, status, response_json, created_at, updated_at)` | 幂等键与首次响应 |
 | `used_nonces` | `(nonce, action_id, used_at)` | ActionEnvelope 一次性 nonce |
-| `circuit_breaker` | `(name, failures, last_failure_at, opened_at, updated_at)` | 连续失败熔断状态 |
+| `circuit_breaker` | `(name, failures, last_failure_at, opened_at, updated_at)` | 熔断 open 状态（连续失败/红色/注入规则共享） |
+| `breaker_events` | `(id, created_at, kind, user_id, detail_json)` | 熔断规则事件（red_operation / injection_hit / circuit_open / reset 等） |
 
-### 2.3 场景模块自建表
+### 2.3 阶段 2A 自建表
+
+| 表 | 关键列 | 说明 |
+|---|---|---|
+| `action_pauses` | `action_id / paused / reason / requested_at / resumed_at / updated_at` | 每个 action 的暂停标记与原因 |
+| `action_journal` | `action_id / user_id / role / status / next_index / nodes_json / results_json / plan_json / response_json` | 执行进度与恢复所需快照 |
+| `action_journal_entries` | `id / action_id / node_id / tool_name / phase / status / arguments_json / result_json` | 节点级执行/暂停/补偿/阻断记录 |
+| `im_messages` | `message_id / channel / sender_id / text / reply_json / created_at` | IM 消息幂等回执 |
+| `compensation_demo_ledger` | `entry_id / user_id / action_id / kind / amount_cents / status / reverses_entry_id` | 补偿演示账本（仅演示数据，不触碰真实资金） |
+
+### 2.4 场景模块自建表
 
 | 模块 | 表 | 说明 |
 |---|---|---|
@@ -54,9 +65,9 @@
 | | `budget_goals` | 预算目标：目标金额、已锁定金额、状态 |
 | | `gift_orders` | 生日礼物订单：鲜花/蛋糕、模拟金额、到期时间、状态 |
 
-## 3. 全量工具清单（34 个）
+## 3. 全量工具清单（48 个）
 
-工具必须继承 `BaseTool`、声明风险等级与最小权限，并统一经权限网关调用。核心 9 个 + 场景 25 个。
+工具必须继承 `BaseTool`、声明风险等级与最小权限，并统一经权限网关与执行器调用。核心 9 个 + 场景 25 个 + 阶段 2A 扩展 14 个（8 个反向工具 + 6 个演示工具）。其中 **15 个**声明 `compensable=true`，**12 个**在补偿规格中声明不可逆。
 
 ### 3.1 核心工具（`tools/finance.py`，9 个）
 
@@ -102,7 +113,65 @@
 | automation | `cancel_scheduled_task` | 取消定时任务 | 绿 | `automation:manage` |
 | automation | `run_due_tasks` | 执行到期任务 | 绿 | `automation:manage` |
 
-> 上表是**基线**风险；动态风险规则可能在执行时上调（见 §5）。风险只升不降。
+### 3.3 阶段 2A 扩展工具（`extensions/compensation.py`，14 个）
+
+| 工具 | 标题 | 基线风险 | 最小权限 | 类型 |
+|---|---|---|---|---|
+| `reverse_transfer` | 转账冲正 | 黄 | `transfer:execute` | 反向 |
+| `restore_repayment_date` | 恢复还款日 | 黄 | `card:manage` | 反向 |
+| `restore_card_limit` | 恢复卡片额度 | 黄 | `card:manage` | 反向 |
+| `restore_transaction_limit` | 恢复交易限额 | 黄 | `card:manage` | 反向 |
+| `reactivate_subscription` | 恢复订阅 | 黄 | `subscription:manage` | 反向 |
+| `cancel_virtual_card_application` | 撤销虚拟卡申请 | 黄 | `card:manage` | 反向 |
+| `restore_wealth_risk` | 恢复风险偏好 | 黄 | `wealth:execute` | 反向 |
+| `reverse_purchase_wealth` | 撤销理财申购 | 黄 | `wealth:execute` | 反向 |
+| `reverse_demo_reserve` | 演示释放预留资金 | 绿 | `compensation:demo` | 演示反向 |
+| `reverse_demo_charge` | 演示撤销手续费 | 绿 | `compensation:demo` | 演示反向 |
+| `demo_reserve_funds` | 演示预留资金 | 绿 | `compensation:demo` | 演示 |
+| `demo_charge_fee` | 演示手续费扣减 | 绿 | `compensation:demo` | 演示 |
+| `demo_irreversible_marker` | 演示不可撤销步骤 | 绿 | `compensation:demo` | 演示 |
+| `demo_fail_step` | 演示可控失败 | 绿 | `compensation:demo` | 演示 |
+
+### 3.4 可补偿 / 不可逆清单（27 条规格）
+
+`GET /api/compensation/specs` 返回 27 条规格：15 条可补偿、12 条不可逆。可补偿工具由 `compensation_tool` 指定反向工具：
+
+| 工具 | 反向工具 | 说明 |
+|---|---|---|
+| `transfer` | `reverse_transfer` | 按原路径冲正模拟转账 |
+| `transfer_to_contact` | `reverse_transfer` | 联系人转账同样冲正 |
+| `adjust_repayment_date` | `restore_repayment_date` | 恢复调整前还款日 |
+| `adjust_card_limit` | `restore_card_limit` | 恢复调整前额度 |
+| `unlock_transaction_limit` | `restore_transaction_limit` | 恢复解锁前限额 |
+| `cancel_subscription` | `reactivate_subscription` | 恢复已取消订阅 |
+| `apply_virtual_card` | `cancel_virtual_card_application` | 撤销仍处于 applying 的申请 |
+| `lock_budget_funds` | `unlock_budget_funds` | 解锁预算并退回金额 |
+| `schedule_flower_order` | `cancel_scheduled_task` | 取消未执行的鲜花计划 |
+| `schedule_cake_order` | `cancel_scheduled_task` | 取消未执行的蛋糕计划 |
+| `schedule_transfer` | `cancel_scheduled_task` | 取消未执行的定时转账 |
+| `purchase_wealth` | `reverse_purchase_wealth` | 撤销刚完成的模拟申购 |
+| `assess_wealth_risk` | `restore_wealth_risk` | 恢复测评前偏好 |
+| `demo_reserve_funds` | `reverse_demo_reserve` | 演示释放预留资金 |
+| `demo_charge_fee` | `reverse_demo_charge` | 演示撤销手续费 |
+
+不可逆工具（自动回滚会被阻止，转人工对账）：
+
+| 工具 | 不可逆原因 |
+|---|---|
+| `report_card_lost` | 挂失是账户安全终态，需人工与银行核实 |
+| `reset_card_password` | 安全凭证变更不可自动回退 |
+| `unlock_card` | 解挂属安全状态变更，自动重新挂失会放大风险 |
+| `set_transaction_limit` | 缺少变更前限额快照，无法精确回退 |
+| `issue_virtual_card` | 已发卡写入卡片清单，自动删卡不可逆 |
+| `add_contact` | 联系人属 KYC 记录，无删除工具 |
+| `cancel_scheduled_task` | 取消后的任务没有恢复接口 |
+| `unlock_budget_funds` | 预算解锁本身是补偿动作，重新锁定会改变资金安排 |
+| `redeem_wealth` | 赎回是资金退出动作，不能自动反向申购 |
+| `run_due_tasks` | 到期任务已实际执行扣款 |
+| `demo_irreversible_marker` | 演示节点，用于验证回滚阻断 |
+| `demo_fail_step` | 演示可控失败节点，不会成功执行 |
+
+> 上表是**基线**风险；动态风险规则可能在执行时上调（见 §5）。风险只升不降。反向工具不是绕过确认的后门：它们同样经网关、执行器、风险与审计链。
 
 ## 4. 六场景能力矩阵
 
@@ -183,6 +252,25 @@ step-1..n: transfer_to_contact（各自独立，可并行执行；风险按 AA �
 
 调度器在执行前解析变量引用，整条 DAG 风险取最高节点；任一节点需要确认时整个任务先进入待确认状态。
 
+### 4.6 阶段 2A 演示数据与 demo 端点
+
+阶段 2A 不新增业务种子，演示数据由 demo 端点按需创建，全部写入本地 SQLite：
+
+| 端点 | 输入 | 产生的数据 / 行为 |
+|---|---|---|
+| `POST /api/compensation/demo/run?mode=reversible` | 默认 `amount_cny=199/59` | 两步 DAG 执行后可控失败，逆序补偿；写 `compensation_demo_ledger` 与 `compensation_executed` 审计，状态 `ROLLED_BACK` |
+| `POST /api/compensation/demo/run?mode=irreversible` | 追加 `demo_irreversible_marker` | 不可逆步骤阻止回滚，写 `compensation_blocked`，状态 `UNKNOWN` |
+| `POST /api/compensation/demo/run?mode=compensation_failure` | `fail_compensation=true` | 部分补偿失败，状态 `UNKNOWN`，写 `compensation_failed` |
+| `POST /api/compensation/demo/run?mode=success` | 无失败节点 | DAG 正常完成，状态 `completed` |
+| `POST /api/actions/{id}/pause` / `resume` / `rollback` | `action_id` | 暂停标记、恢复剩余节点、人工回退 |
+| `GET /api/actions/{id}/journal` | `action_id` | 查看节点、已执行结果、补偿与暂停状态 |
+| `POST /api/sandbox/demo/run` | `kind=network / slow / oversize` | 只执行内存演示工具，不写业务表；拦截写 `sandbox_blocked` / `sandbox_timeout` |
+| `POST /api/mfa/demo/challenge` | `provider/tool_name/risk_level` | 签发演示挑战提示（不返回真实凭据） |
+| `POST /api/channels/im/message` | `channel/sender_id/text/message_id` | 查询/挂失/确认；写 `im_messages` 与 IM 审计事件 |
+| `GET /api/trust/breaker/events` | `limit` | 查看红色/注入/熔断/解锁事件 |
+
+演示重置：删除 `backend/data/aegisbank.db` 后重启即可恢复种子；2A 表初始为空。
+
 ## 5. 动态风险规则
 
 `DynamicRiskEngine` 使用确定性数据判断；场景模块可通过 `risk_rules()` 提供规则，结果与工具基线取最大值（只升不降），LLM 输出不参与风险判定。
@@ -234,12 +322,13 @@ Mock Bank Core 种子：
 | bills | 4 个分类预算：餐饮 1500 元、购物 2000 元、订阅 500 元、交通 500 元/月；账单数据读取 `bank_transactions` 与 `bank_subscriptions` |
 | cards | 1 条已发卡申请 `APP-8001`（虚拟卡，额度 8000 元，关联 `CARD-8821`）；密码修改表初始为空 |
 | automation | 定时任务、预算目标、礼物订单初始为空，由演示操作创建；鲜花 199 元、蛋糕 159 元，提前 2 天预订 |
+| 2A 扩展 | `action_pauses` / `action_journal*` / `breaker_events` / `im_messages` / `compensation_demo_ledger` 初始为空；由补偿 demo、熔断触发、IM 消息与暂停操作按需创建 |
 
 所有种子幂等（`INSERT OR IGNORE` / 先查存在），重复启动不会重复写入。演示前可删除 `backend/data/aegisbank.db` 恢复初始种子。
 
-## 7. API
+## 7. API（49 个路径）
 
-核心：
+核心（16）：
 
 ```text
 GET  /api/banking/overview
@@ -260,7 +349,7 @@ GET  /api/trust/circuit-breaker
 POST /api/trust/circuit-breaker/reset
 ```
 
-场景（只读，写操作统一走 `/api/agent/run` 或对应确认链路）：
+场景（13）：
 
 ```text
 GET  /api/wealth/products | /holdings | /orders
@@ -269,24 +358,45 @@ GET  /api/bills/report | /api/bills/anomalies
 GET  /api/subscriptions/charges | /api/subscriptions/reminders
 GET  /api/cards/applications
 GET  /api/automation/schedules | /goals | /orders
-POST /api/automation/run-due            （演示时间快进）
+POST /api/automation/run-due            （演示时间快进，readiness 503）
 ```
+
+阶段 2A（20）：
+
+```text
+GET  /api/actions/{action_id}/journal
+POST /api/actions/{action_id}/pause | /resume | /rollback
+GET  /api/compensation/specs
+POST /api/compensation/demo/run          （reversible / irreversible / compensation_failure / success）
+GET  /api/mfa/providers | /policy
+POST /api/mfa/demo/challenge
+GET  /api/sandbox/policy
+POST /api/sandbox/demo/run              （network / slow / oversize）
+GET  /api/channels/im/help
+POST /api/channels/im/message
+GET  /api/authz/roles | /me
+POST /api/authz/revoke/{tool_name}
+GET  /api/authz/audit/policy
+GET  /api/trust/breaker/events | /policy
+POST /api/trust/breaker/unlock          （仅 operator）
+```
+
+除只读查询与只读演示端点外，写操作统一走 `/api/agent/run`、确认链路或对应的受控动作端点；所有工具执行仍经统一网关、执行器与审计链。
 
 ## 8. 当前边界
 
 - 银行数据仍为本地模拟数据，不连接真实银行核心；理财内容不构成投资建议，不产生真实资金变动；
-- 强验证仍使用演示 OTP `246810`，不冒充真实短信/人脸/U 盾；
-- DAG 支持依赖、变量解析与幂等，但步骤级回滚/补偿尚未实现（阶段 2A）；
-- 熔断只有连续失败规则，无工具沙箱与可疑行为策略（阶段 2A）；
-- 只支持 Web 控制台，IM 适配器尚未接入（阶段 2A）；
+- 强验证使用演示 OTP `246810` 与模拟生物识别 token `FACE-888888`，不冒充真实短信/人脸/U 盾；
+- DAG 支持依赖、变量解析、幂等、节点间暂停/恢复与逆序补偿；**不可逆步骤会阻止自动回滚**，需人工对账；
+- 沙箱是**进程内演示级**（超时/网络/入参出参/白名单），不是 OS 容器；熔断计数为系统级，未按用户隔离；
+- IM 适配器未校验真实平台签名，`sender_id` 仅写审计；角色来自演示请求头 `X-Aegis-Role`；
+- 幂等键 / `used_nonces` 仍无 TTL 清理；
 - 时间维度用「持久化任务表 + 按需/可选轮询」实现，不是真实常驻 cron；
-- 比赛文档、PPT、演示视频和安全自评报告仍需阶段 3 补齐。
+- 前端 2A 面板（角色切换 / MFA 选择 / 步骤日志与回滚 / 2A 能力页 / 运维面板）已合入；比赛文档、PPT、演示视频和安全自评报告仍需阶段 3 补齐。
 
 ## 9. 下一步
 
-1. 步骤级暂停、回退和补偿（2A）；
-2. 可疑行为熔断策略与 `run-due` readiness 门禁收尾（2A）；
-3. 工具执行沙箱与演示 MFA Provider（2A）；
-4. IM 渠道适配器与多角色撤权演示（2A）；
-5. 多轮上下文与指代消解（后续）；
-6. 准备比赛材料（阶段 3）。
+1. 阶段 2.5：开发者 Dogfooding（六场景 + 2A 安全路径），修复可用性问题；
+2. 生产化收尾：TTL 清理、按用户熔断、OS 级隔离、真实身份/MFA、真实 IM 平台接入；
+3. 多轮上下文与指代消解（后续）；
+4. 准备比赛材料（阶段 3）。

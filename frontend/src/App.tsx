@@ -2,44 +2,77 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   fetchAudit,
   fetchBankingOverview,
+  fetchBreakerStatus,
+  fetchMfaProviders,
   fetchPermissions,
   fetchReadiness,
   fetchTools,
   fetchTrustAction,
   resolveConfirmation,
   runAgent,
+  setApiRole,
   updatePermission,
   verifyAudit,
 } from './api';
 import AuditPage from './components/AuditPage';
 import BankOverviewPage from './components/BankOverviewPage';
+import BreakerBanner from './components/BreakerBanner';
+import CapabilitiesPage from './components/CapabilitiesPage';
 import ConfirmationModal from './components/ConfirmationModal';
+import OpsPage from './components/OpsPage';
 import PermissionsPage from './components/PermissionsPage';
 import ReadinessBanner from './components/ReadinessBanner';
 import ScenariosPage from './components/ScenariosPage';
 import TaskConsolePage from './components/TaskConsolePage';
-import { readinessBlockers } from './viewModel';
+import type { AegisRole } from './roles';
+import {
+  AEGIS_ROLES,
+  ROLE_LABELS,
+  ROLE_SHORT_LABELS,
+  ROLE_STORAGE_KEY,
+  roleFromStorage,
+  roleTaskBlockReason,
+} from './roles';
+import { defaultMfaProvider, describeMfaFailure } from './twoA';
 import type {
+  ActionJournal,
   AgentRunInput,
   AuditEntry,
   BankingOverview,
+  BreakerStatus,
+  MfaProvidersResponse,
   ReadinessSnapshot,
   RunResponse,
   ToolMetadata,
   TrustActionDetail,
 } from './types';
+import { readinessBlockers } from './viewModel';
 
-type Page = 'overview' | 'scenarios' | 'console' | 'permissions' | 'audit';
+type Page = 'overview' | 'scenarios' | 'console' | 'permissions' | 'capabilities' | 'ops' | 'audit';
 
 const navigation: Array<{ id: Page; index: string; label: string; hint: string }> = [
   { id: 'overview', index: '01', label: '银行概览', hint: '账户与订阅' },
   { id: 'scenarios', index: '02', label: '六场景面板', hint: '理财 / 账单 / 自动化' },
   { id: 'console', index: '03', label: '任务控制台', hint: '三场景任务' },
   { id: 'permissions', index: '04', label: '权限控制台', hint: '工具授权' },
-  { id: 'audit', index: '05', label: '操作审计', hint: '哈希链证据' },
+  { id: 'capabilities', index: '05', label: '2A 能力', hint: 'MFA / 沙箱 / IM' },
+  { id: 'ops', index: '06', label: '运维面板', hint: '熔断与恢复' },
+  { id: 'audit', index: '07', label: '操作审计', hint: '哈希链证据' },
 ];
 
 const CROSS_SCENARIO_INSTRUCTION = '分析我的本月账单和所有订阅，找出异常订阅并取消它';
+
+function initialRole(): AegisRole {
+  if (typeof window === 'undefined') return 'user';
+  try {
+    return roleFromStorage(window.localStorage.getItem(ROLE_STORAGE_KEY));
+  } catch {
+    return 'user';
+  }
+}
+
+const INITIAL_ROLE = initialRole();
+setApiRole(INITIAL_ROLE);
 
 function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -51,6 +84,7 @@ function combineErrors(...errors: string[]): string {
 
 export default function App() {
   const [page, setPage] = useState<Page>('overview');
+  const [role, setRole] = useState<AegisRole>(INITIAL_ROLE);
   const [tools, setTools] = useState<ToolMetadata[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [toolsError, setToolsError] = useState('');
@@ -65,6 +99,12 @@ export default function App() {
   const [readiness, setReadiness] = useState<ReadinessSnapshot | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(true);
   const [readinessError, setReadinessError] = useState('');
+  const [breakerStatus, setBreakerStatus] = useState<BreakerStatus | null>(null);
+  const [breakerLoading, setBreakerLoading] = useState(true);
+  const [breakerError, setBreakerError] = useState('');
+  const [mfaProviders, setMfaProviders] = useState<MfaProvidersResponse | null>(null);
+  const [mfaProvidersLoading, setMfaProvidersLoading] = useState(true);
+  const [mfaProvidersError, setMfaProvidersError] = useState('');
   const [instruction, setInstruction] = useState('查询并分析我的本月账单');
   const [lastRun, setLastRun] = useState<RunResponse | null>(null);
   const [pending, setPending] = useState<RunResponse | null>(null);
@@ -72,7 +112,8 @@ export default function App() {
   const [trustAction, setTrustAction] = useState<TrustActionDetail | null>(null);
   const [trustActionLoading, setTrustActionLoading] = useState(false);
   const [trustActionError, setTrustActionError] = useState('');
-  const [otp, setOtp] = useState('');
+  const [mfaToken, setMfaToken] = useState('');
+  const [mfaProvider, setMfaProvider] = useState('otp');
   const [busy, setBusy] = useState(false);
   const [busyTool, setBusyTool] = useState('');
   const [actionError, setActionError] = useState('');
@@ -153,12 +194,38 @@ export default function App() {
     }
   }, []);
 
+  const loadBreaker = useCallback(async (showLoading = false) => {
+    if (showLoading) setBreakerLoading(true);
+    try {
+      setBreakerStatus(await fetchBreakerStatus());
+      setBreakerError('');
+    } catch (error) {
+      setBreakerError(messageOf(error, '无法获取熔断状态'));
+    } finally {
+      setBreakerLoading(false);
+    }
+  }, []);
+
+  const loadMfaProviders = useCallback(async () => {
+    setMfaProvidersLoading(true);
+    setMfaProvidersError('');
+    try {
+      setMfaProviders(await fetchMfaProviders());
+    } catch (error) {
+      setMfaProvidersError(messageOf(error, '无法加载 MFA 验证方式'));
+    } finally {
+      setMfaProvidersLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadTools(true);
     void loadOverview(true);
     void loadAudit(true);
     void loadReadiness(true);
-  }, [loadAudit, loadOverview, loadReadiness, loadTools]);
+    void loadBreaker(true);
+    void loadMfaProviders();
+  }, [loadAudit, loadBreaker, loadMfaProviders, loadOverview, loadReadiness, loadTools]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -167,10 +234,43 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [loadReadiness]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadBreaker();
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [loadBreaker]);
+
+  useEffect(() => {
+    setApiRole(role);
+    try {
+      window.localStorage.setItem(ROLE_STORAGE_KEY, role);
+    } catch {
+      // localStorage may be unavailable in a hardened browser profile.
+    }
+  }, [role]);
+
   function navigate(next: Page) {
     setPage(next);
     setActionError('');
     setNotice('');
+  }
+
+  function switchRole(next: AegisRole) {
+    if (next === role) return;
+    setApiRole(next);
+    setRole(next);
+    setActionError('');
+    if (next === 'operator') setPage('ops');
+    if (next === 'auditor') setPage('audit');
+    setNotice(`角色已切换为 ${ROLE_LABELS[next]}；所有 API 请求自动携带 X-Aegis-Role: ${next}。`);
+    void Promise.all([
+      loadTools(true),
+      loadAudit(true),
+      loadReadiness(true),
+      loadBreaker(true),
+      loadMfaProviders(),
+    ]);
   }
 
   function openCrossScenario() {
@@ -179,7 +279,28 @@ export default function App() {
   }
 
   async function refreshAfterRun() {
-    await Promise.all([loadTools(), loadOverview(), loadAudit(), loadReadiness()]);
+    await Promise.all([loadTools(), loadOverview(), loadAudit(), loadReadiness(), loadBreaker()]);
+  }
+
+  function handleRecoveryChanged(journal: ActionJournal, response: unknown) {
+    const payload =
+      response !== null && typeof response === 'object'
+        ? (response as Partial<RunResponse>)
+        : {};
+    setLastRun((previous) =>
+      previous
+        ? {
+            ...previous,
+            status: journal.status,
+            reason: journal.reason || previous.reason,
+            rollback: payload.rollback ?? previous.rollback,
+            rolled_back: payload.rolled_back ?? previous.rolled_back,
+            paused: payload.paused ?? previous.paused,
+            results: payload.results ?? previous.results,
+          }
+        : previous,
+    );
+    void refreshAfterRun();
   }
 
   async function execute(input: AgentRunInput) {
@@ -193,12 +314,13 @@ export default function App() {
       setLastRun(result);
       setLastActionId(result.confirmation?.id ?? null);
       if (result.status === 'awaiting_confirmation') {
-        setOtp('');
+        setMfaToken('');
+        setMfaProvider(defaultMfaProvider(mfaProviders?.providers ?? [], 'otp'));
         setPending(result);
         setNotice('计划已生成。请核对风险原因并完成人工确认。');
       } else {
         setPending(null);
-        setOtp('');
+        setMfaToken('');
         setNotice(result.reason);
       }
       await refreshAfterRun();
@@ -209,23 +331,32 @@ export default function App() {
     }
   }
 
-  async function decide(approved: boolean) {
+  async function decide(approved: boolean, providerOverride?: string) {
     if (!pending?.confirmation) return;
     const actionId = pending.confirmation.id;
+    const needsMfa = pending.confirmation.requires_reauth || pending.risk_level === 'red';
+    const provider = providerOverride ?? mfaProvider;
     setBusy(true);
     setActionError('');
     try {
-      const result = await resolveConfirmation(actionId, approved, otp);
+      const result = await resolveConfirmation(
+        actionId,
+        approved,
+        needsMfa ? mfaToken : undefined,
+        needsMfa ? provider : null,
+      );
       setLastRun(result);
       setLastActionId(actionId);
       setPending(null);
-      setOtp('');
+      setMfaToken('');
       setNotice(result.reason);
       setTrustAction(null);
       setTrustActionError('');
       await refreshAfterRun();
     } catch (error) {
-      setActionError(messageOf(error, approved ? '确认执行失败' : '拒绝操作失败'));
+      const raw = messageOf(error, approved ? '确认执行失败' : '拒绝操作失败');
+      const lookLikeMfaFailure = /二次身份校验|OTP|token|验证/i.test(raw);
+      setActionError(needsMfa && lookLikeMfaFailure ? describeMfaFailure(raw, provider) : raw);
     } finally {
       setBusy(false);
     }
@@ -272,12 +403,41 @@ export default function App() {
             <span>Trusted Agent Console</span>
           </div>
         </div>
-        <div className="topbar-status">
-          <span
-            className={`status-dot ${auditValid === false ? 'status-bad' : auditValid === null ? 'status-pending' : ''}`}
-          />
-          {auditValid === false ? '审计链异常' : auditValid === null ? '审计链待校验' : '本地 MVP · 审计链在线'}
-          <span className="env-pill">DEV</span>
+        <div className="topbar-tools">
+          <div className="role-switch" role="group" aria-label="角色切换">
+            {AEGIS_ROLES.map((item) => (
+              <button
+                key={item}
+                className={role === item ? 'active' : ''}
+                onClick={() => switchRole(item)}
+                aria-pressed={role === item}
+                title={`${ROLE_LABELS[item]}：所有请求自动携带 X-Aegis-Role: ${item}`}
+              >
+                {ROLE_SHORT_LABELS[item]}
+              </button>
+            ))}
+          </div>
+          <button
+            className={`breaker-pill ${breakerStatus?.open ? 'is-open' : breakerError ? 'is-unknown' : ''}`}
+            onClick={() => navigate('ops')}
+            title={breakerError || (breakerStatus?.open ? breakerStatus.reason : '熔断器关闭')}
+          >
+            <i aria-hidden="true" />
+            {breakerError
+              ? '熔断状态未知'
+              : breakerLoading && !breakerStatus
+                ? '熔断检查中'
+                : breakerStatus?.open
+                  ? '熔断打开'
+                  : '熔断关闭'}
+          </button>
+          <div className="topbar-status">
+            <span
+              className={`status-dot ${auditValid === false ? 'status-bad' : auditValid === null ? 'status-pending' : ''}`}
+            />
+            {auditValid === false ? '审计链异常' : auditValid === null ? '审计链待校验' : '本地 MVP · 审计链在线'}
+            <span className="env-pill">DEV</span>
+          </div>
         </div>
       </header>
 
@@ -286,6 +446,14 @@ export default function App() {
         loading={readinessLoading}
         error={readinessError}
         onRefresh={() => void loadReadiness(true)}
+      />
+
+      <BreakerBanner
+        status={breakerStatus}
+        loading={breakerLoading}
+        error={breakerError}
+        onOpenOps={() => navigate('ops')}
+        onRetry={() => void loadBreaker(true)}
       />
 
       <div className="layout">
@@ -317,7 +485,7 @@ export default function App() {
           </div>
 
           <div className="sidebar-footer">
-            <span>用户 · demo-user</span>
+            <span>角色 · {ROLE_LABELS[role]}</span>
             <span>数据 · SQLite / Local</span>
             <span>策略 · Dynamic Risk v2</span>
           </div>
@@ -336,11 +504,15 @@ export default function App() {
           )}
 
           {page === 'scenarios' && (
-            <ScenariosPage writesBlocked={writesBlocked} blockReason={blockReason} />
+            <ScenariosPage
+              writesBlocked={writesBlocked || role !== 'user'}
+              blockReason={role !== 'user' ? roleTaskBlockReason(role) : blockReason}
+            />
           )}
 
           {page === 'console' && (
             <TaskConsolePage
+              role={role}
               tools={tools}
               toolsLoading={toolsLoading}
               instruction={instruction}
@@ -358,11 +530,13 @@ export default function App() {
               onInspectTrustAction={() => void inspectTrustAction()}
               onExecute={(input) => void execute(input)}
               onRefresh={() => void loadTools(true)}
+              onRecoveryChanged={handleRecoveryChanged}
             />
           )}
 
           {page === 'permissions' && (
             <PermissionsPage
+              role={role}
               tools={tools}
               loading={toolsLoading}
               error={combineErrors(toolsError, overlayError)}
@@ -373,8 +547,34 @@ export default function App() {
             />
           )}
 
+          {page === 'capabilities' && (
+            <CapabilitiesPage
+              role={role}
+              mfa={mfaProviders}
+              mfaLoading={mfaProvidersLoading}
+              mfaError={mfaProvidersError}
+              onRefreshMfa={() => void loadMfaProviders()}
+            />
+          )}
+
+          {page === 'ops' && (
+            <OpsPage
+              role={role}
+              breakerStatus={breakerStatus}
+              breakerLoading={breakerLoading}
+              breakerError={breakerError}
+              onRefreshBreaker={() => void loadBreaker(true)}
+              onBreakerChanged={() => {
+                void loadBreaker();
+                void loadAudit();
+              }}
+              onRoleChange={switchRole}
+            />
+          )}
+
           {page === 'audit' && (
             <AuditPage
+              role={role}
               audit={audit}
               auditValid={auditValid}
               auditChecked={auditChecked}
@@ -391,9 +591,15 @@ export default function App() {
         <ConfirmationModal
           pending={pending}
           busy={busy}
-          otp={otp}
-          setOtp={setOtp}
-          onDecision={(approved) => void decide(approved)}
+          mfaToken={mfaToken}
+          setMfaToken={setMfaToken}
+          mfaProvider={mfaProvider}
+          setMfaProvider={setMfaProvider}
+          mfaProviders={mfaProviders?.providers ?? []}
+          mfaProvidersLoading={mfaProvidersLoading}
+          mfaProvidersError={mfaProvidersError}
+          onRefreshMfaProviders={() => void loadMfaProviders()}
+          onDecision={(approved, provider) => void decide(approved, provider)}
           error={actionError}
           writesBlocked={writesBlocked}
           blockReason={blockReason}

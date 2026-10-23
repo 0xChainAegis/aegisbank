@@ -1,4 +1,6 @@
+import type { AegisRole } from './roles';
 import type {
+  ActionJournal,
   AgentRunInput,
   AuditResponse,
   AuditVerification,
@@ -9,12 +11,22 @@ import type {
   BankingOverview,
   BillAnomalies,
   BillReport,
+  BreakerEventsResponse,
+  BreakerPolicy,
+  BreakerStatus,
   CardApplicationsResponse,
   ContactsResponse,
   ExecutionPlan,
+  ImHelp,
+  ImMessageInput,
+  ImMessageReply,
+  MfaProvidersResponse,
   ReadinessSnapshot,
   RenewalReminders,
   RunResponse,
+  SandboxDemoKind,
+  SandboxDemoResult,
+  SandboxPolicyResponse,
   SubscriptionCharges,
   ToolMetadata,
   TrustActionDetail,
@@ -26,6 +38,42 @@ import { normalizeBankingOverview, normalizeReadiness } from './viewModel';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
+let currentRole: AegisRole = 'user';
+
+/** Every request is role-scoped; call this whenever the top-bar role changes. */
+export function setApiRole(role: AegisRole): void {
+  currentRole = role;
+}
+
+export function getApiRole(): AegisRole {
+  return currentRole;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function detailMessage(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object') {
+    const record = detail as Record<string, unknown>;
+    if (typeof record.message === 'string' && record.message.trim()) {
+      const code = typeof record.code === 'string' ? record.code : '';
+      return code ? `${record.message}（${code}）` : record.message;
+    }
+    return JSON.stringify(detail);
+  }
+  return null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -34,11 +82,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
+        'X-Aegis-Role': currentRole,
         ...(init?.headers ?? {}),
       },
     });
   } catch {
-    throw new Error('无法连接后端服务，请确认 AegisBank API 已启动。');
+    throw new ApiError('无法连接后端服务，请确认 AegisBank API 已启动。', 0);
   }
 
   const payload: unknown = await response.json().catch(() => ({}));
@@ -47,13 +96,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       payload !== null && typeof payload === 'object' && 'detail' in payload
         ? (payload as { detail: unknown }).detail
         : null;
-    const message =
-      typeof detail === 'string'
-        ? detail
-        : detail
-          ? JSON.stringify(detail)
-          : `请求失败（HTTP ${response.status}）`;
-    throw new Error(message);
+    const message = detailMessage(detail) ?? `请求失败（HTTP ${response.status}）`;
+    const code =
+      detail && typeof detail === 'object' && 'code' in detail && typeof detail.code === 'string'
+        ? detail.code
+        : undefined;
+    throw new ApiError(message, response.status, code);
   }
   return payload as T;
 }
@@ -132,10 +180,15 @@ export async function resolveConfirmation(
   actionId: string,
   approved: boolean,
   reauthToken?: string,
+  mfaProvider?: string | null,
 ): Promise<RunResponse> {
   return request<RunResponse>(`/confirmations/${encodeURIComponent(actionId)}`, {
     method: 'POST',
-    body: JSON.stringify({ approved, reauth_token: reauthToken || null }),
+    body: JSON.stringify({
+      approved,
+      reauth_token: reauthToken || null,
+      mfa_provider: mfaProvider || null,
+    }),
   });
 }
 
@@ -145,6 +198,116 @@ export async function fetchAudit(limit = 100): Promise<AuditResponse> {
 
 export async function verifyAudit(): Promise<AuditVerification> {
   return request<AuditVerification>('/audit/verify');
+}
+
+/* ------------------------------------------------------------------ */
+/* 阶段 2A：MFA / 步骤日志 / 熔断 / 沙箱 / IM                            */
+/* ------------------------------------------------------------------ */
+
+export async function fetchMfaProviders(): Promise<MfaProvidersResponse> {
+  const payload = await request<Partial<MfaProvidersResponse>>('/mfa/providers');
+  return {
+    providers: payload.providers ?? [],
+    enabled: payload.enabled ?? [],
+    default: payload.default ?? 'otp',
+    kinds: payload.kinds ?? [],
+    simulated: payload.simulated,
+    demo_only: payload.demo_only,
+    note: payload.note,
+  };
+}
+
+export async function fetchActionJournal(actionId: string): Promise<ActionJournal> {
+  return request<ActionJournal>(`/actions/${encodeURIComponent(actionId)}/journal`);
+}
+
+export async function pauseAction(actionId: string, reason = '用户请求暂停'): Promise<unknown> {
+  const params = new URLSearchParams({ reason, user_id: 'demo-user' });
+  return request(`/actions/${encodeURIComponent(actionId)}/pause?${params.toString()}`, {
+    method: 'POST',
+  });
+}
+
+export async function resumeAction(actionId: string): Promise<unknown> {
+  return request(
+    `/actions/${encodeURIComponent(actionId)}/resume?user_id=demo-user`,
+    { method: 'POST' },
+  );
+}
+
+export async function rollbackAction(actionId: string, reason = '用户请求人工回退'): Promise<unknown> {
+  const params = new URLSearchParams({ reason, user_id: 'demo-user' });
+  return request(`/actions/${encodeURIComponent(actionId)}/rollback?${params.toString()}`, {
+    method: 'POST',
+  });
+}
+
+export async function fetchBreakerStatus(): Promise<BreakerStatus> {
+  return request<BreakerStatus>('/trust/circuit-breaker');
+}
+
+export async function fetchBreakerPolicy(): Promise<BreakerPolicy> {
+  return request<BreakerPolicy>('/trust/breaker/policy');
+}
+
+export async function fetchBreakerEvents(limit = 50): Promise<BreakerEventsResponse> {
+  return request<BreakerEventsResponse>(
+    `/trust/breaker/events?limit=${encodeURIComponent(limit)}`,
+  );
+}
+
+export async function unlockBreaker(): Promise<BreakerStatus> {
+  return request<BreakerStatus>('/trust/breaker/unlock', { method: 'POST' });
+}
+
+export async function fetchSandboxPolicy(): Promise<SandboxPolicyResponse> {
+  const payload = await request<Partial<SandboxPolicyResponse>>('/sandbox/policy');
+  const policy = payload.policy ?? {
+    enabled: payload.enabled ?? false,
+    timeout_seconds: payload.timeout_seconds ?? 0,
+    max_output_bytes: payload.max_output_bytes ?? 0,
+    max_argument_bytes: payload.max_argument_bytes ?? 0,
+    block_network: payload.block_network ?? false,
+    allowed_tools: payload.allowed_tools ?? [],
+    tool_whitelist_enforced: payload.tool_whitelist_enforced ?? false,
+  };
+  return {
+    ...policy,
+    ...payload,
+    policy,
+    guards: payload.guards ?? [],
+    demo_kinds: payload.demo_kinds ?? ['network', 'slow', 'oversize'],
+    network_block_active: payload.network_block_active ?? false,
+    executor: payload.executor ?? null,
+  };
+}
+
+export async function runSandboxDemo(kind: SandboxDemoKind): Promise<SandboxDemoResult> {
+  return request<SandboxDemoResult>('/sandbox/demo/run', {
+    method: 'POST',
+    body: JSON.stringify({ kind }),
+  });
+}
+
+export async function fetchImHelp(): Promise<ImHelp> {
+  return request<ImHelp>('/channels/im/help');
+}
+
+export async function sendImMessage(input: ImMessageInput): Promise<ImMessageReply> {
+  const payload = await request<Partial<ImMessageReply>>('/channels/im/message', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return {
+    channel: payload.channel ?? input.channel,
+    sender_id: payload.sender_id ?? input.sender_id,
+    message_id: payload.message_id ?? input.message_id ?? null,
+    replayed: payload.replayed === true,
+    text: payload.text ?? '',
+    status: payload.status ?? 'unknown',
+    structured: payload.structured ?? {},
+    confirmation: payload.confirmation ?? null,
+  };
 }
 
 /* ------------------------------------------------------------------ */
