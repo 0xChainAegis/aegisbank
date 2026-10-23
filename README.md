@@ -49,6 +49,8 @@ AegisBank 试图证明八件事：
 7. 失败与未知状态不会被伪装成成功；
 8. 日志可验证、事实来源可分层。
 
+> 以上为对外表述的八项承诺；内部 10 条信任不变量与逐条状态见 [安全自评报告](deliverables/05-安全自评报告.md) §3.2。
+
 ### 1.3 可替换性：控制平面独立于数据源
 
 所有余额、流水、账单、持仓与订阅事实都来自仓库中的 Mock Bank Core，Planner 与 LLM 不能编造金融数据。当前用 SQLite 承载 Mock 数据只是为了本地一键运行；控制平面（Planner / Compiler / 风险 / 网关 / 信任层 / 审计）与具体数据源解耦，接入真实银行核心时可替换数据层而不改变 Agent 主流程。
@@ -82,10 +84,10 @@ AegisBank 适合作为银行 Agent 原型的安全控制面参考实现、多工
 | 注入防御：防止特殊 Prompt 绕过权限控制 | 网关 `scan_injection` 在规划前与节点级各扫描一次，命中即整条请求拒绝并写审计；注入命中累计触发熔断 | §4.3；`test_trust.py::test_injection_is_rejected_before_planner` |
 | 操作审计：记录完整决策链路与执行日志 | 每条审计包含触发时间、原始指令、DAG 路径、工具入参、执行结果、用户确认状态六字段，并附风险与证据分层；SHA-256 哈希链可在线校验 | §4.3；`GET /api/audit/verify` |
 | 异常熔断：连续失败或可疑行为触发安全锁定 | 连续失败、短时多次红色操作、注入命中累计三类规则共用 open 状态；触发后写操作 fail closed；operator 解锁写审计 | §4.3；`test_breaker.py` 7 条 |
-| 沙箱环境：生成的代码在受限、可监控环境中运行 | 所有工具经 `ToolExecutor` + `ExecutionGuard`：超时、socket 级网络阻断、入参 8 KB / 出参 64 KB、可选工具白名单；违规先写审计再拒绝 | §4.3；`test_sandbox.py` 8 条 |
+| 沙箱环境：受限、可监控的执行环境 | 所有工具经 `ToolExecutor` + `ExecutionGuard`：超时、socket 级网络阻断、入参 8 KB / 出参 64 KB、可选工具白名单；违规先写审计再拒绝。本项目不执行任意生成代码，沙箱作用于注册工具 | §4.3；`test_sandbox.py` 8 条 |
 | 意图理解：支持模糊表达、省略上下文、隐含意图 | 规则 Planner 为默认与安全兜底；缺参支持限时单次续问；否定与多意图冲突转澄清，不静默猜测收款人、金额或产品 | §4.3；`test_security_regressions.py` |
 | 任务规划：复杂任务拆解为有序 DAG，支持中断、回退与人工接管 | `ExecutionPlan/v1` → 编译器拓扑排序；步骤级暂停/恢复、逆序补偿、执行 journal、`UNKNOWN` 人工对账 | §4.2；`test_compensation.py` 10 条 |
-| APP / IM 等渠道 | React 控制台；`im / cli / webhook` 渠道适配器复用同一 Planner、风险、网关、MFA 与审计链；`message_id` 幂等回放 | §4.3；`test_im_channel.py` 7 条 |
+| APP / IM 等渠道 | 响应式 Web 控制台（未打包原生 APP）；`im / cli / webhook` 渠道适配器复用同一 Planner、风险、网关、MFA 与审计链；`message_id` 幂等回放 | §4.3；`test_im_channel.py` 7 条 |
 
 ### 2.2 作品资料要求
 
@@ -96,18 +98,18 @@ AegisBank 适合作为银行 Agent 原型的安全控制面参考实现、多工
 | 部署说明 | [`deliverables/06-部署说明.md`](deliverables/06-部署说明.md)；§7 快速开始 |
 | 测试用例与复现步骤 | [`deliverables/07-测试与复现.md`](deliverables/07-测试与复现.md)；§9 测试与验证 |
 | 安全自评报告：权限分级实现说明及已知风险清单 | [`deliverables/05-安全自评报告.md`](deliverables/05-安全自评报告.md) |
-| 作品简介（≤ 200 字，含创作理念与 AI 技术） | 本文档开头；[`deliverables/01-作品简介.md`](deliverables/01-作品简介.md) |
-| 答辩 PPT（≤ 10 分钟）与演示视频（≤ 5 分钟） | [`deliverables/03-AegisBank-答辩PPT.pptx`](deliverables/03-AegisBank-答辩PPT.pptx)（14 页，含备注）；[`deliverables/04-演示视频脚本.md`](deliverables/04-演示视频脚本.md)（脚本完成，成片待录制） |
+| 作品简介（≤ 200 字，含创作理念与 AI 技术） | 本文档开头（创作理念见 §1.1、AI 技术见 §1.4）；[`deliverables/01-作品简介.md`](deliverables/01-作品简介.md) |
+| 答辩 PPT（≤ 10 分钟）与演示视频（≤ 5 分钟） | [`deliverables/03-AegisBank-答辩PPT.pptx`](deliverables/03-AegisBank-答辩PPT.pptx)（14 页，含备注；按 10 分钟设计，实际时长待排练）；[`deliverables/04-演示视频脚本.md`](deliverables/04-演示视频脚本.md)（脚本完成，成片待录制） |
 
 ---
 
 ## 3. 六场景覆盖
 
-赛题要求至少覆盖 3 个核心场景、鼓励全覆盖。AegisBank 已实现 **6/6**：
+赛题要求至少覆盖 3 个核心场景、鼓励全覆盖。AegisBank 已实现 **6/6 场景方向覆盖**——六个方向均有可运行链路，但不等于赛题示例中每个子能力都完整实现（如 AA 为「本人垫付后向参与者分摊付款」，理财不含产品推荐与对比）：
 
 | 场景 | 已实现的典型能力 | 风险分级示例 |
 |---|---|---|
-| 一、智能转账 | 按账户/联系人/别名/手机号转账；AA 拆分并生成可并行的多步 DAG；定时/周期转账（到期由 `run_due_tasks` 执行，重复调用不重复扣款）；联系人多命中或未命中一律澄清，不猜测收款人 | 880 元黄色；同日再转 500 元使累计超过 1000 元后升级红色 + OTP；单笔 > 5000 元红色 |
+| 一、智能转账 | 按账户/联系人/别名/手机号转账；AA 拆分（本人垫付后向其余参与者分摊付款）并生成可并行的多步 DAG；定时/周期转账（到期由 `run_due_tasks` 执行，重复调用不重复扣款）；联系人多命中或未命中一律澄清，不猜测收款人 | 880 元黄色；同日再转 500 元使累计超过 1000 元后升级红色 + OTP；单笔 > 5000 元红色 |
 | 二、账单分析 | 月度/年度账单（分类汇总、Top 商户、环比、异常说明）；异常检测（重复扣费、超预算、订阅金额突增、非活跃时段交易）；订阅扣费识别与续费提醒 | 纯查询，绿色自动执行 |
 | 三、理财操作 | 5 个模拟产品（R1–R5）与风险测评；模拟持仓与收益；申购、赎回；接口返回 `simulated=true` 与免责声明 | 申购红色；赎回 ≤ 1000 元黄色 / > 1000 元红色 |
 | 四、卡片管理 | 还款日调整、额度调整、单日交易限额设置/解锁、挂失/解挂、密码重置、虚拟卡申请与发卡 | 还款日/限额/虚拟卡黄色；额度或限额 > 5000 元、挂失、密码重置红色 |
@@ -134,7 +136,7 @@ step-1: query_bill
 step-2: cancel_subscription
 ```
 
-生日准备则生成 4 步 DAG：`query_contact_birthday`（绿）→ `lock_budget_funds`（黄，可补偿解锁）→ `schedule_flower_order`（黄）→ `schedule_cake_order`（黄），礼物在生日前 2 天由 `run_due_tasks` 触发。全部数据为模拟数据，不产生真实资金变动。
+生日准备则生成 4 步 DAG：`query_contact_birthday`（绿）→ `lock_budget_funds`（黄，可补偿解锁）→ 并行预约 `schedule_flower_order` 与 `schedule_cake_order`（黄，两者均只依赖前两步），礼物在生日前 2 天由 `run_due_tasks` 触发。全部数据为模拟数据，不产生真实资金变动。
 
 ---
 
@@ -149,6 +151,8 @@ step-2: cancel_subscription
 | 🔴 红色 | 资金变动、账户安全或高风险设置：单笔转账 > 5000 元，或当日累计将 > 1000 元；挂失/解挂；密码重置；理财申购；赎回 > 1000 元；额度/限额调整 > 5000 元；定时转账 > 1000 元 | 确认 + 二次身份校验（演示 OTP / 模拟生物识别）+ `ActionEnvelope` 执行前复核 |
 
 > 以上阈值是确定性演示规则，不是生产反欺诈、信用评分或监管风控模型。风险结果会同时出现在 Agent 响应、计划步骤的 `risk_level / risk_reasons`、待确认动作、审计记录与前端风险徽标中。
+>
+> 口径说明：赛题权限分级示例把「订阅查询/取消」归入黄色；本项目按「只读纯查询不弹确认」原则将订阅查询归绿色、取消订阅归黄色。该差异已在 [安全修复记录](docs/REMEDIATION-PLAN-2026-10-23.md) 中标注，等待组委会口径确认。
 
 ### 4.2 统一网关、确认绑定与状态机
 
@@ -178,14 +182,14 @@ step-2: cancel_subscription
 | 审计与证据分层 | 六字段审计 + 四类证据来源（Mock 数据 / 人工确认 / 策略判断 / 审计链）+ SHA-256 哈希链在线校验 | 本地可验证审计，不是 WORM 监管存储；高权限者可重算整链 |
 | 可疑行为熔断 | 连续失败、短时多次红色操作、注入命中累计三类规则共用 open 状态；写操作 fail closed；operator 解锁留痕 | 系统级计数，未按用户/租户分桶 |
 | 可插拔 MFA | OTP + 模拟生物识别；策略按风险等级与敏感工具给出提示，执行取允许 provider 交集；成功/失败均入审计 | 固定演示 token；错误计数进入系统级熔断，但无按用户的失败锁定与速率限制 |
-| 工具沙箱 | `ToolExecutor` + `ExecutionGuard`：超时、socket 级网络阻断、入参 8 KB / 出参 64 KB、可选白名单；违规先写审计再拒绝 | 进程内演示级守卫，不是 OS 容器；无内存/CPU/文件系统隔离 |
+| 工具沙箱 | `ToolExecutor` + `ExecutionGuard`：超时、socket 级网络阻断、入参 8 KB / 出参 64 KB、可选白名单；违规先写审计再拒绝；不执行任意生成代码 | 进程内演示级守卫，不是 OS 容器；无内存/CPU/文件系统隔离 |
 | 渠道复用同一链路 | `im / cli / webhook` 复用同一 Planner、风险、网关、MFA 与审计；`message_id` 幂等 | 未校验 IM 平台签名；`sender_id` 未与真实用户绑定 |
 | 补偿与回退 | 28 条补偿规格（15 可补偿 / 13 不可逆）；逆序补偿；补偿前网关复检；不可逆步骤阻断 | 仅覆盖已登记规格；部分红色补偿需二次校验并转人工 |
 | 多角色与撤权 | `user / operator / auditor` 能力矩阵；operator 可解锁熔断与紧急撤权但不能执行银行工具；auditor 只读；撤权立即阻断并留痕 | 角色能力由 `AuthzService` 统一口径，前端只做展示 |
 
 ### 4.4 2026-10-23 安全复审与修复
 
-交付前，项目对照赛题要求与安全边界做了一轮系统复审：隔离复现了 **37 项后端问题与 11 项前端问题**（含漏洞、数据正确性与体验缺陷），逐项修复并补齐回归。在首轮修复之后，修复分支的最终复核又追加了 B36/B37 两项正常用户流程反例（理财申购后全额赎回再回滚、本人账户互转后回滚），修复后通过。重点加固包括：
+交付前，项目对照赛题要求与安全边界做了一轮系统复审：隔离复现了 **37 项后端问题与 11 项前端问题**（含漏洞、数据正确性与体验缺陷），逐项修复并补齐回归。在首轮修复之后，最终复核又追加了两项正常用户流程反例（理财申购后全额赎回再回滚、本人账户互转后回滚），修复后通过。重点加固包括：
 
 - **账本/审计/执行事务原子性**：工具副作用、成功审计与 journal 统一事务，任一提交点故障不得出现「扣款但失败且无证据」；
 - **并发资金安全**：事务内条件扣款与受影响行校验，并发转账不出现负余额；并发回滚与恢复最多一次冲正；
@@ -208,7 +212,7 @@ step-2: cancel_subscription
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │ React 19 + TypeScript + Vite 控制台                          │
-│ 银行概览 │ 六场景面板 │ 任务控制台 │ 权限控制台 │ 操作审计     │
+│ 银行概览 │ 六场景面板 │ 任务控制台 │ 权限控制台 │ 2A/运维/审计 │
 └────────────────────────────┬────────────────────────────────┘
                              │ /api（readiness 未就绪时禁用写操作）
 ┌────────────────────────────▼────────────────────────────────┐
@@ -323,14 +327,14 @@ GET  /api/wealth/products|holdings|orders      理财（模拟数据）
 GET  /api/bills/report | /api/bills/anomalies  账单报告与异常
 GET  /api/subscriptions/charges | /api/subscriptions/reminders  扣费识别与续费提醒
 GET  /api/cards/applications          虚拟卡申请
-POST /api/automation/run-due          演示时间快进：执行到期定时任务
+POST /api/automation/run-due          演示时间快进：执行到期定时任务（支持 now 参数）
 ```
 
 ---
 
 ## 6. 界面预览
 
-以下图片均来自本地运行中的真实控制台，存放于 `docs/screenshots/`。
+以下为界面截图（来自本地运行中的控制台）与产品介绍页渲染图，存放于 `docs/screenshots/`。
 
 ### 银行概览
 
@@ -353,7 +357,7 @@ POST /api/automation/run-due          演示时间快进：执行到期定时任
 前置条件：
 
 - Python 3.11+、`uv`
-- Node.js 22.22.2+（22.x）或 24.15.0+（24.x）、`pnpm`
+- Node.js 22.22.2+（22.x）、24.15.0+（24.x）或 26.0.0+、`pnpm`
 - Linux / WSL Ubuntu 24.04 环境
 
 ```bash
@@ -386,9 +390,9 @@ cd frontend
 pnpm dev
 ```
 
-> 演示数据（含 3000 元虚拟卡 `ACC-3003` / `CARD-9001`）需先执行 `bash scripts/seed-demo.sh`，并让后端指向 `backend/data/dogfood.db`（绝对路径）；`scripts/dev.sh` 默认使用 `backend/data/aegisbank.db`。详见 [`deliverables/06-部署说明.md`](deliverables/06-部署说明.md) §3。
+> 演示数据（含 3000 元虚拟卡 `ACC-3003` / `CARD-9001`）需先执行 `bash scripts/seed-demo.sh`，并让后端指向该文件的**绝对路径**（例如 `/home/<user>/aegisbank/backend/data/dogfood.db`）；`scripts/dev.sh` 默认使用 `backend/data/aegisbank.db`。详见 [`deliverables/06-部署说明.md`](deliverables/06-部署说明.md) §3。
 
-可选配置（复制根目录 `.env.example` 到 `backend/.env`）：
+可选配置（复制根目录 `.env.example` 到 `backend/.env`；以下为可用变量示例，`.env.example` 只含基础项，其余可直接在 `backend/.env` 追加）：
 
 ```bash
 AEGIS_DATABASE_PATH=data/aegisbank.db
@@ -420,12 +424,12 @@ AEGIS_CIRCUIT_BREAKER_LOCK_SECONDS=60
 3. 执行「分析我的账单并取消异常订阅」，查看两步 DAG 与变量解析结果；
 4. 执行「向 ACC-2002 转账 880 元」完成黄色确认；同日再转 500 元，观察累计风险升级为红色并输入演示 OTP `246810`；
 5. 执行「买 1000 元稳健短债A」（红色 + OTP）与「给妈妈转 500 元」；场景数据页（只读）核对理财持仓、账单与订阅明细；
-6. 执行「这顿 300 元 4 个人 AA」，观察并行转账 DAG；
+6. 执行「和妈妈、老爸、张三 AA 300 元（4 人）」，观察 3 笔并行转账 DAG；
 7. 执行「帮我准备下个月妈妈的生日，预算 1000 元」，观察 4 步跨场景 DAG（查生日 → 锁预算 → 鲜花/蛋糕）；
-8. 在场景数据页点击「时间快进」（`POST /api/automation/run-due`），观察到期任务执行与审计 `trigger_source=scheduled`；
+8. 把时间快进到生日前 2 天（`POST /api/automation/run-due?now=2026-11-16T12:00:00%2B08:00`），观察鲜花/蛋糕到期下单与审计 `trigger_source=scheduled`；前端「时间快进」按当前时间执行，当前无到期任务时返回 0 条；
 9. 权限控制台撤回某工具权限，再次执行应被网关阻断；
-10. 操作审计页校验 SHA-256 哈希链并展开证据分层；任务控制台查看 `UNKNOWN` 与对账入口；
-11. 演示回退补偿、熔断解锁、MFA 生物识别、IM 通道、沙箱拦截与多角色切换（前端 2A 能力页 / 运维面板，或对应 `/api` 端点）。
+10. 操作审计页校验 SHA-256 哈希链并展开证据分层；
+11. 演示回退补偿、熔断解锁、MFA 生物识别、IM 通道、沙箱拦截与多角色切换（前端 2A 能力页 / 运维面板，或对应 `/api` 端点）；执行不可逆回滚演示后，任务控制台会出现 `UNKNOWN` 与人工对账入口。
 
 接口级快速验证（服务启动后）：
 
@@ -462,8 +466,8 @@ curl -s -X POST 'http://127.0.0.1:8000/api/compensation/demo/run?mode=irreversib
 | 工具 / 接口 | **50 个工具 / 49 个 `/api` 路径** | `GET /api/tools`、`GET /api/planner/info`、`/docs` |
 | 补偿规格 | **28 条（15 可补偿 / 13 不可逆）** | `GET /api/compensation/specs` |
 | 审计链 | `{"valid": true, "checked": N}` | `GET /api/audit/verify` |
-| 门禁 | encoding / lint / build / test / security **五阶段 PASS** | `gate.ps1 -Repo <repo>` |
-| 依赖扫描 | `pnpm audit` 与 `pip-audit` 生产依赖 **0 项已知漏洞** | 见 [安全修复记录](docs/REMEDIATION-PLAN-2026-10-23.md) |
+| 门禁 | encoding / lint / build / test / security **五阶段 PASS** | 维护者 DSH gate（仓库外脚本）；等价验证：`bash scripts/lint.sh` + `build.sh` + `test.sh` + 依赖扫描 |
+| 依赖扫描 | 扫描当时 `pnpm audit`（全量）与 `pip-audit`（生产依赖）均 **0 项已知漏洞**；零命中不证明不存在未知漏洞 | 见 [安全修复记录](docs/REMEDIATION-PLAN-2026-10-23.md) |
 
 工程命令：
 
@@ -484,12 +488,12 @@ bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 |---|---|---|---|
 | 01 | 作品简介（≤ 200 字，含压缩版） | [`deliverables/01-作品简介.md`](deliverables/01-作品简介.md) | ✅ 已完成 |
 | 02 | 技术文档（架构图 / 核心算法 / 安全设计） | [`deliverables/02-技术文档.md`](deliverables/02-技术文档.md) | ✅ 已完成 |
-| 03 | 答辩 PPT（≤ 10 分钟，14 页，含备注） | [`deliverables/03-AegisBank-答辩PPT.pptx`](deliverables/03-AegisBank-答辩PPT.pptx) | ✅ 已生成 |
-| 04 | 演示视频（≤ 5 分钟）分镜与口播稿 | [`deliverables/04-演示视频脚本.md`](deliverables/04-演示视频脚本.md) | ✅ 脚本完成；成片待录制 |
+| 03 | 答辩 PPT（14 页，含备注；按 10 分钟设计） | [`deliverables/03-AegisBank-答辩PPT.pptx`](deliverables/03-AegisBank-答辩PPT.pptx) | ✅ 已生成；实际汇报时长待排练 |
+| 04 | 演示视频（≤ 5 分钟）分镜与口播稿 | [`deliverables/04-演示视频脚本.md`](deliverables/04-演示视频脚本.md) | ⚠️ 未完成：脚本完成，成片待录制 |
 | 05 | 安全自评报告（权限分级 + 已知风险清单） | [`deliverables/05-安全自评报告.md`](deliverables/05-安全自评报告.md) | ✅ 已完成 |
 | 06 | 部署说明（环境、启动、配置、排障） | [`deliverables/06-部署说明.md`](deliverables/06-部署说明.md) | ✅ 已完成 |
 | 07 | 测试与复现（用例矩阵、命令、预期输出） | [`deliverables/07-测试与复现.md`](deliverables/07-测试与复现.md) | ✅ 已完成 |
-| — | 架构图（PNG / SVG / Mermaid）与真实截图 | [`docs/architecture/`](docs/architecture/)、[`docs/screenshots/`](docs/screenshots/) | ✅ 已完成；阶段 2.5 后更新截图 |
+| — | 架构图（PNG / SVG / Mermaid）与界面截图 | [`docs/architecture/`](docs/architecture/)、[`docs/screenshots/`](docs/screenshots/) | ✅ 架构图已完成；⚠️ 截图待阶段 2.5 更新 |
 
 交付包总索引见 [`deliverables/README.md`](deliverables/README.md)。
 
@@ -501,9 +505,10 @@ AegisBank 是**安全自治 Agent 的可运行原型**，以下边界是刻意�
 
 - **模拟银行数据**：全部账户、卡片、交易、账单、订阅、理财、余额与转账结果为 Mock Bank Core 模拟数据，不连接真实银行接口，不产生真实资金变动；理财内容不构成投资建议；
 - **无真实身份认证**：固定演示用户 `demo-user`，未接入登录、会话、设备指纹或真实身份服务；`X-Aegis-Role` 由客户端自报，服务端只做角色能力与权限校验；
+- **Web 与 IM 渠道**：内置响应式 Web 控制台（未打包原生 APP）与 `im / cli / webhook` 模拟适配器；IM 适配器未校验平台签名，`sender_id` 未与真实用户绑定；
 - **演示级 MFA**：固定 OTP `246810`、模拟生物识别 token `FACE-888888` 与演示审批令牌仅用于本地流程展示；错误强验证会计数并进入系统级熔断，但没有按用户的失败锁定、速率限制与生产级抗重放；
 - **演示级风险规则**：动态风险引擎是确定性规则，不是生产反欺诈、信用评分或监管风控模型；
-- **进程内沙箱**：socket 级网络阻断、线程超时、入参/出参体积与白名单，不是 OS 容器；Python 线程无法强杀，超时后数据库外副作用仍依赖 OS 隔离；
+- **进程内沙箱**：socket 级网络阻断、线程超时、入参/出参体积与白名单，不是 OS 容器；Python 线程无法强杀，超时后数据库外副作用仍依赖 OS 隔离；本项目只执行注册工具，不提供任意生成代码入口；
 - **单机持久化**：SQLite 适合本地原型，不满足银行级高可用、容灾与隔离；幂等键、`used_nonces` 与 `im_messages` 无 TTL 清理；熔断为系统级计数；
 - **有限安全防护**：注入检测、权限网关、`ActionEnvelope`、幂等与哈希链是基线，不替代专用安全策略引擎、OS 沙箱、限流、CSRF/mTLS 与渗透测试；本地哈希链只能发现记录级篡改，不是 WORM；
 - **补偿有边界**：只覆盖已登记的 28 条规格；不可逆步骤阻止自动回滚；部分红色补偿需二次校验并转人工对账；
@@ -544,6 +549,8 @@ AegisBank 是**安全自治 Agent 的可运行原型**，以下边界是刻意�
 - [单文件产品介绍页](docs/product-overview.html)
 - [真实截图目录](docs/screenshots/README.md)
 - [完整架构图 PNG](docs/architecture/aegisbank-architecture.png) ｜ [Mermaid 源文件](docs/architecture/aegisbank-architecture-v2.mmd)
+
+> 部分历史规划/环境文档（如 MASTER-PLAN、DEVELOPMENT-ENVIRONMENT）保留阶段性数字（48 个工具、144 项测试、27 条补偿规格等），当前口径以本 README、[安全自评报告](deliverables/05-安全自评报告.md) 与实际测试输出（50 / 187 / 28）为准。
 
 ### 12.2 贡献
 
