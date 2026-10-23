@@ -1,5 +1,5 @@
-import { FormEvent, useMemo } from 'react';
-import { formatCny, riskDescriptions } from '../risk';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { formatCny } from '../risk';
 import type { AegisRole } from '../roles';
 import { canExecuteTools, roleTaskBlockReason } from '../roles';
 import type {
@@ -16,6 +16,8 @@ import {
   collectRiskReasons,
   formatDateTime,
   formatDisplayValue,
+  receiptHeadline,
+  resultExecutedAt,
   resultRiskLevel,
   runRiskLevel,
   statusDescription,
@@ -201,6 +203,9 @@ interface Props {
   onExecute: (input: AgentRunInput) => void;
   onRefresh: () => void;
   onRecoveryChanged: (journal: ActionJournal, response: unknown) => void;
+  onNavigateAudit: () => void;
+  onReconcile: (outcome: 'reconciled' | 'rolled_back') => void;
+  reconciling: boolean;
 }
 
 export default function TaskConsolePage({
@@ -223,6 +228,9 @@ export default function TaskConsolePage({
   onExecute,
   onRefresh,
   onRecoveryChanged,
+  onNavigateAudit,
+  onReconcile,
+  reconciling,
 }: Props) {
   const toolNames = useMemo(() => new Set(tools.map((tool) => tool.name)), [tools]);
   const riskReasons = useMemo(() => (lastRun ? collectRiskReasons(lastRun) : []), [lastRun]);
@@ -235,6 +243,26 @@ export default function TaskConsolePage({
     : writesBlocked
       ? `写操作已按 fail-closed 禁用：${blockReason}`
       : '';
+
+  const demoActions = useMemo(() => {
+    const all = scenarioGroups.flatMap((group) => group.actions);
+    return [
+      all.find((action) => action.id === 'bill-analyze'),
+      all.find((action) => action.id === 'transfer-small'),
+    ].filter((action): action is ScenarioAction => Boolean(action));
+  }, []);
+  const resultRef = useRef<HTMLDivElement | null>(null);
+  const wasBusyRef = useRef(false);
+  const lastQuickInstructionRef = useRef('');
+  const [quickNotice, setQuickNotice] = useState('');
+
+  // 提交完成后把回执滚进视口（UX-06）：否则用户会以为「点了没反应」。
+  useEffect(() => {
+    if (wasBusyRef.current && !busy && lastRun) {
+      resultRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+    wasBusyRef.current = busy;
+  }, [busy, lastRun]);
   const journalActionId =
     lastRun && journalEligibleStatus(lastRun.status)
       ? lastActionId ?? lastRun.run_id
@@ -249,7 +277,25 @@ export default function TaskConsolePage({
 
   function trigger(action: ScenarioAction) {
     if (busy || taskBlocked) return;
+    const current = instruction.trim();
+    // 内置演示指令（快捷动作/演示路径填入过）视为"已知来源"，返回页面后再点仍可一键执行；
+    // 只有用户自己手写的文本才只填入、不自动执行（UX-08）。
+    const builtInInstructions = new Set(
+      scenarioGroups.flatMap((group) => group.actions.map((item) => item.instruction)),
+    );
+    const canAutoRun =
+      !current ||
+      current === action.instruction ||
+      current === lastQuickInstructionRef.current ||
+      builtInInstructions.has(current);
     setInstruction(action.instruction);
+    lastQuickInstructionRef.current = action.instruction;
+    if (!canAutoRun) {
+      // 不静默覆盖用户已输入的内容（UX-08）：只填入，等用户自己提交。
+      setQuickNotice(`已填入「${action.title}」指令。确认内容后点击「交给 Agent」执行。`);
+      return;
+    }
+    setQuickNotice('');
     onExecute({
       instruction: action.instruction,
       tool_name: action.toolName,
@@ -307,6 +353,26 @@ export default function TaskConsolePage({
           </button>
         </div>
 
+        <div className="demo-path" aria-label="演示路径">
+          <span className="eyebrow">演示路径</span>
+          {demoActions.map((action, index) => (
+            <button
+              key={action.id}
+              className="demo-step"
+              onClick={() => trigger(action)}
+              disabled={busy || taskBlocked}
+              title={action.hint}
+            >
+              <span>{index + 1}</span>
+              {action.id === 'bill-analyze' ? '分析本月账单' : '小额转账 ¥880'}
+            </button>
+          ))}
+          <button className="demo-step" onClick={onNavigateAudit} disabled={busy}>
+            <span>3</span>
+            查看审计与哈希链
+          </button>
+        </div>
+
         {taskBlocked && (
           <div className="alert alert-warn command-blocked" role="alert">
             {taskBlockText}
@@ -321,7 +387,10 @@ export default function TaskConsolePage({
           <textarea
             id="instruction"
             value={instruction}
-            onChange={(event) => setInstruction(event.target.value)}
+            onChange={(event) => {
+              setInstruction(event.target.value);
+              setQuickNotice('');
+            }}
             rows={3}
             placeholder="例如：分析我的本月账单和所有订阅，找出异常订阅并取消它"
           />
@@ -335,10 +404,22 @@ export default function TaskConsolePage({
           </button>
         </form>
 
+        {busy && (
+          <div className="progress-line" role="status" aria-live="polite">
+            <span className="loading-spinner" aria-hidden="true" />
+            <span>正在解析意图、校验权限与风险，请稍候…</span>
+          </div>
+        )}
+        {quickNotice && (
+          <div className="alert alert-info" role="status">
+            {quickNotice}
+          </div>
+        )}
+
         <div className="scenario-heading">
           <div>
             <span className="eyebrow">SCENARIO LAUNCHPAD</span>
-            <h3>三场景快捷操作 + 跨场景编排</h3>
+            <h3>快捷操作（携带演示参数）</h3>
           </div>
           <span className="muted">快捷入口会携带演示参数，仍全部经过权限网关与风险引擎</span>
         </div>
@@ -404,7 +485,7 @@ export default function TaskConsolePage({
       <PageAlerts error={error} notice={notice} />
 
       {lastRun && (
-        <div className="card result-card">
+        <div className="card result-card" ref={resultRef}>
           <div className="section-head">
             <div>
               <span className="eyebrow">RUN RESULT</span>
@@ -416,23 +497,57 @@ export default function TaskConsolePage({
             </div>
           </div>
 
-          <div className="result-summary-grid">
+          <div className="receipt-headline">
+            <strong>{receiptHeadline(lastRun)}</strong>
+            <span className="muted">{lastRun.reason}</span>
+          </div>
+
+          <div className="receipt-facts">
             <div>
-              <span className="eyebrow">RUN ID</span>
-              <code>{lastRun.run_id}</code>
-            </div>
-            <div>
-              <span className="eyebrow">STATUS</span>
+              <span>状态</span>
               <strong>{statusLabel(lastRun.status)}</strong>
             </div>
             <div>
-              <span className="eyebrow">RISK</span>
-              <strong>{riskDescriptions[overallRisk]}</strong>
+              <span>风险等级</span>
+              <strong><RiskBadge risk={overallRisk} verbose /></strong>
+            </div>
+            <div>
+              <span>执行时间</span>
+              <strong>
+                {resultExecutedAt(lastRun) ? formatDateTime(resultExecutedAt(lastRun)) : '—'}
+              </strong>
+            </div>
+            <div>
+              <span>审计编号</span>
+              <strong>{lastRun.audit_id !== undefined ? `#${lastRun.audit_id}` : '—'}</strong>
             </div>
           </div>
 
           <p className="status-description">{statusDescription(lastRun.status)}</p>
-          <p className="result-reason">{lastRun.reason}</p>
+
+          <div className="receipt-actions">
+            <button className="primary-button small-button" onClick={onNavigateAudit}>
+              查看本次审计记录 →
+            </button>
+            {lastRun.status === 'unknown' && (
+              <>
+                <button
+                  className="ghost-button small-button"
+                  onClick={() => onReconcile('reconciled')}
+                  disabled={reconciling || writesBlocked}
+                >
+                  {reconciling ? '处理中…' : '人工对账为已解决'}
+                </button>
+                <button
+                  className="ghost-button small-button"
+                  onClick={() => onReconcile('rolled_back')}
+                  disabled={reconciling || writesBlocked}
+                >
+                  申请人工回滚
+                </button>
+              </>
+            )}
+          </div>
 
           {(lastRun.status === 'unknown' ||
             lastRun.status === 'reconciled' ||
@@ -457,14 +572,6 @@ export default function TaskConsolePage({
             </div>
           )}
 
-          <div className="result-evidence">
-            <span className="eyebrow">EVIDENCE LAYERS</span>
-            <EvidenceBadges
-              evidence={lastRun.evidence ?? lastRun.evidence_list}
-              emptyHint="本次回执未返回分层证据。"
-            />
-          </div>
-
           {riskReasons.length > 0 && (
             <div className={`risk-reason-panel risk-panel-${overallRisk}`}>
               <div className="risk-reason-head">
@@ -485,7 +592,21 @@ export default function TaskConsolePage({
             </div>
           )}
 
-          {lastRun.plan && (
+          <details className="tech-details">
+            <summary>技术详情与证据链（计划 / 入参 / 证据 / 状态机 / 步骤日志）</summary>
+            <div className="result-evidence">
+              <span className="eyebrow">证据分层</span>
+              <EvidenceBadges
+                evidence={lastRun.evidence ?? lastRun.evidence_list}
+                emptyHint="本次回执未返回分层证据。"
+              />
+            </div>
+            <p className="tech-run-id">
+              <span className="eyebrow">RUN ID</span>
+              <code>{lastRun.run_id}</code>
+            </p>
+
+            {lastRun.plan && (
             <div className="plan-block">
               <div className="plan-meta">
                 <span className="eyebrow">STRUCTURED EXECUTION PLAN</span>
@@ -705,6 +826,7 @@ export default function TaskConsolePage({
               onChanged={onRecoveryChanged}
             />
           )}
+          </details>
         </div>
       )}
 

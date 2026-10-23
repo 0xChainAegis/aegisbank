@@ -49,6 +49,17 @@ export function getApiRole(): AegisRole {
   return currentRole;
 }
 
+/**
+ * 生成幂等键（UX-18）。一次逻辑提交生成一次；重试复用同一个 key，
+ * 进入终态后清空。浏览器不支持 randomUUID 时退回时间戳 + 随机数。
+ */
+export function createIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `idem-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -63,6 +74,19 @@ export class ApiError extends Error {
 
 function detailMessage(detail: unknown): string | null {
   if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    // FastAPI 422 的 detail 是数组；直接 JSON.stringify 会把原始结构糊在界面上。
+    const parts = detail
+      .map((item) => {
+        if (!item || typeof item !== 'object') return '';
+        const record = item as Record<string, unknown>;
+        const location = Array.isArray(record.loc) ? record.loc.map(String).join('.') : '';
+        const message = typeof record.msg === 'string' ? record.msg : '';
+        return [location, message].filter(Boolean).join('：');
+      })
+      .filter(Boolean);
+    return parts.length > 0 ? `提交内容校验未通过：${parts.join('；')}` : '提交内容校验未通过。';
+  }
   if (detail && typeof detail === 'object') {
     const record = detail as Record<string, unknown>;
     if (typeof record.message === 'string' && record.message.trim()) {
@@ -74,20 +98,36 @@ function detailMessage(detail: unknown): string | null {
   return null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export interface RequestOptions extends RequestInit {
+  /** 同一逻辑请求重试时复用同一个 key，避免产生第二笔待确认动作。 */
+  idempotencyKey?: string;
+  timeoutMs?: number;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { idempotencyKey, timeoutMs = 30_000, headers, ...init } = options;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
+      signal: init.signal ?? controller?.signal,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         'X-Aegis-Role': currentRole,
-        ...(init?.headers ?? {}),
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+        ...(headers ?? {}),
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('请求超时，请稍后重试。', 0);
+    }
     throw new ApiError('无法连接后端服务，请确认 AegisBank API 已启动。', 0);
+  } finally {
+    if (timer !== null) window.clearTimeout(timer);
   }
 
   const payload: unknown = await response.json().catch(() => ({}));
@@ -169,9 +209,13 @@ export async function previewPlan(input: AgentRunInput): Promise<ExecutionPlan> 
   });
 }
 
-export async function runAgent(input: AgentRunInput): Promise<RunResponse> {
+export async function runAgent(
+  input: AgentRunInput,
+  options: { idempotencyKey?: string } = {},
+): Promise<RunResponse> {
   return request<RunResponse>('/agent/run', {
     method: 'POST',
+    idempotencyKey: options.idempotencyKey,
     body: JSON.stringify({ user_id: 'demo-user', ...input }),
   });
 }
@@ -181,15 +225,31 @@ export async function resolveConfirmation(
   approved: boolean,
   reauthToken?: string,
   mfaProvider?: string | null,
+  options: { idempotencyKey?: string } = {},
 ): Promise<RunResponse> {
   return request<RunResponse>(`/confirmations/${encodeURIComponent(actionId)}`, {
     method: 'POST',
+    idempotencyKey: options.idempotencyKey,
     body: JSON.stringify({
       approved,
       reauth_token: reauthToken || null,
       mfa_provider: mfaProvider || null,
     }),
   });
+}
+
+export async function reconcileAction(
+  actionId: string,
+  outcome: 'reconciled' | 'rolled_back',
+  reason = '',
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(
+    `/trust/actions/${encodeURIComponent(actionId)}/reconcile`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ outcome, reason }),
+    },
+  );
 }
 
 export async function fetchAudit(limit = 100): Promise<AuditResponse> {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunResponse } from './types';
 import {
   collectRiskReasons,
+  confirmationSummary,
   daysLeft,
   evidenceSourceLabel,
   formatChangePct,
@@ -13,6 +14,8 @@ import {
   paginate,
   prettyEvidence,
   readinessBlockers,
+  receiptHeadline,
+  resultExecutedAt,
   runRiskLevel,
   severityLabel,
   statusDescription,
@@ -219,5 +222,75 @@ describe('evidence normalizer', () => {
     expect(evidence[0].verified).toBe(true);
     expect(evidence[1].source).toBe('audit_chain');
     expect(evidence[1].verified).toBe(false);
+  });
+});
+
+describe('confirmation summary (UX-10)', () => {
+  it('turns raw transfer arguments into a human readable sentence', () => {
+    const summary = confirmationSummary({
+      id: 'step-1',
+      tool_name: 'transfer',
+      arguments: {
+        from_account: 'ACC-1001',
+        to_account: 'ACC-2002',
+        amount_cny: 6800,
+        note: '任务控制台 · 大额转账',
+      },
+      depends_on: [],
+    });
+    expect(summary.headline).toContain('6,800');
+    expect(summary.details.join(' ')).toContain('ACC-2002');
+    expect(summary.details.join(' ')).toContain('任务控制台');
+    expect(summary.unresolved).toBe(false);
+  });
+
+  it('flags runtime-resolved placeholders instead of showing raw template text', () => {
+    const summary = confirmationSummary({
+      id: 'step-2',
+      tool_name: 'cancel_subscription',
+      arguments: { subscription_id: '${steps.step-1.data.suspicious_subscription_id}' },
+      depends_on: ['step-1'],
+    });
+    expect(summary.unresolved).toBe(true);
+    expect(summary.details.join(' ')).toContain('执行时确定');
+    expect(summary.details.join(' ')).not.toContain('${steps');
+  });
+
+  it('keeps irreversible steps explicit', () => {
+    const summary = confirmationSummary({
+      id: 'step-3',
+      tool_name: 'report_card_lost',
+      arguments: { card_id: 'CARD-8821' },
+      depends_on: [],
+      irreversible: true,
+    });
+    expect(summary.details.join(' ')).toContain('不可撤销');
+  });
+});
+
+describe('receipt headline (UX-14)', () => {
+  it('prefers the tool result message and exposes execution time', () => {
+    const run: RunResponse = {
+      status: 'completed',
+      run_id: 'run-1',
+      reason: '确认通过，任务已执行。',
+      results: [
+        {
+          tool_name: 'transfer',
+          message: '转账指令已通过风险校验并完成模拟执行。',
+          data: { executed_at: '2026-10-23T08:42:57+00:00' },
+        },
+      ],
+    };
+    expect(receiptHeadline(run)).toContain('转账指令');
+    expect(resultExecutedAt(run)).toBe('2026-10-23T08:42:57+00:00');
+  });
+
+  it('maps terminal states to plain language without leaking status codes', () => {
+    const rejected: RunResponse = { status: 'rejected', run_id: 'run-2', reason: '用户拒绝' };
+    const unknown: RunResponse = { status: 'unknown', run_id: 'run-3', reason: '超时' };
+    expect(receiptHeadline(rejected)).toContain('拒绝');
+    expect(receiptHeadline(unknown)).toContain('人工对账');
+    expect(resultExecutedAt(rejected)).toBe('');
   });
 });

@@ -202,9 +202,11 @@ function RefreshButton({
 interface Props {
   writesBlocked: boolean;
   blockReason: string;
+  /** 时间快进会真实执行到期任务，成功后通知 App 刷新概览 / 审计 / 熔断（UX-22）。 */
+  onDataChanged?: () => void;
 }
 
-export default function ScenariosPage({ writesBlocked, blockReason }: Props) {
+export default function ScenariosPage({ writesBlocked, blockReason, onDataChanged }: Props) {
   /* 理财 */
   const products = useResource(fetchWealthProducts, '无法加载模拟理财产品');
   const holdings = useResource(fetchWealthHoldings, '无法加载模拟理财持仓');
@@ -258,6 +260,7 @@ export default function ScenariosPage({ writesBlocked, blockReason }: Props) {
       const result = await runAutomationDue();
       setRunResult(result);
       await Promise.all([schedules.reload(), goals.reload(), gifts.reload()]);
+      onDataChanged?.();
     } catch (caught) {
       setRunResult(null);
       setRunError(caught instanceof Error ? caught.message : '时间快进失败');
@@ -270,10 +273,10 @@ export default function ScenariosPage({ writesBlocked, blockReason }: Props) {
     <section className="scenarios-page">
       <div className="page-heading">
         <span className="eyebrow">SIX SCENARIOS · READ ONLY + TIME TRAVEL</span>
-        <h1>六场景面板</h1>
+        <h1>场景数据（只读）</h1>
         <p>
-          理财、联系人、账单、订阅、卡片与自动化的统一视图。金融数字全部来自后端模拟数据
-          （simulated=True），不接线真实银行，也不构成投资建议。
+          理财、联系人、账单、订阅、卡片与自动化的统一只读视图：这里只展示数据与时间快进，
+          发起业务请到「任务控制台」。金融数字全部来自后端模拟数据（simulated=True），不接线真实银行。
         </p>
         <small className="page-meta">
           每个数据区独立加载：某个新增接口未就绪时只在该区显示错误/空态，不会影响其它面板。

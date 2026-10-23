@@ -4,6 +4,7 @@ import type {
   BankingCard,
   BankingOverview,
   EvidenceItem,
+  PlanStep,
   ReadinessComponent,
   ReadinessSnapshot,
   ReadinessStatus,
@@ -31,6 +32,9 @@ export const statusLabels: Record<string, string> = {
   executing: '执行中',
   rollback_blocked: '回滚被阻止（存在不可撤销步骤）',
   planned: '计划已生成',
+  awaiting_reauth: '等待二次验证',
+  action_failed: '动作执行失败',
+  completed_with_warnings: '执行完成（有告警）',
 };
 
 export const statusDescriptions: Record<string, string> = {
@@ -85,6 +89,11 @@ export const eventLabels: Record<string, string> = {
   permission_updated: '权限变更',
   injection_blocked: '注入拦截',
   planning_clarification: '规划澄清',
+  action_failed: '动作执行失败',
+  mfa_succeeded: 'MFA 验证通过',
+  action_executed: '动作执行',
+  action_rejected: '动作拒绝',
+  action_expired: '动作过期',
 };
 
 export const confirmationLabels: Record<string, string> = {
@@ -111,6 +120,11 @@ export const confirmationLabels: Record<string, string> = {
   unknown: '结果未知',
   reconciled: '已对账',
   rolled_back: '已回滚',
+  permission_change: '权限变更',
+  reauth_failed: '二次验证失败',
+  ops: '运维操作',
+  demo: '演示数据',
+  scheduled: '定时任务',
 };
 
 export const argumentLabels: Record<string, string> = {
@@ -637,4 +651,165 @@ export function readinessBlockers(snapshot: ReadinessSnapshot | null): string[] 
     );
   }
   return reasons;
+}
+
+/* ------------------------------------------------------------------ */
+/* 确认弹窗与执行回执的「人话」层（UX-10 / UX-14）                        */
+/* ------------------------------------------------------------------ */
+
+export interface StepSummary {
+  /** 一句话说明这笔操作是什么。 */
+  headline: string;
+  /** 补充说明：对象、金额、可逆性、备注。 */
+  details: string[];
+  /** 是否包含运行期才能确定的占位符（如 ${steps.step-1...}）。 */
+  unresolved: boolean;
+}
+
+function hasUnresolved(value: unknown, depth = 0): boolean {
+  if (depth > 4) return false;
+  if (typeof value === 'string') return /\$\{[^}]+\}/.test(value);
+  if (Array.isArray(value)) return value.some((item) => hasUnresolved(item, depth + 1));
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((item) =>
+      hasUnresolved(item, depth + 1),
+    );
+  }
+  return false;
+}
+
+function argumentValue(value: unknown, key: string): string {
+  if (typeof value === 'string') {
+    return /\$\{[^}]+\}/.test(value) ? '执行时确定' : value;
+  }
+  if (typeof value === 'number') {
+    const moneyLike = /(amount|balance|limit|due|cny)/.test(key);
+    return moneyLike ? formatCny(value) : String(value);
+  }
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  if (value === null || value === undefined) return '—';
+  return formatDisplayValue(value);
+}
+
+export function confirmationSummary(step: PlanStep): StepSummary {
+  const args = (step.arguments ?? {}) as Record<string, unknown>;
+  const unresolved = hasUnresolved(args);
+  const text = (key: string): string =>
+    typeof args[key] === 'string' && !/\$\{/.test(String(args[key]))
+      ? String(args[key])
+      : '';
+  const amount = typeof args.amount_cny === 'number' ? args.amount_cny : null;
+  const reversibleNote = step.irreversible
+    ? step.irreversible_reason || '该步骤执行后不可撤销'
+    : '如执行后需要撤销，可在步骤日志中申请人工回退';
+
+  switch (step.tool_name) {
+    case 'transfer': {
+      const from = text('from_account');
+      const to = text('to_account');
+      return {
+        headline: amount !== null ? `转账 ${formatCny(amount)}` : '发起一笔转账',
+        details: [
+          from && to ? `从 ${from} 转到 ${to}` : '转出与转入账户将在执行时确定',
+          to ? `收款账户 ${to}` : '',
+          text('note') ? `备注：${text('note')}` : '',
+          reversibleNote,
+        ].filter(Boolean),
+        unresolved,
+      };
+    }
+    case 'cancel_subscription': {
+      const subscription = text('subscription_id');
+      return {
+        headline: '取消一个订阅',
+        details: [
+          subscription ? `订阅：${subscription}` : '具体订阅由账单分析结果执行时确定',
+          '取消后本周期不再自动扣费',
+          reversibleNote,
+        ].filter(Boolean),
+        unresolved,
+      };
+    }
+    case 'adjust_repayment_date': {
+      const card = text('card_id');
+      const day = args.new_day;
+      return {
+        headline: '调整信用卡还款日',
+        details: [
+          card ? `卡片：${card}` : '卡片在执行时确定',
+          day !== undefined ? `新的还款日：每月 ${argumentValue(day, 'new_day')} 日` : '',
+          reversibleNote,
+        ].filter(Boolean),
+        unresolved,
+      };
+    }
+    case 'set_transaction_limit': {
+      const card = text('card_id');
+      return {
+        headline: '调整单笔交易限额',
+        details: [
+          card ? `卡片：${card}` : '卡片在执行时确定',
+          args.limit_cny !== undefined
+            ? `新限额：${argumentValue(args.limit_cny, 'limit_cny')}`
+            : '',
+          reversibleNote,
+        ].filter(Boolean),
+        unresolved,
+      };
+    }
+    case 'report_card_lost':
+      return {
+        headline: '挂失银行卡',
+        details: [
+          text('card_id') ? `卡片：${text('card_id')}` : '卡片在执行时确定',
+          '挂失后该卡将立即停止交易，属于不可撤销操作',
+        ],
+        unresolved,
+      };
+    case 'unlock_card':
+      return {
+        headline: '解锁银行卡',
+        details: [
+          text('card_id') ? `卡片：${text('card_id')}` : '卡片在执行时确定',
+          reversibleNote,
+        ],
+        unresolved,
+      };
+    default: {
+      const detailKeys = Object.keys(args).slice(0, 4);
+      return {
+        headline: step.title || step.tool_name,
+        details: detailKeys.map(
+          (key) => `${argumentLabels[key] ?? key}：${argumentValue(args[key], key)}`,
+        ),
+        unresolved,
+      };
+    }
+  }
+}
+
+/** 回执首屏的一句话结论（优先使用工具返回的业务消息）。 */
+export function receiptHeadline(run: RunResponse): string {
+  const firstMessage = run.results?.[0]?.message?.trim();
+  if (run.status === 'completed') return firstMessage || '操作已完成';
+  if (run.status === 'rejected') return '操作已拒绝，未执行任何工具';
+  if (run.status === 'failed') return '执行失败，未产生资金变动';
+  if (run.status === 'unknown') return '结果未知：需要人工对账';
+  if (run.status === 'rolled_back') return '已回滚，相关变更已撤销';
+  if (run.status === 'rollback_blocked') return '回滚被阻止：存在不可撤销步骤';
+  if (run.status === 'paused') return '执行已暂停，剩余步骤未执行';
+  if (run.status === 'awaiting_confirmation') return '等待你确认后才会执行';
+  if (run.status === 'needs_clarification') return '需要补充信息后才能继续';
+  if (run.status === 'reconciled') return '已人工对账';
+  return statusLabel(run.status);
+}
+
+/** 从工具结果里取执行时间；没有就退回空串（由调用方展示占位）。 */
+export function resultExecutedAt(run: RunResponse): string {
+  for (const result of run.results ?? []) {
+    const data = result.data as Record<string, unknown> | undefined;
+    const value = data?.executed_at;
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return '';
 }
