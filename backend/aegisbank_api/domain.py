@@ -36,6 +36,8 @@ class ToolMetadata:
     permission: str
     input_schema: dict[str, Any] = field(default_factory=dict)
     output_schema: dict[str, Any] = field(default_factory=dict)
+    compensable: bool = False
+    compensation_tool: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +48,8 @@ class ToolMetadata:
             "permission": self.permission,
             "input_schema": self.input_schema,
             "output_schema": self.output_schema,
+            "compensable": self.compensable,
+            "compensation_tool": self.compensation_tool,
         }
 
 

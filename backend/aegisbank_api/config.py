@@ -27,6 +27,16 @@ class Settings(BaseSettings):
     circuit_breaker_threshold: int = 3
     circuit_breaker_window_seconds: int = 60
     circuit_breaker_lock_seconds: int = 60
+    # stage 2A switches
+    authz_default_role: str = "user"
+    mfa_default_provider: str = "otp"
+    sandbox_enabled: bool = True
+    sandbox_timeout_seconds: float = 5.0
+    sandbox_max_output_bytes: int = 64_000
+    sandbox_block_network: bool = True
+    suspicious_red_events: int = 3
+    suspicious_injection_events: int = 3
+    suspicious_window_seconds: int = 300
 
     @property
     def cors_origin_list(self) -> list[str]:

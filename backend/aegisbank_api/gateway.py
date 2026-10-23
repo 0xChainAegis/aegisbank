@@ -10,6 +10,7 @@ from typing import Any
 from .db import Database
 from .domain import GatewayDecision, RiskLevel
 from .registry import ToolRegistry
+from .trust.authz import AuthzService
 
 INJECTION_PATTERNS = (
     re.compile(r"ignore\s+(all\s+)?(previous|prior)\s+instructions", re.IGNORECASE),
@@ -69,6 +70,7 @@ class PermissionStore:
 class PermissionGateway:
     registry: ToolRegistry
     permissions: PermissionStore
+    authz: AuthzService | None = None
 
     def evaluate(
         self,
@@ -79,11 +81,18 @@ class PermissionGateway:
         permission: str,
         instruction: str,
         arguments: dict[str, Any],
+        role: str = "user",
     ) -> GatewayDecision:
         if scan_injection(instruction, arguments):
             return GatewayDecision(
                 outcome="deny",
                 reason="检测到疑似 Prompt 注入或越权指令，已交由权限网关拦截。",
+            )
+
+        if self.authz is not None and not self.authz.allowed(role, "tool:execute"):
+            return GatewayDecision(
+                outcome="deny",
+                reason=f"当前角色 {role} 无工具执行权限，仅普通用户可发起银行操作。",
             )
 
         if not self.permissions.is_granted(user_id, tool_name, self.registry):

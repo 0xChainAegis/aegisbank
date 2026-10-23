@@ -11,8 +11,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .audit import AuditService
 from .banking.repository import BankingRepository
+from .compensation import CompensationRegistry
 from .config import Settings, get_settings
 from .db import Database
+from .executor import ToolExecutor
+from .extensions import (
+    activate_extensions,
+    include_extension_routers,
+    prepare_extensions,
+    register_extension_tools,
+    start_extension_background,
+    stop_extension_background,
+)
 from .gateway import PermissionGateway, PermissionStore
 from .planning.factory import build_planner, describe_planner
 from .risk import DynamicRiskEngine
@@ -34,12 +44,16 @@ from .schemas import (
 from .services import CoreServices
 from .tools.finance import build_registry
 from .trust.action_envelope import EnvelopeError
+from .trust.authz import AuthzError, AuthzService
 from .trust.idempotency import (
     IdempotencyError,
     IdempotencyOutcome,
     IdempotencyStore,
 )
+from .trust.mfa import MfaService, OtpProvider
 from .trust.readiness import NotReadyError, ReadinessService
+
+ROLE_HEADER = "X-Aegis-Role"
 
 
 def create_app(
@@ -56,16 +70,33 @@ def create_app(
     bank_repository = BankingRepository(db)
     services = CoreServices(db=db, repository=bank_repository, settings=config)
 
+    # Stage 2A runtime capabilities (multi-role, MFA, guarded execution).
+    authz = AuthzService()
+    mfa = MfaService([OtpProvider(config.demo_otp)], default_provider=config.mfa_default_provider)
+    executor = ToolExecutor()
+    compensation = CompensationRegistry()
+    services.authz = authz
+    services.mfa = mfa
+    services.executor = executor
+    services.compensation = compensation
+
     # Scenario modules own their schema, seed data, tools, intents and routes.
     scenario_modules = prepare_persistence(db, DEMO_USER)
+    # Stage 2A cross-cutting capabilities are discovered the same way.
+    extension_modules = prepare_extensions(db, DEMO_USER)
 
     registry = build_registry(bank_repository)
     services.registry = registry
     register_scenario_tools(services, scenario_modules)
+    register_extension_tools(services, extension_modules)
 
     permission_store = PermissionStore(db)
     permission_store.seed(DEMO_USER, registry)
-    gateway = PermissionGateway(registry=registry, permissions=permission_store)
+    gateway = PermissionGateway(
+        registry=registry,
+        permissions=permission_store,
+        authz=authz,
+    )
     services.gateway = gateway
     risk_engine = DynamicRiskEngine(bank_repository)
     audit = AuditService(db)
@@ -80,11 +111,16 @@ def create_app(
         audit=audit,
         confirmation_ttl_seconds=config.confirmation_ttl_seconds,
         demo_otp=config.demo_otp,
+        mfa=mfa,
+        executor=executor,
+        compensation=compensation,
         circuit_breaker_threshold=config.circuit_breaker_threshold,
         circuit_breaker_window_seconds=config.circuit_breaker_window_seconds,
         circuit_breaker_lock_seconds=config.circuit_breaker_lock_seconds,
     )
     services.scheduler = scheduler
+    activate_extensions(services, extension_modules)
+
     readiness = ReadinessService(
         db=db,
         audit=audit,
@@ -100,6 +136,18 @@ def create_app(
             readiness.require_ready()
         except NotReadyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    def resolve_role(role_header: str | None) -> str:
+        try:
+            return authz.normalize(role_header, default=config.authz_default_role)
+        except AuthzError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    def require_capability(role: str, capability: str) -> None:
+        try:
+            authz.require(role, capability)
+        except AuthzError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     def begin_idempotent(
         key: str | None, *, scope: str, request_hash: str
@@ -126,9 +174,11 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         start_scenario_background(services, scenario_modules)
+        start_extension_background(services, extension_modules)
         try:
             yield
         finally:
+            stop_extension_background(extension_modules)
             stop_scenario_background(scenario_modules)
 
     app = FastAPI(title=config.app_name, version="0.1.0", lifespan=lifespan)
@@ -142,6 +192,11 @@ def create_app(
     app.state.services = services
     app.state.readiness = readiness
     app.state.idempotency = idempotency
+    app.state.authz = authz
+    app.state.mfa = mfa
+    app.state.executor = executor
+    app.state.compensation = compensation
+    app.state.extension_modules = extension_modules
 
     @app.get(f"{config.api_prefix}/health")
     def health() -> dict[str, Any]:
@@ -198,12 +253,26 @@ def create_app(
         tool_name: str,
         body: PermissionUpdateRequest,
         user_id: str = Query(default=DEMO_USER, max_length=64),
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
     ) -> dict[str, Any]:
+        role = resolve_role(x_aegis_role)
+        require_capability(role, "permission:manage")
         try:
             tool = registry.get(tool_name)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="工具不存在。") from exc
         permission_store.set_granted(user_id, tool_name, body.granted)
+        audit.record(
+            event="permission_updated",
+            user_id=user_id,
+            instruction=f"{'授予' if body.granted else '撤回'} {tool_name} 权限",
+            dag_path="permissions",
+            tool_name=tool_name,
+            arguments={"tool_name": tool_name, "granted": body.granted},
+            result={"role": role, "permission": tool.metadata.permission},
+            confirmation_state="permission_change",
+            risk_level="green",
+        )
         return {
             "tool_name": tool_name,
             "title": tool.metadata.title,
@@ -214,11 +283,13 @@ def create_app(
     def run_agent(
         body: AgentRunRequest,
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
     ) -> dict[str, Any]:
         ensure_ready()
+        role = resolve_role(x_aegis_role)
         scope = "agent.run"
         request_hash = IdempotencyStore.request_hash(
-            {"endpoint": "agent.run", "body": body.model_dump()}
+            {"endpoint": "agent.run", "body": body.model_dump(), "role": role}
         )
         outcome = begin_idempotent(
             idempotency_key, scope=scope, request_hash=request_hash
@@ -231,6 +302,7 @@ def create_app(
                 instruction=body.instruction,
                 tool_name=body.tool_name,
                 arguments=body.arguments,
+                role=role,
             )
         except IntentError as exc:
             release_idempotent(idempotency_key, scope=scope)
@@ -246,14 +318,18 @@ def create_app(
         action_id: str,
         body: ConfirmationRequest,
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
     ) -> dict[str, Any]:
         ensure_ready()
+        role = resolve_role(x_aegis_role)
         scope = "confirmation"
         request_hash = IdempotencyStore.request_hash(
             {
                 "endpoint": "confirmation",
                 "action_id": action_id,
                 "approved": body.approved,
+                "mfa_provider": body.mfa_provider,
+                "role": role,
             }
         )
         outcome = begin_idempotent(
@@ -267,6 +343,8 @@ def create_app(
                 action_id=action_id,
                 approved=body.approved,
                 reauth_token=body.reauth_token,
+                role=role,
+                mfa_provider=body.mfa_provider,
             )
         except EnvelopeError as exc:
             release_idempotent(idempotency_key, scope=scope)
@@ -286,25 +364,51 @@ def create_app(
         return result
 
     @app.get(f"{config.api_prefix}/trust/circuit-breaker")
-    def circuit_breaker_status() -> dict[str, Any]:
+    def circuit_breaker_status(
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
+    ) -> dict[str, Any]:
+        require_capability(resolve_role(x_aegis_role), "trust:inspect")
         return scheduler.circuit_breaker_status()
 
     @app.post(f"{config.api_prefix}/trust/circuit-breaker/reset")
-    def circuit_breaker_reset() -> dict[str, Any]:
+    def circuit_breaker_reset(
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
+    ) -> dict[str, Any]:
+        role = resolve_role(x_aegis_role)
+        require_capability(role, "ops:manage")
+        audit.record(
+            event="circuit_breaker_reset",
+            user_id=DEMO_USER,
+            instruction="运维重置熔断器",
+            dag_path="trust",
+            tool_name="circuit_breaker",
+            arguments={},
+            result={"role": role},
+            confirmation_state="ops",
+            risk_level="green",
+        )
         return scheduler.reset_circuit_breaker()
 
     @app.get(f"{config.api_prefix}/trust/actions/{{action_id}}")
     def trust_action(
         action_id: str,
         user_id: str = Query(default=DEMO_USER, max_length=64),
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
     ) -> dict[str, Any]:
+        require_capability(resolve_role(x_aegis_role), "trust:inspect")
         try:
             return scheduler.action_view(action_id, user_id=user_id)
         except IntentError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post(f"{config.api_prefix}/trust/actions/{{action_id}}/reconcile")
-    def trust_reconcile(action_id: str, body: ReconcileRequest) -> dict[str, Any]:
+    def trust_reconcile(
+        action_id: str,
+        body: ReconcileRequest,
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
+    ) -> dict[str, Any]:
+        role = resolve_role(x_aegis_role)
+        require_capability(role, "trust:inspect")
         try:
             return scheduler.reconcile(
                 action_id=action_id,
@@ -316,15 +420,23 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get(f"{config.api_prefix}/audit")
-    def list_audit(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+    def list_audit(
+        limit: int = Query(default=50, ge=1, le=200),
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
+    ) -> dict[str, Any]:
+        require_capability(resolve_role(x_aegis_role), "audit:read")
         entries = audit.list(limit=limit)
         return {"entries": entries, "count": len(entries)}
 
     @app.get(f"{config.api_prefix}/audit/verify")
-    def verify_audit() -> dict[str, Any]:
+    def verify_audit(
+        x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),
+    ) -> dict[str, Any]:
+        require_capability(resolve_role(x_aegis_role), "audit:read")
         return audit.verify()
 
     include_scenario_routers(app, services, scenario_modules)
+    include_extension_routers(app, services, extension_modules)
     return app
 
 

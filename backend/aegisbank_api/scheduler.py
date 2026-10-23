@@ -14,8 +14,10 @@ from typing import Any
 from uuid import uuid4
 
 from .audit import AuditService
+from .compensation import CompensationRegistry
 from .db import Database
 from .domain import ExecutionContext, ExecutionStatus, PlanNode, RiskLevel
+from .executor import ToolExecutor
 from .gateway import PermissionGateway, scan_injection
 from .planning.compiler import CompiledPlan, PlanCompilationError, PlanCompiler
 from .planning.contracts import ExecutionPlan, Planner, PlanningRequest, PlanStep
@@ -38,6 +40,7 @@ from .trust.evidence import (
     policy_decision_evidence,
     tool_result_evidence,
 )
+from .trust.mfa import MfaError, MfaResult, MfaService, OtpProvider
 from .trust.state_machine import (
     ActionState,
     ExecutionOutcomeUnknown,
@@ -70,6 +73,9 @@ class DagScheduler:
         audit: AuditService,
         confirmation_ttl_seconds: int,
         demo_otp: str,
+        mfa: MfaService | None = None,
+        executor: ToolExecutor | None = None,
+        compensation: CompensationRegistry | None = None,
         circuit_breaker_threshold: int = 3,
         circuit_breaker_window_seconds: int = 60,
         circuit_breaker_lock_seconds: int = 60,
@@ -83,6 +89,9 @@ class DagScheduler:
         self.compiler = PlanCompiler(registry)
         self.confirmation_ttl_seconds = confirmation_ttl_seconds
         self.demo_otp = demo_otp
+        self.mfa = mfa or MfaService([OtpProvider(demo_otp)])
+        self.executor = executor or ToolExecutor()
+        self.compensation = compensation or CompensationRegistry()
         self.envelopes = EnvelopeService(db)
         self.breaker = CircuitBreaker(
             db,
@@ -365,6 +374,7 @@ class DagScheduler:
         instruction: str,
         tool_name: str | None = None,
         arguments: dict[str, Any] | None = None,
+        role: str = "user",
     ) -> dict[str, Any]:
         arguments = arguments or {}
         run_id = uuid4().hex
@@ -396,6 +406,7 @@ class DagScheduler:
 
         matched = scan_injection(instruction, arguments)
         if matched:
+            self.breaker.record_injection(user_id=user_id)
             audit_entry = self.audit.record(
                 event="injection_blocked",
                 user_id=user_id,
@@ -463,6 +474,7 @@ class DagScheduler:
         nodes = compiled.nodes
         assessments = self._assess_nodes(nodes, user_id, instruction)
         risk_level = self._max_assessed_risk(assessments)
+        self.breaker.record_risk_level(user_id=user_id, level=risk_level.value)
         plan_payload = self._decorate_plan(compiled.as_dict(), assessments)
         dag_path = compiled.dag_path
         decisions: list[tuple[PlanNode, Any, RiskAssessment]] = []
@@ -476,6 +488,7 @@ class DagScheduler:
                 permission=tool.metadata.permission,
                 instruction=instruction,
                 arguments=node.arguments,
+                role=role,
             )
             decisions.append((node, decision, assessment))
 
@@ -758,6 +771,8 @@ class DagScheduler:
         action_id: str,
         approved: bool,
         reauth_token: str | None,
+        role: str = "user",
+        mfa_provider: str | None = None,
     ) -> dict[str, Any]:
         pending = self.db.get_pending(action_id)
         if pending is None:
@@ -870,8 +885,40 @@ class DagScheduler:
             machine.transition(
                 ActionState.AWAITING_REAUTH, reason="红色操作需要二次身份校验"
             )
-        if requires_reauth and reauth_token != self.demo_otp:
-            raise ReauthError("二次身份校验失败，请检查演示验证码。")
+        mfa_result: MfaResult | None = None
+        if requires_reauth:
+            try:
+                mfa_result = self.mfa.verify(
+                    reauth_token,
+                    user_id=user_id,
+                    provider=mfa_provider,
+                )
+            except MfaError as exc:
+                self.audit.record(
+                    event="mfa_failed",
+                    user_id=user_id,
+                    instruction=pending["instruction"],
+                    dag_path=self._dag_path(nodes),
+                    tool_name=nodes[0].tool_name,
+                    arguments=nodes[0].arguments,
+                    result={"error": str(exc), "mfa": None},
+                    confirmation_state="reauth_failed",
+                    risk_level=pending["risk_level"],
+                )
+                raise ReauthError(f"二次身份校验失败：{exc}") from exc
+            if not mfa_result.ok:
+                self.audit.record(
+                    event="mfa_failed",
+                    user_id=user_id,
+                    instruction=pending["instruction"],
+                    dag_path=self._dag_path(nodes),
+                    tool_name=nodes[0].tool_name,
+                    arguments=nodes[0].arguments,
+                    result={"mfa": mfa_result.as_dict()},
+                    confirmation_state="reauth_failed",
+                    risk_level=pending["risk_level"],
+                )
+                raise ReauthError(f"二次身份校验失败：{mfa_result.detail}")
 
         # Re-check permissions and dynamic risk immediately before execution.
         for node in nodes:
@@ -884,6 +931,7 @@ class DagScheduler:
                 permission=tool.metadata.permission,
                 instruction=pending["instruction"],
                 arguments=node.arguments,
+                role=role,
             )
             if decision.denied:
                 machine.transition(
@@ -949,6 +997,7 @@ class DagScheduler:
             result={
                 "reason": "用户明确批准执行",
                 "envelopes": [envelope.masked() for envelope in envelopes],
+                "mfa": mfa_result.as_dict() if mfa_result is not None else None,
             },
             confirmation_state="approved",
             risk_level=pending["risk_level"],
@@ -1083,7 +1132,7 @@ class DagScheduler:
                 instruction=instruction,
             )
             try:
-                result = tool.execute(resolved_args, context).as_dict()
+                result = self.executor.execute(tool, resolved_args, context)
             except ExecutionOutcomeUnknown as exc:
                 self.audit.record(
                     event="tool_outcome_unknown",

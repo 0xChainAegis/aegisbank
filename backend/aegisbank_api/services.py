@@ -8,7 +8,7 @@ itself and only resolve authorization pieces when a tool actually runs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .audit import AuditService
@@ -30,6 +30,11 @@ class CoreServices:
     gateway: PermissionGateway | None = None
     audit: AuditService | None = None
     scheduler: Any = None
+    executor: Any = None
+    mfa: Any = None
+    authz: Any = None
+    compensation: Any = None
+    extras: dict[str, Any] = field(default_factory=dict)
 
     def require_registry(self) -> ToolRegistry:
         if self.registry is None:

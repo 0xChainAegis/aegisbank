@@ -98,6 +98,18 @@ class CircuitBreaker:
     def record_success(self) -> None:
         self.reset()
 
+    def record_risk_level(
+        self, *, user_id: str, level: str, now: datetime | None = None
+    ) -> None:
+        """Observation hook for red operations (stage-2A suspicious rules)."""
+        return None
+
+    def record_injection(
+        self, *, user_id: str, now: datetime | None = None
+    ) -> None:
+        """Observation hook for injection hits (stage-2A suspicious rules)."""
+        return None
+
     def reset(self) -> None:
         self.db.reset_circuit_breaker(self.name)
 

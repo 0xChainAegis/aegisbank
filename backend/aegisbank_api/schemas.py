@@ -17,6 +17,7 @@ class AgentRunRequest(BaseModel):
 class ConfirmationRequest(BaseModel):
     approved: bool
     reauth_token: str | None = Field(default=None, max_length=32)
+    mfa_provider: str | None = Field(default=None, max_length=32)
 
 
 class PermissionUpdateRequest(BaseModel):
