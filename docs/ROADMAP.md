@@ -18,7 +18,7 @@
 
 | 指标 | 数值 | 来源 |
 |---|---|---|
-| 后端测试 | **136 项** pytest 全部通过（14 个测试文件；2A 新增 51 条） | `cd backend && uv run pytest -p no:warnings` |
+| 后端测试 | **144 项** pytest 全部通过（15 个测试文件；2A 新增 51 条 + 回归 8 条） | `cd backend && uv run pytest -p no:warnings` |
 | 其中信任层 | **17 条** | `backend/tests/test_trust.py` |
 | 其中 2A | **51 条**（authz 9 / breaker 7 / compensation 10 / im 7 / mfa 10 / sandbox 8） | `backend/tests/test_{authz,breaker,compensation,im_channel,mfa,sandbox}.py` |
 | 前端测试 | **22 项** Vitest 全部通过（3 个测试文件） | `frontend/src/**/*.test.ts` |
@@ -43,7 +43,7 @@
 - 环境记录更新为 Linux ext4 主线（`docs/DEVELOPMENT-ENVIRONMENT.md`）；
 - 新增 `docs/MASTER-PLAN.md` 作为项目总规划。
 
-阶段 0 验收（2026-10-23）：`main` 不包含 `upstream-pr/`；lint / build / test 全绿；文档与实现一致。当时基线为后端 20 项 pytest、前端 7 项 Vitest，已被本轮后端 136 / 前端 22 的新基线取代。
+阶段 0 验收（2026-10-23）：`main` 不包含 `upstream-pr/`；lint / build / test 全绿；文档与实现一致。当时基线为后端 20 项 pytest、前端 7 项 Vitest，已被本轮后端 144 / 前端 22 的新基线取代。
 
 ## 阶段 1：信任工程（已完成）
 
@@ -86,7 +86,7 @@
 - 两条真实跨场景 DAG：账单分析 → 取消异常订阅；生日场景 `query_contact_birthday → lock_budget_funds → schedule_flower_order / schedule_cake_order`；
 - 时间维度：`scheduled_tasks` + `POST /api/automation/run-due`（时间快进）+ 可选后台轮询线程（`AEGIS_AUTOMATION_ENABLED=true`），不做真实常驻 cron。
 
-阶段 2B 验收：六场景 6/6；25 个场景工具全部继承 `BaseTool`、经统一网关、风险只升不降；每个场景至少覆盖正向链路、风险分级、撤权/失败与幂等种子；后端测试由 20 项增至 85 项（阶段 2A 后为 136 项）。
+阶段 2B 验收：六场景 6/6；25 个场景工具全部继承 `BaseTool`、经统一网关、风险只升不降；每个场景至少覆盖正向链路、风险分级、撤权/失败与幂等种子；后端测试由 20 项增至 85 项（阶段 2A 后为 144 项）。
 
 ## 阶段 2A：比赛硬要求（已完成，2026-10-23）
 
@@ -102,7 +102,7 @@
 | 6 | 多角色与撤权 | `trust/authz.py` + `extensions/authz.py` + `gateway.py`；`X-Aegis-Role`；端点 `/api/authz/roles / me / revoke/{tool} / audit/policy` | operator/auditor 不能执行工具；撤权后重放被阻断并写 `role_revocation`；`test_authz.py` 9 条 |
 | 7 | 信任层收尾 | `scenarios/automation.py` 的 `run-due` readiness 门禁 | 未就绪时 `POST /api/automation/run-due` 返回 503；`test_automation.py` 覆盖 |
 
-阶段 2A 验收：后端 **136 项** pytest 通过（2A 新增 51 条）；工具 **48 个**（compensable=15）；补偿规格 **27 条**（15 可补偿 / 12 不可逆）；HTTP 接口 **49 个**；`smoke.sh` 实测审计链 `valid=true`。赛题四项硬要求（熔断、沙箱、MFA、IM）均可一次走通。→ **满足**。
+阶段 2A 验收：后端 **144 项** pytest 通过（2A 新增 51 条 + 回归 8 条）；工具 **48 个**（compensable=15）；补偿规格 **27 条**（15 可补偿 / 12 不可逆）；HTTP 接口 **49 个**；`smoke.sh` 实测审计链 `valid=true`。赛题四项硬要求（熔断、沙箱、MFA、IM）均可一次走通。→ **满足**。
 
 **仍未做（诚实标注）**：幂等 / `used_nonces` TTL 清理、熔断按用户隔离、OS 级容器隔离、真实身份认证与 MFA、真实 IM 平台签名与用户映射、工具执行中途强停。
 

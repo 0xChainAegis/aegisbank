@@ -238,3 +238,19 @@ def test_card_intents_route_natural_language_without_hijacking_core(tmp_path):
         credit_limit = run_agent(client, instruction="把信用卡额度调整到 8000 元")
         assert credit_limit["plan"]["steps"][0]["tool_name"] == "adjust_card_limit"
         assert credit_limit["risk_level"] == "red"
+
+
+def test_password_intent_tolerates_card_id_between_verb_and_noun(tmp_path):
+    with make_client(tmp_path) as client:
+        for phrase in (
+            "重置 CARD-8821 密码",
+            "修改 CARD-8821 的密码",
+            "重置卡片密码 CARD-8821",
+        ):
+            body = run_agent(client, instruction=phrase)
+            assert body["status"] == "awaiting_confirmation", (phrase, body)
+            assert [step["tool_name"] for step in body["plan"]["steps"]] == [
+                "reset_card_password"
+            ], phrase
+            assert body["risk_level"] == "red", phrase
+            assert body["confirmation"]["requires_reauth"] is True, phrase

@@ -419,7 +419,7 @@ POST /api/trust/breaker/unlock      运维解锁（仅 operator）
 | Planner | Rule + OpenAI-compatible LLM | 结构化 `ExecutionPlan/v1`，可插拔、可回退、可校验 |
 | 持久化 | SQLite（stdlib） | 本地零依赖；保存 Mock Bank Core、授权、待确认动作、信任状态与审计链 |
 | 前端 | React 19 · TypeScript · Vite | 银行概览、六场景面板、2A 能力、运维面板、任务控制台、权限控制台、操作审计 |
-| 测试 | pytest · httpx · Vitest | 后端 136 项、前端 22 项 |
+| 测试 | pytest · httpx · Vitest | 后端 144 项、前端 22 项 |
 
 ## 快速开始
 
@@ -484,7 +484,8 @@ AEGIS_CIRCUIT_BREAKER_LOCK_SECONDS=60
 ```bash
 bash scripts/lint.sh    # 后端 ruff + 前端 TypeScript 类型检查
 bash scripts/build.sh   # 后端 compileall + 前端 Vite 生产构建
-bash scripts/test.sh    # pytest（136 项）+ Vitest（22 项）
+bash scripts/test.sh    # pytest（144 项）+ Vitest（22 项）
+cd backend && uv run python ../scripts/scenario-check.py   # 六场景端到端回归（29 项检查）
 bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 ```
 

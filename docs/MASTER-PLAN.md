@@ -3,7 +3,7 @@
 > 版本：v1.3　更新日期：2026-10-23　基线：`main` @ `bf36895`（阶段 2A 六项硬要求已合入）
 > 适用对象：参赛团队、工程实施者、评审与答辩
 > 信息来源：《项目总结与规划一》（Word）、上一轮工作轨迹与结论、三个仓库/分支实测、本轮实现与测试输出
-> v1.3 变更：阶段 2A 六项硬要求（步骤级暂停/回退/补偿、可疑行为熔断、演示 MFA Provider、IM 渠道、工具沙箱、多角色撤权）的**后端/API 与前端面板实现标记为已完成**；新增 §9.1.1「2A 落地实现与测试映射」、§12 D12–D15 决策；工具更新为 **48 个**、后端测试 **136 项**、HTTP 接口 **49 个**；下一步改为阶段 2.5 / 3。
+> v1.3 变更：阶段 2A 六项硬要求（步骤级暂停/回退/补偿、可疑行为熔断、演示 MFA Provider、IM 渠道、工具沙箱、多角色撤权）的**后端/API 与前端面板实现标记为已完成**；新增 §9.1.1「2A 落地实现与测试映射」、§12 D12–D15 决策；工具更新为 **48 个**、后端测试 **144 项**、HTTP 接口 **49 个**；下一步改为阶段 2.5 / 3。
 > v1.2 变更：阶段 1（信任工程）与阶段 2B（六场景完整覆盖）标记为**已完成**；六场景覆盖更新为 **6/6**；新增 §8.9「阶段 1 落地实现与测试映射」、§12 D9–D11 决策；工具/测试/接口数字更新为当前实现基线。
 > v1.1 变更：新增「六场景覆盖现状与完整覆盖扩展计划」（§4.6、§6、§9.2），阶段 2 拆分为 2A（硬要求）与 2B（场景完整覆盖）。
 
@@ -21,7 +21,7 @@
 | 已完成能力 | 动态风险（金额/日累计/产品等级/操作类型）、**48 个银行工具**（核心 9 + 场景 25 + 2A 扩展 14）、跨场景 DAG、绿/黄/红分级、统一权限网关、ActionEnvelope 确认绑定、幂等键、任务状态机（含 `UNKNOWN / PAUSED / ROLLED_BACK`）、readiness fail-closed、证据分层、注入整条拒绝、模型候选白名单、三类规则熔断、**步骤级暂停/回退/补偿、可疑行为熔断、演示 MFA Provider、IM 渠道、进程内工具沙箱、多角色与撤权**、五页 React 控制台 |
 | 六场景覆盖 | **6/6**：账单分析 ✅ / 卡片管理 ✅ / 智能转账 ✅ / 订阅代扣 ✅ / 跨场景联动 ✅ / 理财操作 ✅ |
 | 硬缺口 | 生产化收尾：幂等/nonce TTL 清理、按用户熔断、OS 级容器隔离、真实身份认证与 MFA、IM 平台接入、WORM 审计；**后续**：多轮上下文与指代消解 |
-| 验证基线 | 后端 **136 项** pytest 全部通过（14 个测试文件，2A 新增 51 条）；前端 **22 项** Vitest 全部通过（3 个测试文件）；HTTP 接口 **49 个**（FastAPI OpenAPI paths）；工具 **48 个**（其中 compensable=15、不可逆=12） |
+| 验证基线 | 后端 **144 项** pytest 全部通过（15 个测试文件，2A 新增 51 条 + 回归 8 条）；前端 **22 项** Vitest 全部通过（3 个测试文件）；HTTP 接口 **49 个**（FastAPI OpenAPI paths）；工具 **48 个**（其中 compensable=15、不可逆=12） |
 
 ---
 
@@ -153,7 +153,7 @@ X-Aegis-Role: auditor / operator               → 只读 / 不可执行；opera
 
 | 命令/检查 | 结果 |
 |---|---|
-| `cd backend && uv run pytest -p no:warnings` | **136 项** pytest 全部通过（14 个测试文件；2A 新增 51 条） |
+| `cd backend && uv run pytest -p no:warnings` | **144 项** pytest 全部通过（15 个测试文件；2A 新增 51 条 + 回归 8 条） |
 | `cd frontend && pnpm test` | **22 项** Vitest 全部通过（3 个测试文件） |
 | HTTP 接口枚举（`create_app().openapi()`） | **49 个** `/api` 路径 / 49 个 operation（2A 新增 20 个） |
 | 工具目录（`GET /api/tools`） | **48 个**（核心 9 + 场景 25 + 2A 扩展 14；compensable=15） |
@@ -357,7 +357,7 @@ X-Aegis-Role: auditor / operator               → 只读 / 不可执行；opera
 | 6 | 多角色与撤权 | `trust/authz.py`、`extensions/authz.py`、`gateway.py`；`X-Aegis-Role` | operator/auditor 不能执行工具；撤权后重放被阻断并写 `role_revocation`。`test_authz.py` 9 条 |
 | 7 | 信任层收尾 | `run-due` readiness 门禁已完成（`test_automation.py`）；幂等/nonce TTL 清理**仍未做** | 写入口统一 fail-closed；存储增长列入生产化清单 |
 
-**2A 退出标准**：赛题四项硬要求（熔断、沙箱、MFA、IM）均可在演示中一次走通，并有自动化测试；暂停/回退/补偿与多角色撤权同样有测试覆盖。→ **满足**（2A 新增 51 条测试，后端合计 136 条）。
+**2A 退出标准**：赛题四项硬要求（熔断、沙箱、MFA、IM）均可在演示中一次走通，并有自动化测试；暂停/回退/补偿与多角色撤权同样有测试覆盖。→ **满足**（2A 新增 51 条 + 回归 8 条测试，后端合计 144 条）。
 
 **仍未做（诚实标注）**：`used_nonces` / `idempotency_keys` TTL 清理、熔断按用户隔离、OS 级容器隔离、真实身份认证与 MFA、真实 IM 平台接入、工具执行中途强停。
 
@@ -577,7 +577,7 @@ detail:            人类可读说明
 | `trust/authz.py` + `extensions/authz.py` + `gateway.py` | 角色矩阵、能力校验、`/authz/roles / me / revoke / audit/policy` | `test_authz.py`（9 条：矩阵、me、operator/auditor 拒绝、重置权限、撤权、404、审计只读） |
 | `scenarios/automation.py` + `main.py` | `run-due` readiness 503 门禁 | `test_automation.py::test_run_due_write_endpoint_is_fail_closed_when_not_ready` |
 
-2A 测试合计 **51 条**：`test_authz.py` 9 + `test_breaker.py` 7 + `test_compensation.py` 10 + `test_im_channel.py` 7 + `test_mfa.py` 10 + `test_sandbox.py` 8；后端总计 **136 条**（14 个测试文件）。
+2A 测试合计 **51 条**：`test_authz.py` 9 + `test_breaker.py` 7 + `test_compensation.py` 10 + `test_im_channel.py` 7 + `test_mfa.py` 10 + `test_sandbox.py` 8；后端总计 **144 条**（15 个测试文件）。
 
 ### 9.2 2B：六场景完整覆盖（✅ 已完成，保留设计记录）
 

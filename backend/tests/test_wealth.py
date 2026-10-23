@@ -304,3 +304,13 @@ def test_seed_is_idempotent_across_app_restarts(tmp_path):
     assert first == second
     assert first["count"] == 1
     assert products["count"] == 5
+
+
+def test_purchase_by_product_name_without_wealth_keyword(tmp_path):
+    """「买 1000 元稳健短债A」这类只报产品名的说法也必须命中申购意图。"""
+    with make_client(tmp_path) as client:
+        body = run(client, instruction="买 1000 元稳健短债A")
+        assert body["status"] == "awaiting_confirmation", body
+        assert [step["tool_name"] for step in body["plan"]["steps"]] == ["purchase_wealth"]
+        assert body["risk_level"] == "red"
+        assert body["confirmation"]["requires_reauth"] is True

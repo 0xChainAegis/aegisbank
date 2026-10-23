@@ -49,7 +49,7 @@ pnpm lock: frontend/pnpm-lock.yaml
 
 | 命令 | 结果 |
 |---|---|
-| `cd backend && uv run pytest -p no:warnings` | 后端 **136 项** pytest 全部通过（14 个测试文件；其中 `test_trust.py` 17 条，2A 新增 51 条） |
+| `cd backend && uv run pytest -p no:warnings` | 后端 **144 项** pytest 全部通过（15 个测试文件；其中 `test_trust.py` 17 条，2A 新增 51 条 + 回归 8 条） |
 | `cd frontend && pnpm test` | **22 项** Vitest 全部通过（3 个测试文件） |
 | HTTP 接口枚举 | **49 个** `/api` 路径（核心 16 + 场景 13 + 2A 20） |
 | 工具目录 | **48 个**（核心 9 + 场景 25 + 2A 扩展 14；compensable=15） |

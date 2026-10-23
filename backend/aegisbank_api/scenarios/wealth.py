@@ -996,9 +996,6 @@ class PurchaseWealthIntent:
         text = ctx.instruction
         if not any(verb in text for verb in _PURCHASE_VERBS):
             return None
-        has_wealth_context = any(word in text for word in ("理财", "基金", "产品"))
-        if not has_wealth_context and not _risk_tokens(text):
-            return None
         explicit_buy = any(verb in text for verb in ("买入", "申购", "购买"))
         if any(hint in text for hint in _QUERY_HINTS) and not explicit_buy:
             return None
@@ -1006,6 +1003,9 @@ class PurchaseWealthIntent:
         if products is None:
             return _clarify("理财数据尚未初始化，暂时无法申购。", self.name)
         matches = _match_products(text, products)
+        has_wealth_context = any(word in text for word in ("理财", "基金", "产品"))
+        if not has_wealth_context and not _risk_tokens(text) and not matches:
+            return None
         if not matches:
             return _clarify(
                 "未找到匹配的模拟理财产品，请补充产品名称或风险等级"

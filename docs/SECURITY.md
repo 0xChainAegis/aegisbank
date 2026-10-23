@@ -1,7 +1,7 @@
 # 安全边界与生产化清单
 
 > 最近更新：2026-10-23（阶段 2A 六项硬要求落地后，基线 `bf36895`）。
-> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 14 个测试文件（136 条）。
+> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 15 个测试文件（144 条）。
 
 ## 1. 信任层实现（阶段 1）
 

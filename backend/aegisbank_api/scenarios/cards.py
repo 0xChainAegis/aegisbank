@@ -44,7 +44,7 @@ PLACEHOLDER_PATTERN = r"^\$\{steps\.[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+\}$"
 _APPLICATION_ID_PATTERN = re.compile(r"^APP-\d{3,}$")
 _APPLY_CARD_PATTERN = re.compile(r"(申请|办理|办)\s*(?:一张|张)?\s*(?:虚拟卡|信用卡)")
 _PASSWORD_PATTERN = re.compile(
-    r"(?:修改|重置|变更|更改)[^，。；,;]{0,8}密码|密码[^，。；,;]{0,6}(?:修改|重置|变更|更改)"
+    r"(?:修改|重置|变更|更改)[^，。；,;]{0,20}密码|密码[^，。；,;]{0,20}(?:修改|重置|变更|更改)"
 )
 _UNLOCK_LIMIT_PATTERN = re.compile(
     r"(?:解锁|解除|恢复)[^，。；,;]{0,8}限额|限额[^，。；,;]{0,6}(?:解锁|解除|恢复)"
