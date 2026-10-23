@@ -84,7 +84,7 @@ git -C $unc push origin main
   - `trust/`：ActionEnvelope、幂等、状态机、证据、readiness、熔断
   - `scenarios/`：5 个可自动发现的业务场景模块（25 个场景工具）与模块契约
   - `tools/finance.py`：9 个核心银行工具与 Manifest
-- `backend/tests/`：API 闭环、Planner 契约与信任层/六场景测试（9 个测试文件）
+- `backend/tests/`：API 闭环、Planner 契约与信任层/六场景测试（8 个测试文件）
 - `frontend/src/`：银行概览、六场景面板、任务控制台、权限控制台、操作审计
 - `scripts/`：依赖安装、开发启动、lint/build/test/smoke
 - `docs/`：总规划、架构、安全边界、路线图、Dogfooding、参考资料
