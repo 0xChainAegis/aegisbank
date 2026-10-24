@@ -7,7 +7,7 @@
 | 赛题 | 人工智能赛道 · 银行 AI 智能体 |
 | 作品形态 | 本地可运行的银行 AI 智能体（AI Banking Agent）原型；全部金融数据来自 Mock Bank Core |
 | 代码仓库 | <https://github.com/LQZ5885/aegisbank>（Public · MIT License） |
-| 当前基线 | 2026-10-23 安全复审与修复后；后端 187 项 pytest、前端 53 项 Vitest、六场景回归 29/29、门禁五阶段 PASS |
+| 当前基线 | 2026-10-24 后端补强；后端 200 项 pytest、前端 53 项 Vitest、六场景回归 29/29；[本轮记录](docs/BACKEND-HARDENING-2026-10-24.md) |
 
 ## 作品简介（≤ 200 字）
 
@@ -199,7 +199,7 @@ step-2: cancel_subscription
 - **输入与输出契约**：金额必须为有限数且精确到分，缺参不补默认金额；50 个工具均有业务字段输出 Schema，坏输出不提交；
 - **确认绑定完整**：`ActionEnvelope` 必须与计划步骤一一对应，缺失或重复一律 `409`。
 
-验证记录：新增后端安全回归 43 项（`backend/tests/test_security_regressions.py`）、前端 React/jsdom 回归 8 项与 API 回归 3 项；全量后端 187 项、前端 53 项、六场景 29/29、门禁五阶段 PASS、依赖扫描 0 项已知漏洞。逐项复现与原代码位置见 [安全修复记录](docs/REMEDIATION-PLAN-2026-10-23.md)。
+2026-10-23 验证记录：新增后端安全回归 43 项（`backend/tests/test_security_regressions.py`）、前端 React/jsdom 回归 8 项与 API 回归 3 项；全量后端 187 项、前端 53 项、六场景 29/29、门禁五阶段 PASS、依赖扫描 0 项已知漏洞。逐项复现与原代码位置见 [安全修复记录](docs/REMEDIATION-PLAN-2026-10-23.md)。
 
 > 安全复审只能覆盖已确认的问题与反例，不承诺系统不存在其他漏洞；这不是渗透测试或生产安全认证。
 
@@ -274,7 +274,7 @@ step-2: cancel_subscription
 | Planner | Rule + OpenAI-compatible LLM | 结构化 `ExecutionPlan/v1`，可插拔、可回退、可校验 |
 | 持久化 | SQLite（stdlib） | 本地零依赖；保存 Mock Bank Core、授权、待确认动作、信任状态与审计链 |
 | 前端 | React 19 · TypeScript · Vite | 银行概览、六场景面板、2A 能力、运维面板、任务控制台、权限控制台、操作审计七个页面 |
-| 测试 | pytest · httpx · Vitest | 后端 187 项（16 个文件）、前端 53 项（7 个文件） |
+| 测试 | pytest · httpx · Vitest | 后端 200 项（16 个文件）、前端 53 项（7 个文件） |
 
 ### 5.4 工具目录
 
@@ -456,11 +456,11 @@ curl -s -X POST 'http://127.0.0.1:8000/api/compensation/demo/run?mode=irreversib
 
 ## 9. 测试与验证
 
-所有数字均来自当前代码基线的实际测试输出（2026-10-23 安全复审与修复后）：
+当前后端补强见 [2026-10-24 记录](docs/BACKEND-HARDENING-2026-10-24.md)；历史复审记录保留当时快照。以下为当前验证口径：
 
 | 指标 | 结果 | 复现命令 |
 |---|---|---|
-| 后端测试 | **187 passed**（16 个测试文件，含 43 项安全回归） | `cd backend && uv run pytest` |
+| 后端测试 | **200 passed**（16 个测试文件，含 56 项安全回归） | `cd backend && uv run pytest` |
 | 前端测试 | **53 passed**（7 个测试文件，含 8 项 React/jsdom 安全回归） | `cd frontend && pnpm test` |
 | 六场景端到端回归 | **29/29 PASS** | `cd backend && uv run python ../scripts/scenario-check.py` |
 | 工具 / 接口 | **50 个工具 / 49 个 `/api` 路径** | `GET /api/tools`、`GET /api/planner/info`、`/docs` |
@@ -474,7 +474,7 @@ curl -s -X POST 'http://127.0.0.1:8000/api/compensation/demo/run?mode=irreversib
 ```bash
 bash scripts/lint.sh    # 后端 ruff + 前端 TypeScript 类型检查
 bash scripts/build.sh   # 后端 compileall + 前端 Vite 生产构建
-bash scripts/test.sh    # pytest（187 项）+ Vitest（53 项）
+bash scripts/test.sh    # pytest（200 项）+ Vitest（53 项）
 bash scripts/smoke.sh   # 启动 API，跑一条绿色链路并校验审计链
 ```
 
@@ -550,7 +550,7 @@ AegisBank 是**安全自治 Agent 的可运行原型**，以下边界是刻意�
 - [真实截图目录](docs/screenshots/README.md)
 - [完整架构图 PNG](docs/architecture/aegisbank-architecture.png) ｜ [Mermaid 源文件](docs/architecture/aegisbank-architecture-v2.mmd)
 
-> 部分历史规划/环境文档（如 MASTER-PLAN、DEVELOPMENT-ENVIRONMENT）保留阶段性数字（48 个工具、144 项测试、27 条补偿规格等），当前口径以本 README、[安全自评报告](deliverables/05-安全自评报告.md) 与实际测试输出（50 / 187 / 28）为准。
+> 部分历史规划/环境文档（如 MASTER-PLAN、DEVELOPMENT-ENVIRONMENT）保留阶段性数字（48 个工具、144 项测试、27 条补偿规格等），当前口径以本 README、[后端补强记录](docs/BACKEND-HARDENING-2026-10-24.md) 与实际测试输出（50 / 200 / 28）为准；deliverables 为 2026-10-23 交付快照，后续补强以本 README 和补强记录为准。
 
 ### 12.2 贡献
 

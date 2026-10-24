@@ -1,9 +1,10 @@
 # 安全边界与生产化清单
 
+> 2026-10-24 后端补强：补偿设置冲突保护、恢复额度风险复检、事务内 MFA 拒绝、权限与审计原子提交。见 [本轮记录](BACKEND-HARDENING-2026-10-24.md)。
 
 > 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
-> 最近更新：2026-10-23（阶段 2A 六项硬要求落地后，基线 `bf36895`）。
-> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 16 个测试文件（187 条）。
+> 最近更新：2026-10-24（后端补偿与权限审计补强，详见本轮记录）。
+> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 16 个测试文件（200 条）。
 
 ## 1. 信任层实现（阶段 1）
 
@@ -132,9 +133,10 @@ detail:            人类可读说明
 
 - 补偿工具本身也是普通 `BaseTool`（声明风险等级与最小权限），进入统一注册表、权限种子与网关；
 - 回滚只处理执行 journal 中 `phase=executed` 且尚未补偿的节点，并按**相反顺序**执行；
-- 每个补偿执行前重新跑动态风险与 `PermissionGateway.evaluate`；被拒绝或需要二次身份校验时不自动执行，写 `compensation_failed` 并转人工对账（D12）；
+- 每个补偿执行前重新跑动态风险与 `PermissionGateway.evaluate`；被拒绝或需要二次身份校验时不自动执行，写 `compensation_blocked` 并转人工对账；事务内执行前仍复检 MFA 要求（D12）；
 - 已执行步骤中存在不可逆操作时，整条自动回滚被阻止（不在部分可逆步骤上「半回滚」），计划与响应标注「不可撤销」，写 `compensation_blocked`；
-- 补偿成功写 `compensation_executed`，失败写 `compensation_failed`；状态最终为 `ROLLED_BACK`，部分失败/被阻止为 `UNKNOWN` 并需人工对账；
+- 恢复设置前验证原 journal、当前状态和同资源后续写操作；禁止旧快照覆盖新指令。恢复信用额度或交易限额超过 5000 元按红色处理，自动补偿拒绝执行。
+- 补偿成功写 `compensation_executed`，执行失败写 `compensation_failed`；状态最终为 `ROLLED_BACK`，部分失败/被阻止为 `UNKNOWN` 并需人工对账；
 - 端点：`GET /api/compensation/specs`、`POST /api/compensation/demo/run`、`POST /api/actions/{id}/pause|resume|rollback`、`GET /api/actions/{id}/journal`；暂停/恢复/回退要求 `tool:execute`，journal 要求 `trust:inspect`。
 
 **边界**：只覆盖已登记规格的工具；需要在补偿时二次验证的红色操作不会自动补偿；Python 工具执行中途无法强停，回滚发生在失败返回之后。
@@ -353,3 +355,7 @@ detail:            人类可读说明
 - `audit.result_json` 新增受哈希保护的 run_id / step_id，支持 `GET /api/audit?run_id=...`；历史链不重写。对账只记结论，实际资金补偿使用 rollback。
 
 仍需后续验证：kill -9 / 多 worker 故障恢复、长期 TTL 清理、按用户熔断、OS 隔离、真实身份与 MFA / IM、外部审计锚点与长时间压力测试。详见 [修复记录](REMEDIATION-PLAN-2026-10-23.md)。
+
+### 2026-10-24 权限审计事务
+
+权限更新与独立撤权接口将权限写入和审计追加放入同一事务。审计存储失败时权限保持原值，API 返回故障；不能留下未审计的授权或宣称撤权成功。复现见 [后端补强记录](BACKEND-HARDENING-2026-10-24.md)。

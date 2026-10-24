@@ -1,5 +1,6 @@
 # AegisBank 产品路线图
 
+> 2026-10-24 后端补强：新增 13 项回归，当前后端 200 项；补偿不覆盖后续设置、红色恢复需 MFA、权限写入与审计原子提交。详见 [补强记录](BACKEND-HARDENING-2026-10-24.md)。生产化剩余项维持下列清单。
 
 > v1.5 安全复审：已修复记录见 [REMEDIATION-PLAN-2026-10-23.md](REMEDIATION-PLAN-2026-10-23.md)。既往阶段记录保留当时快照，当前状态以本轮验收为准。已支持 10 分钟、绑定用户与角色、单次消费的澄清续问；通用指代与长会话仍待完善。
 > 总规划与阶段详细设计见 [MASTER-PLAN.md](MASTER-PLAN.md)。
@@ -16,11 +17,11 @@
 | 2.5 | 人工用户体验（开发者 Dogfooding） | 🔄 进行中（第一轮完成，见 `docs/UX-RECORD.md`） |
 | 3 | 比赛交付（简介、PPT、视频、安全自评、部署说明） | ✅ 材料已产出（视频待录制、截图待更新） |
 
-### 当前验证基线（2026-10-23）
+### 当前验证基线（2026-10-24）
 
 | 指标 | 数值 | 来源 |
 |---|---|---|
-| 后端测试 | **187 项** pytest 全部通过（16 个测试文件；2A 新增 51 条 + 回归 8 条） | `cd backend && uv run pytest -p no:warnings` |
+| 后端测试 | **200 项** pytest 全部通过（16 个测试文件；2A 新增 51 条 + 回归 8 条） | `cd backend && uv run pytest -p no:warnings` |
 | 其中信任层 | **17 条** | `backend/tests/test_trust.py` |
 | 其中 2A | **51 条**（authz 9 / breaker 7 / compensation 10 / im 7 / mfa 10 / sandbox 8） | `backend/tests/test_{authz,breaker,compensation,im_channel,mfa,sandbox}.py` |
 | 前端测试 | **53 项** Vitest 全部通过（7 个测试文件；阶段 2.5 新增 16 条） | `frontend/src/**/*.test.ts` |
