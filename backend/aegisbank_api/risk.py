@@ -106,6 +106,19 @@ class DynamicRiskEngine:
         base_risk: RiskLevel,
         instruction: str = "",
     ) -> RiskAssessment:
+        restore_limits = {
+            "restore_card_limit": "previous_limit_cny",
+            "restore_transaction_limit": "previous_transaction_limit_cny",
+        }
+        if tool_name in restore_limits:
+            data = (arguments.get("original_result") or {}).get("data") or {}
+            amount = float(data.get(restore_limits[tool_name]) or 0)
+            return self._assessment(
+                level=RiskLevel.RED if amount > 5000 else RiskLevel.YELLOW,
+                base_risk=base_risk,
+                reasons=[f"补偿实际恢复额度 {amount:.2f} 元，按目标额度重新评估风险。"],
+                score=85 if amount > 5000 else 45,
+            )
         scenario = self._scenario_assessment(
             user_id=user_id,
             tool_name=tool_name,

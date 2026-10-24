@@ -312,18 +312,19 @@ def create_app(
             tool = registry.get(tool_name)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="工具不存在。") from exc
-        permission_store.set_granted(user_id, tool_name, body.granted)
-        audit.record(
-            event="permission_updated",
-            user_id=user_id,
-            instruction=f"{'授予' if body.granted else '撤回'} {tool_name} 权限",
-            dag_path="permissions",
-            tool_name=tool_name,
-            arguments={"tool_name": tool_name, "granted": body.granted},
-            result={"role": role, "permission": tool.metadata.permission},
-            confirmation_state="permission_change",
-            risk_level="green",
-        )
+        with db.transaction():
+            permission_store.set_granted(user_id, tool_name, body.granted)
+            audit.record(
+                event="permission_updated",
+                user_id=user_id,
+                instruction=f"{'授予' if body.granted else '撤回'} {tool_name} 权限",
+                dag_path="permissions",
+                tool_name=tool_name,
+                arguments={"tool_name": tool_name, "granted": body.granted},
+                result={"role": role, "permission": tool.metadata.permission},
+                confirmation_state="permission_change",
+                risk_level="green",
+            )
         return {
             "tool_name": tool_name,
             "title": tool.metadata.title,

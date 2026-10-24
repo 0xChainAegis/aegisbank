@@ -1747,7 +1747,7 @@ class DagScheduler:
             risk_level=risk_level,
         )
         self.audit.record(
-            event="compensation_failed",
+            event="compensation_blocked" if gateway_reason else "compensation_failed",
             user_id=user_id,
             instruction=instruction,
             dag_path=f"compensate:{node_id}:{tool_name}",
@@ -1914,15 +1914,18 @@ class DagScheduler:
                 )
                 continue
 
+            authorization_state = {"assessment": assessment, "decision": decision}
+
             def persist_compensation(
                 result,
                 node_id=node_id,
                 tool_name=tool_name,
                 arguments=arguments,
-                assessment=assessment,
                 compensation_tool=compensation_tool,
-                decision=decision,
+                authorization_state=authorization_state,
             ):
+                assessment = authorization_state["assessment"]
+                decision = authorization_state["decision"]
                 self.journal.append_entry(
                     action_id,
                     node_id=node_id,
@@ -1963,26 +1966,33 @@ class DagScheduler:
                     ),
                 )
 
-            def authorize_compensation(compensation_tool=compensation_tool, arguments=arguments):
-                current = self.risk_engine.assess(
+            def authorize_compensation(
+                compensation_tool=compensation_tool,
+                arguments=arguments,
+                authorization_state=authorization_state,
+            ):
+                assessment = self.risk_engine.assess(
                     user_id=user_id,
                     tool_name=compensation_tool.metadata.name,
                     arguments=arguments,
                     base_risk=compensation_tool.metadata.risk_level,
                     instruction=instruction,
                 )
-                gate = self.gateway.evaluate(
+                decision = self.gateway.evaluate(
                     user_id=user_id,
                     tool_name=compensation_tool.metadata.name,
-                    risk_level=current.level,
+                    risk_level=assessment.level,
                     permission=compensation_tool.metadata.permission,
                     instruction=instruction,
                     arguments=arguments,
                     role=role,
                     purpose="compensation",
                 )
-                if gate.denied:
-                    raise PermissionError(gate.reason)
+                authorization_state.update(assessment=assessment, decision=decision)
+                if decision.denied:
+                    raise PermissionError(decision.reason)
+                if decision.requires_reauth or assessment.requires_reauth:
+                    raise PermissionError("补偿工具需要二次身份校验，自动补偿拒绝执行。")
 
             try:
                 result = self.executor.execute(
@@ -2002,14 +2012,15 @@ class DagScheduler:
                     entry=entry,
                     compensation_tool=compensation_tool_name,
                     error=error,
-                    risk_level=assessment.level.value,
+                    risk_level=authorization_state["assessment"].level.value,
+                    gateway_reason=str(exc) if isinstance(exc, PermissionError) else "",
                 )
                 continue
             compensated.append(
                 {
                     **base,
-                    "gateway_outcome": decision.outcome,
-                    "risk_level": assessment.level.value,
+                    "gateway_outcome": authorization_state["decision"].outcome,
+                    "risk_level": authorization_state["assessment"].level.value,
                     "result": result,
                 }
             )

@@ -69,24 +69,25 @@ def router(services: CoreServices) -> APIRouter:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="工具不存在。") from exc
 
-        gateway.permissions.set_granted(user_id, tool_name, False)
-        granted = gateway.permissions.is_granted(user_id, tool_name, registry)
-        audit = services.require_audit()
-        entry = audit.record(
-            event="role_revocation",
-            user_id=user_id,
-            instruction=f"角色 {role} 撤回工具 {tool_name} 的授权",
-            dag_path="authz",
-            tool_name=tool_name,
-            arguments={"tool_name": tool_name, "role": role, "user_id": user_id},
-            result={
-                "granted": granted,
-                "permission": tool.metadata.permission,
-                "role": role,
-            },
-            confirmation_state="permission_change",
-            risk_level="green",
-        )
+        with services.db.transaction():
+            gateway.permissions.set_granted(user_id, tool_name, False)
+            granted = gateway.permissions.is_granted(user_id, tool_name, registry)
+            audit = services.require_audit()
+            entry = audit.record(
+                event="role_revocation",
+                user_id=user_id,
+                instruction=f"角色 {role} 撤回工具 {tool_name} 的授权",
+                dag_path="authz",
+                tool_name=tool_name,
+                arguments={"tool_name": tool_name, "role": role, "user_id": user_id},
+                result={
+                    "granted": granted,
+                    "permission": tool.metadata.permission,
+                    "role": role,
+                },
+                confirmation_state="permission_change",
+                risk_level="green",
+            )
         return {
             "tool_name": tool_name,
             "title": tool.metadata.title,

@@ -316,7 +316,7 @@ def test_revoked_compensation_permission_is_denied(tmp_path: Path) -> None:
         assert "未授权" in failure["error"]
 
         failed_entries = [
-            entry for entry in audit_events(client) if entry["event"] == "compensation_failed"
+            entry for entry in audit_events(client) if entry["event"] == "compensation_blocked"
         ]
         assert failed_entries
         assert "未授权" in failed_entries[0]["result"]["error"]

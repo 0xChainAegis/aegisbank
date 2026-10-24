@@ -17,6 +17,7 @@ from aegisbank_api.executor import SandboxViolation
 from aegisbank_api.main import create_app
 from aegisbank_api.planning.contracts import ExecutionPlan, PlanStep
 from aegisbank_api.registry import BaseTool
+from aegisbank_api.risk import RiskAssessment
 from aegisbank_api.trust.action_envelope import EnvelopeError
 from aegisbank_api.trust.idempotency import IdempotencyInProgress
 from aegisbank_api.trust.sandbox import SandboxedToolExecutor, SandboxGuard, SandboxPolicy
@@ -57,6 +58,179 @@ def approve(client, pending, **extra):
 
 def balance(services):
     return services.repository.account("demo-user", "ACC-1001").balance_cny
+
+
+def execute_setting(client, tool, arguments):
+    pending = start(client, tool, arguments)
+    if pending["status"] == "awaiting_confirmation":
+        response = approve(client, pending, reauth_token="246810")
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "completed"
+    else:
+        assert pending["status"] == "completed", pending
+    return pending["run_id"]
+
+
+@pytest.mark.parametrize("return_to_same_value", [False, True])
+def test_old_repayment_rollback_preserves_later_instruction(system, return_to_same_value):
+    client, services = system
+    action = execute_setting(
+        client, "adjust_repayment_date", {"card_id": "CARD-9902", "new_day": 12}
+    )
+    execute_setting(client, "adjust_repayment_date", {"card_id": "CARD-9902", "new_day": 18})
+    if return_to_same_value:
+        execute_setting(
+            client, "adjust_repayment_date", {"card_id": "CARD-9902", "new_day": 12}
+        )
+    expected = services.repository.card("demo-user", "CARD-9902").repayment_day
+    result = services.scheduler.rollback_action(action_id=action, user_id="demo-user")
+    assert services.repository.card("demo-user", "CARD-9902").repayment_day == expected
+    assert result["status"] == "unknown"
+    assert services.audit.verify()["valid"]
+
+
+def test_old_limit_rollback_preserves_later_security_limit(system):
+    client, services = system
+    action = execute_setting(
+        client, "unlock_transaction_limit", {"card_id": "CARD-9902", "daily_limit_cny": 3000}
+    )
+    execute_setting(
+        client, "set_transaction_limit", {"card_id": "CARD-9902", "daily_limit_cny": 100}
+    )
+    result = services.scheduler.rollback_action(action_id=action, user_id="demo-user")
+    assert services.repository.card("demo-user", "CARD-9902").transaction_limit_cny == 100
+    assert result["status"] == "unknown"
+
+
+def test_old_wealth_profile_rollback_preserves_later_preference(system):
+    client, services = system
+    action = execute_setting(client, "assess_wealth_risk", {"risk_preference": "R3"})
+    execute_setting(client, "assess_wealth_risk", {"risk_preference": "R1"})
+    result = services.scheduler.rollback_action(action_id=action, user_id="demo-user")
+    with services.db.transaction() as conn:
+        preference = conn.execute(
+            "SELECT risk_preference FROM wealth_profile WHERE user_id='demo-user'"
+        ).fetchone()
+    assert preference is not None
+    assert preference[0] == "R1"
+    assert result["status"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    ("tool", "field"),
+    [("restore_card_limit", "previous_limit_cny"),
+     ("restore_transaction_limit", "previous_transaction_limit_cny")],
+)
+def test_restore_limits_assesses_actual_target(system, tool, field):
+    _, services = system
+    assessment = services.scheduler.risk_engine.assess(
+        user_id="demo-user", tool_name=tool,
+        arguments={"original_result": {"data": {field: 10000}}},
+        base_risk=RiskLevel.YELLOW,
+    )
+    assert assessment.level is RiskLevel.RED
+    assert assessment.requires_reauth
+
+
+def test_rollback_cannot_restore_high_limit_without_mfa(system):
+    client, services = system
+    with services.db.transaction() as conn:
+        conn.execute("UPDATE bank_cards SET transaction_limit_cents=1000000 "
+                     "WHERE card_id='CARD-9902'")
+    action = execute_setting(
+        client, "unlock_transaction_limit", {"card_id": "CARD-9902", "daily_limit_cny": 1000}
+    )
+    result = services.scheduler.rollback_action(action_id=action, user_id="demo-user")
+    assert services.repository.card("demo-user", "CARD-9902").transaction_limit_cny == 1000
+    assert result["status"] == "unknown"
+
+
+def test_compensation_rechecks_mfa_inside_execution_transaction(system, monkeypatch):
+    client, services = system
+    pending = start(client)
+    assert approve(client, pending).status_code == 200
+    before = balance(services)
+    original = services.scheduler.risk_engine.assess
+    calls = 0
+
+    def escalate(**kwargs):
+        nonlocal calls
+        if kwargs["tool_name"] == "reverse_transfer":
+            calls += 1
+            if calls >= 2:
+                return RiskAssessment(RiskLevel.RED, 100, ["复检风险升级"], RiskLevel.YELLOW, True)
+        return original(**kwargs)
+
+    monkeypatch.setattr(services.scheduler.risk_engine, "assess", escalate)
+    result = services.scheduler.rollback_action(
+        action_id=pending["confirmation"]["id"], user_id="demo-user"
+    )
+    assert balance(services) == before
+    assert result["status"] == "unknown"
+    assert any(row["event"] == "compensation_blocked" for row in services.db.list_audit())
+    assert services.audit.verify()["valid"]
+
+
+@pytest.mark.parametrize("operation", ["grant", "revoke"])
+def test_permission_mutation_is_atomic_with_audit(system, monkeypatch, operation):
+    client, services = system
+    granted = operation == "revoke"
+    services.gateway.permissions.set_granted("demo-user", "transfer", granted)
+    original = type(services.audit).record
+
+    def fail_permission_audit(self, **kwargs):
+        if kwargs["event"] in {"permission_updated", "role_revocation"}:
+            raise OSError("injected permission audit failure")
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(type(services.audit), "record", fail_permission_audit)
+    with pytest.raises(OSError, match="injected permission audit failure"):
+        if operation == "grant":
+            client.put("/api/permissions/transfer", json={"granted": True})
+        else:
+            client.post("/api/authz/revoke/transfer")
+    assert services.db.get_permission("demo-user", "transfer") is granted
+    assert services.audit.verify()["valid"]
+
+
+def test_old_credit_limit_rollback_preserves_later_limit(system):
+    client, services = system
+    with services.db.transaction() as conn:
+        conn.execute(
+            "UPDATE bank_cards SET credit_limit_cents=500000,available_limit_cents=500000 "
+            "WHERE card_id='CARD-9902'"
+        )
+    action = execute_setting(
+        client, "adjust_card_limit", {"card_id": "CARD-9902", "new_limit_cny": 3000}
+    )
+    execute_setting(client, "adjust_card_limit", {"card_id": "CARD-9902", "new_limit_cny": 2000})
+    result = services.scheduler.rollback_action(action_id=action, user_id="demo-user")
+    assert services.repository.card("demo-user", "CARD-9902").credit_limit_cny == 2000
+    assert result["status"] == "unknown"
+
+
+@pytest.mark.parametrize("other_card", [False, True])
+def test_setting_rollback_allows_reverse_order_and_unrelated_resources(system, other_card):
+    client, services = system
+    before = services.repository.card("demo-user", "CARD-9902").repayment_day
+    first = execute_setting(
+        client, "adjust_repayment_date", {"card_id": "CARD-9902", "new_day": 12}
+    )
+    second = execute_setting(
+        client, "adjust_repayment_date",
+        {"card_id": "CARD-8821" if other_card else "CARD-9902", "new_day": 18},
+    )
+    if not other_card:
+        assert services.scheduler.rollback_action(
+            action_id=second, user_id="demo-user"
+        )["status"] == "rolled_back"
+    assert services.scheduler.rollback_action(
+        action_id=first, user_id="demo-user"
+    )["status"] == "rolled_back"
+    assert services.repository.card("demo-user", "CARD-9902").repayment_day == before
+    if other_card:
+        assert services.repository.card("demo-user", "CARD-8821").repayment_day == 18
+    assert services.audit.verify()["valid"]
 
 
 @pytest.mark.parametrize(

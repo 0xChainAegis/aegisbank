@@ -90,6 +90,52 @@ def _reserve_reversal(conn, *, kind: str, original_id: str, user_id: str, revers
     )
 
 
+def _require_latest_setting(
+    services: CoreServices,
+    context: ExecutionContext,
+    args: ReverseArgs,
+    *,
+    writers: tuple[str, ...],
+    resource_key: str | None = None,
+) -> None:
+    """Do not undo another action's later intent, including same-value (ABA) edits.
+
+    Called inside the executor's write transaction. Journal IDs establish commit
+    order without relying on second-resolution timestamps. A later step that was
+    itself successfully compensated no longer prevents reverse-order rollback.
+    """
+    with services.db.transaction() as conn:
+        original = conn.execute(
+            "SELECT e.id FROM action_journal_entries e "
+            "JOIN action_journal j ON j.action_id=e.action_id "
+            "WHERE e.action_id=? AND e.node_id=? AND e.phase='executed' "
+            "AND e.status='succeeded' AND j.user_id=?",
+            (context.run_id, args.compensating_node_id, context.user_id),
+        ).fetchone()
+        if original is None:
+            raise ValueError("恢复设置失败：缺少可信的原执行日志。")
+        data = _result_data(args.original_result)
+        resource = data.get(resource_key) if resource_key else None
+        if resource_key and not resource:
+            raise ValueError("恢复设置失败：原回执缺少资源标识。")
+        placeholders = ",".join("?" for _ in writers)
+        later = conn.execute(
+            "SELECT 1 FROM action_journal_entries e "
+            "JOIN action_journal j ON j.action_id=e.action_id "
+            "WHERE e.id>? AND j.user_id=? AND e.phase='executed' "
+            "AND e.status='succeeded' "
+            f"AND e.tool_name IN ({placeholders}) "
+            "AND (? IS NULL OR json_extract(e.result_json, ?) = ?) "
+            "AND NOT EXISTS (SELECT 1 FROM action_journal_entries c "
+            "WHERE c.action_id=e.action_id AND c.node_id=e.node_id "
+            "AND c.phase='compensated' AND c.status='succeeded') LIMIT 1",
+            (original["id"], context.user_id, *writers,
+             resource_key, f"$.data.{resource_key}", resource),
+        ).fetchone()
+        if later is not None:
+            raise ValueError("恢复设置失败：该设置已有后续操作，禁止用旧快照覆盖，请人工核查。")
+
+
 class ReverseArgs(BaseModel):
     """Uniform payload handed to every inverse tool by the scheduler."""
 
@@ -431,6 +477,13 @@ class RestoreRepaymentDateTool(BaseTool):
         previous_day = data.get("previous_day")
         if not card_id or previous_day is None:
             raise ValueError("恢复还款日失败：缺少卡片或调整前的还款日。")
+        _require_latest_setting(
+            self.services, context, args,
+            writers=("adjust_repayment_date",), resource_key="card_id",
+        )
+        card = self.services.repository.card(context.user_id, card_id)
+        if card is None or card.repayment_day != data.get("new_day"):
+            raise ValueError("恢复还款日失败：当前设置与原操作结果不一致。")
         result = self.services.repository.adjust_repayment_date(
             context.user_id, card_id, int(previous_day)
         )
@@ -464,6 +517,13 @@ class RestoreCardLimitTool(BaseTool):
         previous_limit = data.get("previous_limit_cny")
         if not card_id or previous_limit is None:
             raise ValueError("恢复卡片额度失败：缺少卡片或调整前的额度。")
+        _require_latest_setting(
+            self.services, context, args,
+            writers=("adjust_card_limit",), resource_key="card_id",
+        )
+        card = self.services.repository.card(context.user_id, card_id)
+        if card is None or card.credit_limit_cny != data.get("new_limit_cny"):
+            raise ValueError("恢复卡片额度失败：当前设置与原操作结果不一致。")
         result = self.services.repository.adjust_card_limit(
             context.user_id, card_id, float(previous_limit)
         )
@@ -497,6 +557,13 @@ class RestoreTransactionLimitTool(BaseTool):
         previous_limit = data.get("previous_transaction_limit_cny")
         if not card_id or previous_limit is None:
             raise ValueError("恢复交易限额失败：缺少卡片或解锁前的限额快照。")
+        _require_latest_setting(
+            self.services, context, args,
+            writers=("set_transaction_limit", "unlock_transaction_limit"), resource_key="card_id",
+        )
+        card = self.services.repository.card(context.user_id, card_id)
+        if card is None or card.transaction_limit_cny != data.get("daily_limit_cny"):
+            raise ValueError("恢复交易限额失败：当前设置与原操作结果不一致。")
         result = self.services.repository.set_transaction_limit(
             context.user_id, card_id, float(previous_limit)
         )
@@ -529,6 +596,10 @@ class ReactivateSubscriptionTool(BaseTool):
         subscription_id = str(original.get("subscription_id") or data.get("subscription_id") or "")
         if not subscription_id:
             raise ValueError("恢复订阅失败：缺少订阅编号。")
+        _require_latest_setting(
+            self.services, context, args,
+            writers=("cancel_subscription",), resource_key="subscription_id",
+        )
         with self.services.db.transaction() as conn:
             row = conn.execute(
                 "SELECT status FROM bank_subscriptions WHERE user_id = ? AND subscription_id = ?",
@@ -536,12 +607,13 @@ class ReactivateSubscriptionTool(BaseTool):
             ).fetchone()
             if row is None:
                 raise ValueError(f"恢复订阅失败：订阅不存在：{subscription_id}")
-            if str(row["status"]) != "active":
-                conn.execute(
-                    "UPDATE bank_subscriptions SET status = 'active' "
-                    "WHERE user_id = ? AND subscription_id = ?",
-                    (context.user_id, subscription_id),
-                )
+            if str(row["status"]) != "cancelled":
+                raise ValueError("恢复订阅失败：当前状态与原取消结果不一致。")
+            conn.execute(
+                "UPDATE bank_subscriptions SET status = 'active' "
+                "WHERE user_id = ? AND subscription_id = ?",
+                (context.user_id, subscription_id),
+            )
         return ToolResult(
             tool_name=self.metadata.name,
             message=f"订阅 {subscription_id} 已恢复为 active（演示数据）。",
@@ -625,8 +697,16 @@ class RestoreWealthRiskTool(BaseTool):
         data = _result_data(args.original_result)
         if "previous_preference" not in data:
             raise ValueError("恢复风险偏好失败：缺少测评前的偏好快照。")
+        _require_latest_setting(
+            self.services, context, args, writers=("assess_wealth_risk",),
+        )
         previous = data.get("previous_preference")
         with self.services.db.transaction() as conn:
+            current = conn.execute(
+                "SELECT risk_preference FROM wealth_profile WHERE user_id=?", (context.user_id,),
+            ).fetchone()
+            if current is None or current["risk_preference"] != data.get("risk_preference"):
+                raise ValueError("恢复风险偏好失败：当前设置与原测评结果不一致。")
             if previous is None:
                 conn.execute("DELETE FROM wealth_profile WHERE user_id = ?", (context.user_id,))
             else:
