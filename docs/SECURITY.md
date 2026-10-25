@@ -4,7 +4,7 @@
 
 > 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
 > 最近更新：2026-10-24（后端补偿与权限审计补强，详见本轮记录）。
-> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 16 个测试文件（200 条）。
+> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 17 个测试文件（252 条）。
 
 ## 1. 信任层实现（阶段 1）
 
@@ -113,9 +113,15 @@ detail:            人类可读说明
 1. 只接受 `ExecutionPlan` / `PlanStep` 契约字段，出现契约外字段或非 JSON 对象直接失败；
 2. 模型返回未注册工具 → 失败，不进入执行；
 3. 模型不得覆盖用户显式提供的参数、不得丢弃高风险参数（`to_account / from_account / amount_cny / new_day / new_limit_cny / daily_limit_cny / card_id / subscription_id`）；
-4. 模型不得补全用户未提供的转账收款方或金额（值必须能在用户原话中找到）；
+4. 模型不得补全用户未提供的转账收款方或金额；金额必须对应完整词元的确定性解析或经验证的规则计划，不能用数字子串证明金额来源；
 5. 冲突转为 `needs_clarification`，不会「模型赢」；
 6. `auto` 模式下 LLM 失败回退规则 Planner，并显式标注 `planner: auto:rule-fallback`。
+
+### 1.7.1 NLP P0 语义安全检查
+
+rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、执行及续问都经过相同检查。可识别的条件、未支持组合、多目标、金额歧义及显式金额冲突返回澄清与空步骤，不创建待确认动作或业务写入。中文/千分位金额通过 `planning/amounts.py` 完整解析，保留来源；订阅事实不可用时不再回退取消演示订阅。
+
+这是有界规则防线，会保守拒绝部分合法表达，不是通用语义完备性证明；预置组合仅在既有支持边界内保留。52 项新增回归和边界见 [P0 记录](NLP-ASSESSMENT-AND-PLAN-2026-10-25.md)。
 
 ### 1.8 异常熔断
 

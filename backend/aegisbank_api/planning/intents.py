@@ -15,20 +15,11 @@ from typing import Protocol
 
 from ..banking.repository import BankingRepository
 from ..registry import ToolRegistry
+from .amounts import extract_amounts  # re-export for scenario intent rules
 from .contracts import ExecutionPlan, PlanningRequest
 
-_AMOUNT_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:元|rmb|cny)", re.IGNORECASE)
-_IMPLIED_AMOUNT_PATTERN = re.compile(r"(?:到|至|为|改成)\s*(\d+(?:\.\d+)?)")
 _ACCOUNT_PATTERN = re.compile(r"ACC-\d{3,}", re.IGNORECASE)
 _CARD_PATTERN = re.compile(r"CARD-\d{3,}", re.IGNORECASE)
-
-
-def extract_amounts(instruction: str) -> list[float]:
-    """Extract explicit ("300 元") or implied ("调整到 12000") amounts."""
-    values = _AMOUNT_PATTERN.findall(instruction)
-    if values:
-        return [float(item) for item in values]
-    return [float(item) for item in _IMPLIED_AMOUNT_PATTERN.findall(instruction)]
 
 
 @dataclass(frozen=True, slots=True)

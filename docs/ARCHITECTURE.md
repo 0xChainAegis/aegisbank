@@ -4,7 +4,7 @@
 
 > 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
 > 最近更新：2026-10-24（补偿设置冲突、风险/MFA 复检与权限审计事务）。
-> 文中数字与实现一致：50 个工具、49 个 `/api` 接口、5 个场景模块 + 6 个 2A 扩展模块、后端 200 项 pytest（16 个测试文件）。
+> 文中数字与实现一致：50 个工具、49 个 `/api` 接口、5 个场景模块 + 6 个 2A 扩展模块、后端 252 项 pytest（17 个测试文件）。
 
 ## 1. 设计目标
 
@@ -74,6 +74,8 @@ IM / CLI / webhook（`channels/im.py`）不是第二条执行路径：适配器�
 ## 3. 结构化计划契约
 
 Planner 可替换，契约固定（`planning/contracts.py`）。
+
+P0 在规则和 LLM 规划前共用 `planning/safety.py` 检查条件、组合、多目标与金额冲突；模型候选再次校验。`planning/amounts.py` 使用 Decimal 完整解析金额，返回原文片段/位置和值；各场景通过 `planning/intents.py` 的统一入口使用它。对未支持语义返回空步骤澄清；已支持的预置 DAG 沿用原编译和执行链。原始指令不被规范化文本覆盖，金额来源进入计划 assumptions。详情见 [NLP P0](NLP-ASSESSMENT-AND-PLAN-2026-10-25.md)。
 
 ### PlanningRequest
 

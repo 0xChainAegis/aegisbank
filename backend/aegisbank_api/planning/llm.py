@@ -17,7 +17,9 @@ from typing import Any
 import httpx
 
 from ..registry import ToolRegistry
+from .amounts import AmountError, money_mentions
 from .contracts import ExecutionPlan, Planner, PlanningRequest, PlanStep
+from .safety import planning_clarification
 
 _ALLOWED_PLAN_FIELDS = frozenset(ExecutionPlan.model_fields)
 _ALLOWED_STEP_FIELDS = frozenset(PlanStep.model_fields)
@@ -89,7 +91,7 @@ def _value_mentioned(value: Any, text: str) -> bool:
         if float(value).is_integer():
             candidates.add(str(int(value)))
         return any(
-            re.search(r"(?<![\d.\-])" + re.escape(item) + r"(?![\d.])", haystack)
+            re.search(r"(?<![\d.,，\-])" + re.escape(item) + r"(?![\d.,，])", haystack)
             for item in candidates
         )
     return str(value) in haystack
@@ -99,6 +101,11 @@ def _candidate_conflict(
     plan: ExecutionPlan, request: PlanningRequest, reference: ExecutionPlan | None = None
 ) -> str | None:
     """Return a human-readable conflict reason, or ``None`` when safe."""
+    blocked = planning_clarification(request)
+    if blocked is not None:
+        return blocked.clarification
+    if reference is not None and reference.needs_clarification and plan.steps:
+        return "确定性规划仍需澄清，模型不能忽略未解决的语义生成部分计划"
     explicit = request.arguments or {}
     if request.tool_name and (len(plan.steps) != 1 or plan.steps[0].tool_name != request.tool_name):
         return f"模型步骤与用户显式指定的 {request.tool_name} 冲突"
@@ -158,7 +165,18 @@ def _candidate_conflict(
                     ref.tool_name == step.tool_name and _same_value(ref.arguments.get(key), value)
                     for ref in reference.steps
                 )
-                if not grounded and not _value_mentioned(value, instruction):
+                if key.endswith("_cny"):
+                    try:
+                        monetary = [m.value for m in money_mentions(instruction)]
+                    except AmountError:
+                        return "用户金额格式需澄清"
+                    if not grounded and not any(_same_value(float(v), value) for v in monetary):
+                        return f"模型的 {step.tool_name}.{key} 与完整金额解析结果不一致"
+                if (
+                    not grounded
+                    and not key.endswith("_cny")
+                    and not _value_mentioned(value, instruction)
+                ):
                     return (
                         f"模型的 {step.tool_name}.{key}（收款方或关键参数）"
                         "无法对应用户指令或确定性解析结果"
@@ -170,8 +188,14 @@ def _candidate_conflict(
             step.arguments.get("to_account"), instruction
         ):
             return "模型补全了用户未提供的收款方"
-        if "amount_cny" not in explicit and not _value_mentioned(
-            step.arguments.get("amount_cny"), instruction
+        if (
+            "amount_cny" not in explicit
+            and not any(
+                ref.tool_name == "transfer"
+                and _same_value(ref.arguments.get("amount_cny"), step.arguments.get("amount_cny"))
+                for ref in (reference.steps if reference else [])
+            )
+            and not _value_mentioned(step.arguments.get("amount_cny"), instruction)
         ):
             return "模型补全了用户未提供的转账金额"
     return None
@@ -222,6 +246,9 @@ class OpenAICompatiblePlanner:
             self.client.close()
 
     def plan(self, request: PlanningRequest) -> ExecutionPlan:
+        blocked = planning_clarification(request)
+        if blocked is not None:
+            return blocked
         if not self.base_url or not self.model:
             raise PlannerError("LLM Planner 缺少 base_url 或 model 配置。")
         catalog = [
@@ -294,10 +321,14 @@ class OpenAICompatiblePlanner:
         if unknown_tools:
             raise PlannerError(f"模型返回了未注册工具：{', '.join(unknown_tools)}")
 
-        conflict = _candidate_conflict(plan, request, self.reference_planner.plan(request))
+        reference = self.reference_planner.plan(request)
+        conflict = _candidate_conflict(plan, request, reference)
         if conflict:
             return _conflict_clarification(plan, conflict, self.name)
 
+        for assumption in reference.assumptions:
+            if assumption.startswith("金额来源：") and len(plan.assumptions) < 12:
+                plan.assumptions.append(assumption)
         plan.planner = self.name
         return plan
 

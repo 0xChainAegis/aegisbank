@@ -111,7 +111,6 @@ _AA_PARTICIPANTS_RE = re.compile(
     r"(?:和|跟|与|同)\s*([^\s，,。；;！!？?：:]+?)\s*(?:一起)?\s*aa",
     re.IGNORECASE,
 )
-_AA_TOTAL_RE = re.compile(r"aa[^0-9]{0,6}(\d+(?:\.\d+)?)", re.IGNORECASE)
 _AA_PEOPLE_RE = re.compile(r"(\d+)\s*(?:个|位)?\s*人")
 _PARTICIPANT_SPLIT_RE = re.compile(r"[、,，/和跟与\s]+")
 _AA_NOISE_TOKENS = frozenset(
@@ -137,7 +136,6 @@ _AA_NOISE_SUBSTRINGS = (
 _NAME_TRANSFER_RE = re.compile(
     r"(?:给|向|帮|替)\s*([\u4e00-\u9fa5A-Za-z·]{1,12}?)\s*(?:转账|汇款|转)"
 )
-_TRANSFER_AMOUNT_RE = re.compile(r"(?:转账|汇款|打款|转)\s*(\d+(?:\.\d+)?)")
 
 
 # ---------------------------------------------------------------------------
@@ -508,8 +506,7 @@ def _aa_total_from(instruction: str) -> float | None:
     amounts = extract_amounts(instruction)
     if amounts:
         return amounts[0]
-    match = _AA_TOTAL_RE.search(instruction)
-    return None if match is None else float(match.group(1))
+    return None
 
 
 class ContactTransferRiskRule:
@@ -741,13 +738,8 @@ class ContactTransferIntent:
                 return None
         label = receiver_name or receiver_phone or ""
 
-        amount: float | None = None
-        amount_match = _TRANSFER_AMOUNT_RE.search(instruction)
-        if amount_match is not None:
-            amount = float(amount_match.group(1))
-        else:
-            amounts = ctx.amounts()
-            amount = amounts[0] if amounts else None
+        amounts = ctx.amounts()
+        amount = amounts[0] if amounts else None
         if amount is None or amount <= 0:
             return _clarification(
                 f"请补充给「{label}」的转账金额，例如：给{label}转 200 元。",

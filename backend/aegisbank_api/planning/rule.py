@@ -6,8 +6,10 @@ import re
 
 from ..banking.repository import BankingRepository
 from ..registry import ToolRegistry
+from .amounts import money_mentions
 from .contracts import ExecutionPlan, PlanningRequest, PlanStep
 from .intents import IntentContext, collect_intent_rules, extract_amounts
+from .safety import planning_clarification
 
 _CANCEL_WORDS = ("取消", "关闭", "关掉", "退订", "停掉", "cancel", "unsubscribe")
 _SUBSCRIPTION_WORDS = (
@@ -36,6 +38,20 @@ class RuleBasedPlanner:
         self.scenario_rules = collect_intent_rules()
 
     def plan(self, request: PlanningRequest) -> ExecutionPlan:
+        blocked = planning_clarification(request)
+        if blocked is not None:
+            return blocked
+        plan = self._plan(request)
+        if not plan.needs_clarification:
+            for mention in money_mentions(request.instruction):
+                if len(plan.assumptions) < 12:
+                    plan.assumptions.append(
+                        f"金额来源：原文[{mention.start}:{mention.end}]「{mention.raw}」"
+                        f" = {mention.value:.2f} CNY。"
+                    )
+        return plan
+
+    def _plan(self, request: PlanningRequest) -> ExecutionPlan:
         if re.search(
             r"不要|别(?:给|转|改|调|挂失|取消)|不(?:要|必|用)|暂不|取消这次|don't|do not",
             request.instruction,
@@ -312,11 +328,8 @@ class RuleBasedPlanner:
                 f"{subscriptions[0].subscription_id}。当前订阅：{candidates}",
                 "cancel_subscription",
             )
-        return self._single_plan(
-            "cancel_subscription",
-            "cancel_subscription",
-            {"subscription_id": "SUB-3002"},
-            assumptions=["未读取到订阅列表，回退到演示订阅 SUB-3002。"],
+        return self._clarification(
+            "未读取到可验证的订阅目标，请明确订阅编号或稍后重试。", "cancel_subscription"
         )
 
     def _single_plan(

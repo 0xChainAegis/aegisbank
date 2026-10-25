@@ -113,8 +113,6 @@ _PHONE_FULL_PATTERN = re.compile(r"1[3-9]\d{9}")
 _NAME_TRANSFER_PATTERN = re.compile(
     r"(?:给|向|帮|替)\s*([\u4e00-\u9fa5A-Za-z·]{1,12}?)\s*(?:转账|汇款|转)"
 )
-_TRANSFER_AMOUNT_PATTERN = re.compile(r"(?:转账|汇款|打款|转)\s*(\d+(?:\.\d+)?)")
-_BUDGET_PATTERN = re.compile(r"预算\s*(\d+(?:\.\d+)?)")
 _TASK_ID_PATTERN = re.compile(r"TASK-[A-Z0-9]{4,}")
 
 _SCHEDULE_HINTS = (
@@ -302,17 +300,11 @@ def _resolve_run_at(instruction: str, now: datetime) -> tuple[datetime, str]:
 
 
 def _transfer_amount_from(instruction: str) -> float | None:
-    match = _TRANSFER_AMOUNT_PATTERN.search(instruction)
-    if match is not None:
-        return float(match.group(1))
     amounts = extract_amounts(instruction)
     return amounts[-1] if amounts else None
 
 
 def _budget_amount_from(instruction: str) -> float | None:
-    match = _BUDGET_PATTERN.search(instruction)
-    if match is not None:
-        return float(match.group(1))
     amounts = extract_amounts(instruction)
     return amounts[0] if amounts else None
 
