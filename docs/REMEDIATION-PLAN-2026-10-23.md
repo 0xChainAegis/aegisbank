@@ -176,4 +176,3 @@ pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate
 - 仍待验证/生产化：OS 级沙箱、任意数据库外副作用隔离、kill -9 与多 worker 故障矩阵、TTL 清理、按用户熔断、外部审计锚点、长时间压力、真实浏览器多窗口/网络回归。进程内线程超时不能代表任意代码可安全执行。
 - 订阅纯查询目前仍按绿色，赛题表中的黄色口径差异未取得组委会解释；一般指代消解和长会话未宣称完成。
 - 修复源分支为 `codex/audit-remediation-20261023`；提交与发布记录以 Git 历史为准；Windows 历史副本保持冻结。
-

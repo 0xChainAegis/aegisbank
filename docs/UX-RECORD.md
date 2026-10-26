@@ -752,5 +752,3 @@ team-plan.ps1 -Repo . -Tasks   → 4 个任务键（scout → be-docs → ver �
 | 真实浏览器 | 1440×900 textarea top=344；演示路径 1→2 通过；弹窗可见层无 `${steps...}`；Tab 15 次不逃窗；ESC→恢复横幅；刷新后恢复；390/360/768 七页无横向滚动；console error = 0 |
 | 结论 | ACCEPT WITH NOTES（无阻断）；已处理 3 条建议，其余为文案精度与后端字段缺失 |
 | 环境说明 | 验收使用 `/tmp/ux-audit.db` 测试库，同日已有 ¥880 完成转账，故小额转账按规则升级为 RED；测试库可通过 `scripts/seed-demo.sh` 重置 |
-
-
