@@ -819,36 +819,233 @@ curl -s http://127.0.0.1:8000/api/audit/verify \
 ```
 
 `checked` 随操作数量变化；示例中为上述完整流程后的条数。
-## 8. 演示数据与排障
+## 8. 错误码与典型响应
 
-- 首次启动会自动建库并写入确定性 Mock Bank Core 种子。
-- `seed-demo.sh` 默认重置 `.runtime/backend/data/dogfood.db`，而 `dev.sh` 默认使用 `.runtime/backend/data/aegisbank.db`；需要 3000 元虚拟卡时，必须让后端指向同一个数据库。
-- 建议使用绝对路径：
-  ```bash
-  bash scripts/seed-demo.sh "$PWD/.runtime/backend/data/aegisbank.db"
-  bash scripts/dev.sh
-  ```
+### 8.1 状态码总表
+
+| HTTP | 典型场景 | 说明 |
+|---|---|---|
+| 200 | 业务请求已处理 | 业务状态可能是 `completed` / `awaiting_confirmation` / `blocked` / `needs_clarification` |
+| 400 | 确认请求不存在、意图错误 | 请求语义或目标不合法 |
+| 403 | 直接能力端点缺少角色能力 | 例如普通用户重置熔断器 |
+| 404 | 工具不存在 | 权限接口中的未知工具名 |
+| 409 | 幂等键冲突、确认 Envelope 失效、澄清上下文不可用 | 需要更换请求或重新发起操作 |
+| 413 | 请求体超过 128 KB | 中间件在解析前拒绝 |
+| 422 | Pydantic 校验失败或执行失败 | 字段缺失/类型错误，或确认执行阶段失败 |
+| 503 | 服务未就绪 | 写操作 fail closed，不会伪装成功 |
+
+注意：`POST /api/agent/run` 遇到角色无 `tool:execute` 时，可能返回 **HTTP 200 + `status=blocked`**，而不是 403；这是业务状态层的拒绝。直接检查能力的端点（如熔断重置）才会返回 403。
+
+### 8.2 400 — 确认请求不存在
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/confirmations/does-not-exist \
+  -H 'Content-Type: application/json' \
+  -d '{"approved":true}'
+```
+
+```json
+{
+  "detail": "确认请求不存在。"
+}
+```
+
+### 8.3 403 — 角色能力不足
+
+`user` 角色不能重置熔断器：
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/trust/circuit-breaker/reset \
+  -H 'X-Aegis-Role: user'
+```
+
+```json
+{
+  "detail": "角色 user 不具备能力 ops:manage 的执行权限。"
+}
+```
+
+### 8.4 409 — 幂等键复用但请求内容不同
+
+```bash
+# 第一次请求
+curl -s -X POST http://127.0.0.1:8000/api/agent/run \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: same-key' \
+  -d '{"instruction":"查询我的本月账单","tool_name":"query_bill","arguments":{"account_id":"ACC-1001"}}'
+
+# 相同 key，不同 body
+curl -s -X POST http://127.0.0.1:8000/api/agent/run \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: same-key' \
+  -d '{"instruction":"查询我的本月账单","tool_name":"query_bill","arguments":{"account_id":"ACC-2002"}}'
+```
+
+```json
+{
+  "detail": {
+    "code": "IDEMPOTENCY_KEY_REUSED",
+    "message": "同一个 Idempotency-Key 携带了不同的请求内容，拒绝处理。"
+  }
+}
+```
+
+确认 Envelope 过期、plan/arguments 哈希不一致等也会返回 409；响应中的 `code` 用于区分具体原因。
+
+### 8.5 413 — 请求体过大
+
+```bash
+python3 - <<'PY'
+import json, urllib.request
+body = json.dumps({"instruction": "x" * 130000}).encode()
+req = urllib.request.Request(
+    "http://127.0.0.1:8000/api/agent/run",
+    data=body,
+    headers={"Content-Type": "application/json", "X-Aegis-Role": "user"},
+    method="POST",
+)
+try:
+    urllib.request.urlopen(req)
+except urllib.error.HTTPError as exc:
+    print(exc.code, exc.read().decode())
+PY
+```
+
+```json
+{
+  "detail": "请求体超出上限。"
+}
+```
+
+### 8.6 422 — 请求字段校验失败
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/agent/run \
+  -H 'Content-Type: application/json' \
+  -d '{"instruction":""}'
+```
+
+```json
+{
+  "detail": [
+    {
+      "type": "string_too_short",
+      "loc": ["body", "instruction"],
+      "msg": "String should have at least 1 character",
+      "input": "",
+      "ctx": {"min_length": 1}
+    }
+  ]
+}
+```
+
+### 8.7 503 — 服务未就绪
+
+就绪检查本身返回 200，但 `status=not_ready`：
+
+```json
+{
+  "status": "not_ready",
+  "components": {
+    "sqlite": {"ok": false, "detail": "模拟 SQLite 未就绪"},
+    "audit_chain": {"ok": true, "detail": "哈希链校验通过，共 0 条"},
+    "mock_bank_seed": {"ok": true, "detail": "模拟银行种子就绪：2 个账户 / 2 张卡"},
+    "planner": {"ok": true, "detail": "Planner 可用：rule"}
+  }
+}
+```
+
+此时写操作返回 503：
+
+```json
+{
+  "detail": "系统未就绪，写操作已按 fail closed 拒绝（sqlite: 模拟 SQLite 未就绪）。"
+}
+```
+## 9. 演示数据与排障
+
+- 首次启动会自动建库并写入确定性 Mock Bank Core 种子，不需要手工迁移。
+- `seed-demo.sh` 默认重置 `.runtime/backend/data/dogfood.db`，而 `dev.sh` 默认使用 `.runtime/backend/data/aegisbank.db`。需要 3000 元虚拟卡时，必须让后端指向同一个数据库。
+- 推荐用绝对路径重置默认库：
+
+```bash
+# 先停止后端
+pkill -f '[u]vicorn aegisbank_api.main:app' || true
+
+# 重置并使用 dev.sh 默认的数据库
+bash scripts/seed-demo.sh "$PWD/.runtime/backend/data/aegisbank.db"
+bash scripts/dev.sh
+```
+
+- 也可以让 `dev.sh` 指向 `dogfood.db`：
+
+```bash
+bash scripts/seed-demo.sh
+AEGIS_DATABASE_PATH="$PWD/.runtime/backend/data/dogfood.db" bash scripts/dev.sh
+```
+
 - 重置数据库前先停止后端，避免 SQLite 文件锁。
 - 端口冲突时检查 8000 / 5173：
-  ```bash
-  ss -ltnp | grep -E ':8000|:5173'
-  ```
 
-## 9. 已知边界
+```bash
+ss -ltnp | grep -E ':8000|:5173'
+```
 
-- 全部账户、卡片、账单、理财和交易均为 Mock Bank Core 模拟数据，不连接真实银行。
-- `X-Aegis-Role` 只是演示请求头，不是身份认证。
-- 固定 OTP `246810` 和模拟生物识别不是生产 MFA。
-- 当前 NLP 只完成 P0；P1–P4 的通用上下文、对话纠错、任意条件与组合规划仍未实现。
+- 复现第 7 节示例时，建议按以下顺序执行，以保证风险分级与审计条数一致：
+  1. `GET /api/health`、`GET /api/health/ready`、`GET /api/banking/overview`
+  2. `POST /api/planner/plan`（880 元）
+  3. `POST /api/agent/run`（880 元黄色）
+  4. `POST /api/confirmations/{id}`（黄色确认）
+  5. `POST /api/agent/run`（绿色账单查询）
+  6. `POST /api/agent/run`（1200 元红色，日累计升级）
+  7. 错误 OTP → 正确 OTP
+  8. `GET /api/audit`、`GET /api/audit/verify`
+## 10. 前端契约核对与已知边界
+
+### 10.1 前端契约核对
+
+已核对以下前端调用与后端路由/字段一致：
+
+| 前端函数 | 后端接口 | 关键字段 |
+|---|---|---|
+| `fetchBankingOverview()` | `GET /api/banking/overview?user_id=demo-user` | `accounts`、`cards`、`subscriptions`、`monthly_spend_cny` |
+| `previewPlan(input)` | `POST /api/planner/plan` | `plan`、`steps`、`risk` |
+| `runAgent(input)` | `POST /api/agent/run` | `status`、`run_id`、`plan`、`confirmation`、`results` |
+| `resolveConfirmation(id, approved, reauthToken, mfaProvider)` | `POST /api/confirmations/{id}` | `approved`、`reauth_token`、`mfa_provider` |
+| `fetchReadiness()` | `GET /api/health/ready` | `status`、`components` |
+| `fetchAudit(limit, runId)` | `GET /api/audit` | `entries`、`count` |
+| `verifyAudit()` | `GET /api/audit/verify` | `valid`、`checked` |
+
+前端 `RunResponse` 类型已覆盖 `completed`、`awaiting_confirmation`、`needs_clarification`、`blocked` 等业务状态。接口字段变更时，必须同步 `fronted/frontend/src/api.ts` 与 `types.ts`。
+### 10.2 NLP 能力边界
+
+- P0 已落地：完整金额词元规范化、Decimal 分位校验、金额原文与位置记录；已识别的条件、组合和参数冲突转澄清；rule / llm / auto / 显式工具入口共用安全检查。
+- P1-P4 未实现：没有通用 SemanticFrame、会话记忆与纠错、任意条件与组合规划，也没有正式 NLP 保留集评测。
+- 当前可表述为支持限定表达、部分口语、受限续问和预置跨场景 DAG 的可信银行智能体原型，不能表述为通用自然语言理解或任意复杂任务规划。
+- 详见 [NLP 现状与 P0 修复](NLP-ASSESSMENT-AND-PLAN-2026-10-25.md) 与 [NLP 后续待办](NLP-BACKLOG.md)。
+### 10.3 安全与演示边界
+
+- 全部账户、卡片、账单、理财和交易均为 Mock Bank Core 模拟数据，不连接真实银行或支付网络。
+- X-Aegis-Role 只是演示请求头，不是身份认证。
+- 固定 OTP 246810 和模拟生物识别不是生产 MFA。
 - 进程内工具沙箱不是 OS 级隔离；没有真实 IM 平台接入。
+- SHA-256 哈希链用于检测日志改动，不等同于数字签名或独立存证。
 - 测试通过只代表已知用例可复现，不代表生产安全认证。
 
-## 10. 参考资料
+### 10.4 验证数字口径
+
+- 应用验证基线（2026-10-25）：后端 pytest 252 项、前端 Vitest 73 项、六场景回归 29/29、实际前端入口 15/15。
+- 职责包组装器测试：18 项通过。
+- 以上数字来自对应版本的历史记录；当前变更后应重新运行并引用实际输出，不能用旧数字代替新验证。
+
+## 11. 参考资料
 
 - [根 README](../README.md)
 - [贡献指南](../CONTRIBUTING.md)
 - [六模块整合记录](INTEGRATION-2026-10-26.md)
 - [系统架构](ARCHITECTURE.md)
 - [安全设计](SECURITY.md)
+- [NLP 现状](NLP-ASSESSMENT-AND-PLAN-2026-10-25.md)
+- [NLP 待办](NLP-BACKLOG.md)
 - [部署说明](../deliverables/06-部署说明.md)
 - [测试与复现](../deliverables/07-测试与复现.md)
