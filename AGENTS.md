@@ -1,5 +1,7 @@
 # AegisBank —— 项目规则
 
+> 2026-10-26 团队协作主线迁入 `0xChainAegis/aegisbank`，保留原作者历史和 MIT 声明。每位成员在独立分支开发，接口更改先对齐；NLP P1–P4 仍是后续待办，不因迁仓宣称已实现。
+
 > 2026-10-25 NLP P0：金额统一规范化，未支持的条件/组合请求转澄清；rule / llm / auto / 显式工具入口共用检查，详情见 [P0 记录](docs/NLP-ASSESSMENT-AND-PLAN-2026-10-25.md)。
 
 > 2026-10-24 后端补强：补偿设置冲突保护、恢复额度风险复检、事务内 MFA 拒绝、权限与审计原子提交。见 [本轮记录](docs/BACKEND-HARDENING-2026-10-24.md)。
@@ -31,7 +33,7 @@
 - **阶段 0（产品边界与仓库定型）已完成**：上游 PR 材料归档到 `archive/upstream-plan-provenance`，`main` 只保留产品内容。
 - **阶段 1（信任工程）已完成**：`backend/aegisbank_api/trust/` 落地 ActionEnvelope/v1、幂等键、状态机（含 `UNKNOWN / RECONCILED / ROLLED_BACK`）、readiness fail-closed、证据分层、注入整条拒绝与模型候选白名单；新增 `GET /api/health/ready`、`/api/trust/*` 接口；`POST /api/agent/run` 与 `POST /api/confirmations/{id}` 支持 `Idempotency-Key`，确认链路区分 409 / 422 / 503 语义；`backend/tests/test_trust.py` 共 17 条用例。
 - **阶段 2B（六场景完整覆盖）已完成**：`scenarios/` 下 5 个场景模块（`wealth` / `transfers` / `bills` / `cards` / `automation`）覆盖赛题六个参考场景 6/6，新增 26 个场景工具。
-- **阶段 2A（六项硬要求，后端/API）已完成**（基线 `bf36895`）：步骤级暂停/恢复/回退/补偿（28 条补偿规格，15 可补偿 / 13 不可逆）、三类规则可疑行为熔断与 operator 解锁、可插拔 MFA Provider（OTP + 模拟生物识别）、IM/CLI/webhook 渠道适配器、进程内工具沙箱（超时/网络/入参出参/白名单）、多角色与撤权（`user / operator / auditor`）。工具目录共 **50 个**（核心 10 + 场景 26 + 2A 扩展 14）；后端 **252 项** pytest（17 个测试文件，含 52 项 NLP 回归）、前端 53 项 Vitest。
+- **阶段 2A（六项硬要求，后端/API）已完成**（基线 `bf36895`）：步骤级暂停/恢复/回退/补偿（28 条补偿规格，15 可补偿 / 13 不可逆）、三类规则可疑行为熔断与 operator 解锁、可插拔 MFA Provider（OTP + 模拟生物识别）、IM/CLI/webhook 渠道适配器、进程内工具沙箱（超时/网络/入参出参/白名单）、多角色与撤权（`user / operator / auditor`）。工具目录共 **50 个**（核心 10 + 场景 26 + 2A 扩展 14）；后端 **252 项** pytest（17 个测试文件，含 52 项 NLP 回归）、前端 73 项 Vitest。
 - **阶段 3 交付材料已产出**：`deliverables/`（作品简介、技术文档、14 页答辩 PPT、演示视频分镜脚本、安全自评、部署说明、测试复现）；演示视频待人工录制。
 - 下一步：**阶段 2.5（人工体验，推迟，后续重新进行）**；生产化剩余项：幂等/nonce TTL 清理、按用户熔断、OS 级沙箱、真实身份认证与 MFA、真实 IM 平台接入。详见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 
@@ -39,10 +41,11 @@
 
 | 项 | 值 |
 |---|---|
-| 产品主线仓库 | <https://github.com/LQZ5885/aegisbank>（Public / MIT / 默认分支 `main`） |
-| 开发主线目录 | WSL Ubuntu 24.04 ext4：`/home/lqz5885/aegisbank/dev/aegisbank` |
+| 团队集成主线 | <https://github.com/0xChainAegis/aegisbank>（Public / MIT / 默认分支 `main`） |
+| 原作者来源 | <https://github.com/LQZ5885/aegisbank>，保留历史与版权声明 |
+| 开发位置 | 每位成员独立 Linux / WSL 检出；原作者使用 `/home/lqz5885/aegisbank/dev/aegisbank` |
 | 展示与备份 | Windows `D:\开发交流\mia03-ether\aegisbank智能体`（历史副本，**已冻结，不再开发**） |
-| 归档分支 | `archive/upstream-plan-provenance`（历史上游 PR 材料，只读） |
+| 历史归档 | [原作者归档分支](https://github.com/LQZ5885/aegisbank/tree/archive/upstream-plan-provenance)，本轮不复制 |
 
 不要在 Windows 历史副本上继续开发；需要展示时从 Linux 主线单向复制。
 
@@ -66,7 +69,7 @@
 
 ## 门禁与提交
 
-开发主线在 WSL 内，脚本来自工作流目录 `/mnt/d/开发交流/mia03-ether/.dsh-workflow`。
+后端在 Linux / WSL 运行。团队使用仓库内的 `scripts/lint.sh`、`build.sh`、`test.sh` 与 GitHub CI 验证，再正常提交并通过 PR 集成。以下 DSH 绝对路径属于原作者机器上的可选工作流，只有在该环境开发时才使用；其他成员不需要安装或伪造其门禁尾注。
 
 ```bash
 # 门禁（在 WSL Ubuntu 中执行）

@@ -1,5 +1,9 @@
 # AegisBank 产品路线图
 
+> 2026-10-26：协作集成主线迁入 `0xChainAegis/aegisbank`，原作者历史保留。NLP P1–P4 仍未实施，已拆分为 [独立待办和验收标准](NLP-BACKLOG.md)，本轮仅整理，不承诺赛前全部完成。
+
+> 2026-10-25 前端复验完成一轮：确认恢复与 MFA、六场景入口、状态展示与请求竞态已修复；前端 73 项、后端 252 项、六场景 29/29、15 个实际入口通过。详见 [本轮修复与验收](FRONTEND-REPAIR-2026-10-25.md)。视频和更广泛的人工体验测试仍待开展。
+
 > 2026-10-25 NLP P0 已实现：完整金额规范化、条件/组合任务澄清与多入口校验；新增 52 项 NLP 回归。P1–P4 尚未实施，通用指代与自由组合仍待完善。见 [核验、实现与复现](NLP-ASSESSMENT-AND-PLAN-2026-10-25.md#6-p0-落地2026-10-25)。
 
 > 2026-10-24 后端补强：新增 13 项回归，当时后端 200 项；补偿不覆盖后续设置、红色恢复需 MFA、权限写入与审计原子提交。详见 [补强记录](BACKEND-HARDENING-2026-10-24.md)。生产化剩余项维持下列清单。
@@ -26,7 +30,7 @@
 | 后端测试 | **252 项** pytest（17 个测试文件；含本轮 52 项 NLP 回归） | `cd backend && uv run pytest -p no:warnings` |
 | 其中信任层 | **17 条** | `backend/tests/test_trust.py` |
 | 其中 2A | **51 条**（authz 9 / breaker 7 / compensation 10 / im 7 / mfa 10 / sandbox 8） | `backend/tests/test_{authz,breaker,compensation,im_channel,mfa,sandbox}.py` |
-| 前端测试 | **53 项** Vitest 全部通过（7 个测试文件；阶段 2.5 新增 16 条） | `frontend/src/**/*.test.ts` |
+| 前端测试 | **73 项** Vitest 全部通过（8 个测试文件） | `frontend/src/**/*.test.*` |
 | 银行工具 | **50 个**（核心 10 + 场景 26 + 2A 扩展 14；compensable=15） | `GET /api/tools` |
 | 补偿规格 | **28 条**（15 可补偿 + 13 不可逆） | `GET /api/compensation/specs` |
 | HTTP 接口 | **49 个**（2A 新增 20 个） | `create_app().openapi()` paths |

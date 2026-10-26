@@ -2,13 +2,15 @@
 
 # AegisBank
 
+[![CI](https://github.com/0xChainAegis/aegisbank/actions/workflows/ci.yml/badge.svg)](https://github.com/0xChainAegis/aegisbank/actions/workflows/ci.yml)
+
 ### 让 AI 替你办银行业务，也让每一步都在掌控之中
 
 **自然语言交互 × 六类银行场景 × 可信执行控制平面**
 
 [产品体验](#产品体验) · [核心能力](#核心能力) · [安全设计](#安全设计) · [快速开始](#快速开始) · [参赛材料](#参赛材料)
 
-<img src="docs/screenshots/task-console.png" alt="AegisBank 任务控制台：自然语言指令、执行计划与风险结果" width="92%">
+<img src="docs/screenshots/receipt-verified-2026-10-25.jpg" alt="AegisBank 实际回执：红色模拟转账经 MFA 后执行，风险原因与审计号可见" width="92%">
 
 </div>
 
@@ -24,7 +26,7 @@
 
 > 例如：“分析我的账单，并取消异常订阅。”
 >
-> Agent 会先拆解为账单分析与订阅取消两个步骤。查询自动执行；涉及状态变更的取消操作则展示详情，等待用户确认。
+> Agent 会展示账单分析与订阅取消的两步计划。因为任务包含状态变更，整条任务先等待确认；确认后才按依赖顺序执行查询与取消，不在确认前执行其中一部分。
 
 ## 核心能力
 
@@ -54,7 +56,7 @@
 
 ### 用户看到的不只是答案，还有接下来要发生的事
 
-AegisBank 把执行计划、步骤依赖、风险等级与确认状态放到同一个任务控制台中。复杂任务会拆解为有序 DAG；涉及前序结果时，后续步骤可以引用上游数据，而不是让模型猜测。
+AegisBank 把执行计划、步骤依赖、风险等级与确认状态放到同一个任务控制台中。已支持的预置复杂任务会拆解为有序 DAG；涉及前序结果时，后续步骤可以引用上游数据，而不是让模型猜测。
 
 **绿色操作直接办，黄色操作先确认，红色操作再强验证。**
 
@@ -65,7 +67,7 @@ AegisBank 把执行计划、步骤依赖、风险等级与确认状态放到同�
 风险会根据金额、当日累计和操作类型动态调整，且**只能保持或上调，模型不能降低风险等级**。例如，单日累计规则下，一笔 880 元转账可以是黄色；同日再转 500 元，累计超过 1000 元后会升级为红色。
 
 <p align="center">
-  <img src="docs/screenshots/confirmation-modal.png" alt="AegisBank 操作确认与演示 MFA 弹窗" width="82%">
+  <img src="docs/screenshots/confirmation-recovery-2026-10-25.jpg" alt="AegisBank 刷新后恢复黄色任务，重新核对服务端计划后等待明确确认" width="82%">
 </p>
 
 ## 安全设计
@@ -82,7 +84,7 @@ AegisBank 把安全机制嵌入每一笔操作，而不是附加在回答之后�
 6. **每次决定都有证据**：原始指令、DAG、工具入参、执行结果与确认状态写入 SHA-256 审计哈希链，可在线校验。
 
 <p align="center">
-  <img src="docs/screenshots/audit.png" alt="AegisBank 操作审计与 SHA-256 哈希链校验" width="92%">
+  <img src="docs/screenshots/audit-verified-2026-10-25.jpg" alt="AegisBank 本轮工具执行、人工确认、Mock 数据证据与 SHA-256 哈希链" width="92%">
 </p>
 
 > 安全能力仍有明确演示边界：角色请求头不是身份认证，固定 OTP 与模拟生物识别不是生产 MFA，进程内工具沙箱不是 OS 容器。完整边界见[安全自评报告](deliverables/05-安全自评报告.md)。
@@ -110,10 +112,10 @@ Planner → Plan Compiler → 动态风险引擎 → 统一权限网关
 
 ### 环境要求
 
-Linux / WSL Ubuntu 24.04，Python 3.11+、`uv`、Node.js 22.22.2+ 与 `pnpm`。
+后端需要 Linux 或 WSL（使用 `fcntl` 文件锁，原生 Windows Python 不能直接运行）。安装 Python 3.11+、`uv`、`pnpm`，Node.js 满足 `^22.22.2 || ^24.15.0 || >=26.0.0`。本轮 CI 固定使用 Python 3.14.4、Node 24.22.0 与 pnpm 10.11.0。
 
 ```bash
-git clone https://github.com/LQZ5885/aegisbank.git
+git clone https://github.com/0xChainAegis/aegisbank.git
 cd aegisbank
 
 # 安装依赖
@@ -141,7 +143,7 @@ bash scripts/dev.sh
 
 ## 质量与复现
 
-仓库当前验证记录包含：**252 项后端 pytest、53 项前端 Vitest、六场景端到端回归 29/29**。这些结果用于证明已知用例可复现，不等同于生产安全认证或完整人工验收。
+仓库当前验证记录包含：**252 项后端 pytest、73 项前端 Vitest、六场景端到端回归 29/29**；本轮另验证了 15 个实际前端入口请求。修复、部署环境与验收范围见 [前端修复记录](docs/FRONTEND-REPAIR-2026-10-25.md)。这些结果用于证明已知用例可复现，不等同于生产安全认证或完整人工验收。
 
 - [测试用例与复现步骤](deliverables/07-测试与复现.md)
 - [安全自评与已知风险](deliverables/05-安全自评报告.md)
@@ -150,14 +152,17 @@ bash scripts/dev.sh
 
 ## 参赛材料
 
-- [作品简介](deliverables/01-作品简介.md) · [技术文档](deliverables/02-技术文档.md) · [答辩 PPT](deliverables/03-AegisBank-答辩PPT.pptx)
+- [本轮提交材料索引](deliverables/current/README.md)：可上传的技术文档、安全自评（Word / PDF）与 14 页答辩 PPT。
+- [作品简介](deliverables/01-作品简介.md) · [技术文档源稿](deliverables/02-技术文档.md) · [原答辩快照](deliverables/03-AegisBank-答辩PPT.pptx)
 - [演示视频脚本](deliverables/04-演示视频脚本.md)（成片待录制）
 - [安全自评报告](deliverables/05-安全自评报告.md) · [部署说明](deliverables/06-部署说明.md) · [测试与复现](deliverables/07-测试与复现.md)
 
-更多真实界面见[截图目录](docs/screenshots/README.md)，项目规划与后续方向见[路线图](docs/ROADMAP.md)。
+旧材料保留当时的验证快照，当前实现以 [前端验收记录](docs/FRONTEND-REPAIR-2026-10-25.md) 为准。更多真实界面见[截图目录](docs/screenshots/README.md)，后续工作见 [NLP 待办](docs/NLP-BACKLOG.md) 与[路线图](docs/ROADMAP.md)。
 
 ## 参与与许可
 
-欢迎通过 [Issue](https://github.com/LQZ5885/aegisbank/issues) 或 [Pull Request](https://github.com/LQZ5885/aegisbank/pulls) 参与改进，提交前请阅读[贡献指南](CONTRIBUTING.md)。
+本组织仓库基于 [LQZ5885/aegisbank](https://github.com/LQZ5885/aegisbank) 继续协作，保留原提交历史与原作者版权声明。AegisAgent 的设计参考范围见 [来源说明](docs/UPSTREAM-NOTES.md)；参考附件的来源单独记录在 [参考资料索引](docs/reference/README.md)。
+
+欢迎通过 [Issue](https://github.com/0xChainAegis/aegisbank/issues) 或 [Pull Request](https://github.com/0xChainAegis/aegisbank/pulls) 参与改进，提交前请阅读[贡献指南](CONTRIBUTING.md)。
 
 本项目采用 [MIT License](LICENSE)。

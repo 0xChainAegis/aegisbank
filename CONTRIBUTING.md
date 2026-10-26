@@ -12,7 +12,7 @@ AegisBank 是面向「银行 AI 智能体」赛题的**可运行原型**。我�
 
 ## 2. 开发环境
 
-推荐 WSL2 Ubuntu 24.04（项目主线开发目录在其中），需要 Python 3.11+ / `uv`、Node.js 20.19+ 或 22.12+ / `pnpm`。
+后端需要 Linux 或 WSL，因为数据库锁依赖 `fcntl`；原生 Windows Python 不能直接运行。需要 Python 3.11+ / `uv`、Node.js `^22.22.2 || ^24.15.0 || >=26.0.0` / `pnpm`。每人使用独立检出目录，作者机器上的绝对路径不是团队成员的前置条件。
 
 ```bash
 bash scripts/bootstrap.sh   # 安装后端与前端依赖
@@ -21,11 +21,14 @@ bash scripts/dev.sh         # 同时启动 API(8000) 与前端(5173)
 
 ## 3. 分支与提交
 
-- `main` 是唯一产品主线，始终保持可构建、可测试。
-- `archive/upstream-plan-provenance` 是历史上游 PR 材料的只读归档分支，不再修改。
+- 组织仓库 `0xChainAegis/aegisbank` 的 `main` 是团队集成主线，始终保持可构建、可测试；不在原作者仓库与组织仓库同时维护两条集成主线。
+- 历史上游 PR 材料保留在[原作者归档分支](https://github.com/LQZ5885/aegisbank/tree/archive/upstream-plan-provenance)，本轮不复制或修改该归档。
 - 功能开发使用独立分支（如 `feat/trust-action-envelope`），完成后合入 `main`。
+- 前端、后端各自分支提交，经 PR 对齐后合入；修改接口、共享类型或同一文件前先沟通。AI 生成的修改也需要负责人阅读并复现。
 - 提交信息使用 Conventional Commits 前缀：`feat:` / `fix:` / `docs:` / `chore:` / `test:`。
 - 提交前必须通过门禁（见下节）。
+
+具体文件边界、已有原仓库如何接入团队 remote，以及接口交接方式见 [团队协作说明](docs/TEAM-WORKFLOW.md)。
 
 ## 4. 门禁与验证
 
@@ -36,7 +39,7 @@ bash scripts/test.sh    # pytest + Vitest
 bash scripts/smoke.sh   # 启动 API，跑绿色链路并校验审计哈希链
 ```
 
-如使用 DSH 工作流，提交必须经 `gate.ps1` 五阶段（encoding / lint / build / test / security）通过后由 `checkpoint.ps1` 生成提交。命令见仓库根 [`AGENTS.md`](AGENTS.md)。
+推送或 PR 后，GitHub CI 在 Linux 中分别验证后端和前端，使用冻结锁文件安装依赖。必须查看实际通过结果，不把新增工作流等同于验证通过。若在原作者机器使用 DSH 工作流，仍按其 `gate.ps1` / `checkpoint.ps1` 约定执行；该外部工作流不是其他成员的必需安装项。
 
 ## 5. 代码约定
 

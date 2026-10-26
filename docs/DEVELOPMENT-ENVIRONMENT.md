@@ -1,7 +1,7 @@
 # 开发环境与验收记录
 
 更新日期：2026-10-23（阶段 2A 六项硬要求完成后，基线 `bf36895`）
-适用仓库：<https://github.com/LQZ5885/aegisbank>
+当前团队仓库：<https://github.com/0xChainAegis/aegisbank>。本页保留原作者 `LQZ5885/aegisbank` 的机器环境记录；团队成员使用各自的 Linux / WSL 检出，不依赖下文绝对路径或外部 DSH 工作流。通用安装和 CI 见根 README 与 CONTRIBUTING。
 总规划：[MASTER-PLAN.md](MASTER-PLAN.md)
 
 ## 1. 目录与角色
