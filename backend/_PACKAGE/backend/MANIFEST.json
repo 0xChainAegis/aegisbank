@@ -1,0 +1,120 @@
+{
+  "source_commit": "654c986ffcac5aa2b5e42baf8bbfa144c6b6eaec",
+  "group": "backend",
+  "files": [
+    {
+      "group": "backend",
+      "path": ".env.example",
+      "bytes": 499,
+      "sha256": "5ea88c07bc5c76bcad9c280402d86dd344bbb99b6f3817efe1bab5b06c780664"
+    },
+    {
+      "group": "backend",
+      "path": "backend/README.md",
+      "bytes": 237,
+      "sha256": "e634319a5e6c53a00b341d1a91bd80695c1b48d5314280eeef8fc6197da3167c"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/__init__.py",
+      "bytes": 58,
+      "sha256": "59a51af3a1f8886de4f8f950a8a22416d607b892905afe2c6e681637fdad37bd"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/banking/__init__.py",
+      "bytes": 344,
+      "sha256": "fafd9f30cad32351ad9b489db64c1f1f6c68c50f7a6af1e4ed42075a34ca0f53"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/banking/models.py",
+      "bytes": 1408,
+      "sha256": "fad7d257e07eacbaafc8584af9c6a9541e3d87523cfcee8744cf003239f3a943"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/banking/repository.py",
+      "bytes": 23249,
+      "sha256": "87148e4d630b9ac941e0e9956978ee9d651c51e7163687e7327d4cfe54cae827"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/config.py",
+      "bytes": 1589,
+      "sha256": "21443a9bcf0239e0a8e4814d85684b44cc17c5d6b453aece2d6e5670fb5cfef7"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/db.py",
+      "bytes": 18111,
+      "sha256": "7c472825938953a1f290620b535bf346092344e5905b7a408944a39903f81fc7"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/demo_seed.py",
+      "bytes": 3846,
+      "sha256": "88a7f21df90e5db9016c016be4715af3a52844ddec59ddd883ff54c8c2f46da7"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/main.py",
+      "bytes": 20001,
+      "sha256": "705e066efe6652f663eb899abc86efe98e0475bbfafdbe2895f8bb3cf6ba1be6"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/schemas.py",
+      "bytes": 896,
+      "sha256": "02cf14b887334664b6b98ca0c4d266f6fc865a8e8f37f5fa200c928682293131"
+    },
+    {
+      "group": "backend",
+      "path": "backend/aegisbank_api/services.py",
+      "bytes": 1805,
+      "sha256": "5363860354fe1f015e35ac7661877a0d8d6ec70a7fc2d978f1c8b9cb03b1fa48"
+    },
+    {
+      "group": "backend",
+      "path": "backend/pyproject.toml",
+      "bytes": 632,
+      "sha256": "54f90afbbec8b67300c45c7be66604415bcc98cb1a0e353679a6754f984a7a13"
+    },
+    {
+      "group": "backend",
+      "path": "backend/uv.lock",
+      "bytes": 230151,
+      "sha256": "85d44a558fd639a9dcc1aa0fee564e49cf7f76665c472960c64e119e7aa412b2"
+    },
+    {
+      "group": "backend",
+      "path": "docs/DEVELOPMENT-ENVIRONMENT.md",
+      "bytes": 5375,
+      "sha256": "5b2c119a9b93efae94767bcd40ffca38be7b5dfc3ba63421e462c15496301c9e"
+    },
+    {
+      "group": "backend",
+      "path": "scripts/bootstrap.sh",
+      "bytes": 371,
+      "sha256": "46cb6ce9627c474156bae6c9d72873fe0ed2542cf85facc0655e60308a30f0b8"
+    },
+    {
+      "group": "backend",
+      "path": "scripts/build.sh",
+      "bytes": 289,
+      "sha256": "b0b2c17cf45635f72e4ccff4d30d5e76aeff603051d3662190a81109ea518de1"
+    },
+    {
+      "group": "backend",
+      "path": "scripts/dev.sh",
+      "bytes": 574,
+      "sha256": "649a3de9433b167d2bb37f4906efc8e28654eafc5771c1667bedf418412e8897"
+    },
+    {
+      "group": "backend",
+      "path": "scripts/seed-demo.sh",
+      "bytes": 767,
+      "sha256": "0e3d0021c93fea00766cc98209a2b03315277362a16605e891c049d8a41c5c0e"
+    }
+  ]
+}

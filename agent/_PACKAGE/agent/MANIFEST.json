@@ -1,0 +1,186 @@
+{
+  "source_commit": "654c986ffcac5aa2b5e42baf8bbfa144c6b6eaec",
+  "group": "agent",
+  "files": [
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/audit.py",
+      "bytes": 4003,
+      "sha256": "b3f845e2d93dd24496c7f0fd42dd1a1eb604b05d5c61f2dc34e65c83ee7f969d"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/channels/__init__.py",
+      "bytes": 843,
+      "sha256": "d0eb33a14c19024d26ae27de55a96ef86ae02a2dab5911b4261434cdc57e607c"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/channels/im.py",
+      "bytes": 18467,
+      "sha256": "3b707f19f5e23509c71b5a0c2ed7a5f5031931865d019c003a03569757029902"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/compensation.py",
+      "bytes": 1997,
+      "sha256": "5a11a9cab668982bc851242585079540ac19e48ae0979b032cd81cf4d55fb7e8"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/domain.py",
+      "bytes": 3119,
+      "sha256": "b61a1b8b38d09f118844059b7a78752ac9bb15ec8a6b29cca4f0febb6fd0575e"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/executor.py",
+      "bytes": 3191,
+      "sha256": "cad1c7416546b6f3f4c54bd6835f39a96e94d8f1ee4b1495403ebac12fdc0d60"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/README.md",
+      "bytes": 1608,
+      "sha256": "18c363c33679c56ca6d4a4093f8f6f4a46e5fb150962ab67c455fbc7b67684aa"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/__init__.py",
+      "bytes": 5501,
+      "sha256": "55a02673800b15eb4bffd4b869070ef21a47e87581b26edbdbc3c8c2837acb39"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/authz.py",
+      "bytes": 4906,
+      "sha256": "7acf5f4e4404970ce445551ff7c86fc30381485be75cd743aa65b36bbdbc6c97"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/breaker.py",
+      "bytes": 5817,
+      "sha256": "deb0f1063fe6582897510d462bbac9a59c282612528a09690f18dacba06fa577"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/compensation.py",
+      "bytes": 59609,
+      "sha256": "d3d859a04bd4818ec2efa2239462cd8cde3fca52202dc47148ab0bf7169e2343"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/im.py",
+      "bytes": 7566,
+      "sha256": "44c6b9af28310d836cb99b1194b2744c3135423b60d93b398ecf24bfa8fbae16"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/mfa.py",
+      "bytes": 7042,
+      "sha256": "e49337bf2288cba67d6dd273df8a1daeff85747ffd6a257b682dbeb21786ade5"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/extensions/sandbox.py",
+      "bytes": 9252,
+      "sha256": "4fccdaf741678eac573d9bdf11f4e6ce40901ba56fc2e95db848c424694852dd"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/gateway.py",
+      "bytes": 6244,
+      "sha256": "aa87d6c88ae2bf9e3d96a937bdc5c2e26f4a0462250e28d7bb47aff5f4b0b3a2"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/risk.py",
+      "bytes": 8100,
+      "sha256": "391910ea02bd2d5cbd42d17e4b8268ec76506b8ac6ec18d3566df9cacaf5c070"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/risk_rules.py",
+      "bytes": 1668,
+      "sha256": "c554a426dee54cb0c6486f298f0224d4fed901d2bf6b820ef9d472921a0ae75d"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/scheduler.py",
+      "bytes": 117563,
+      "sha256": "b3dc1318b71222aa4a6c19e6de9b975761d06722b78043e4090651b80c5c86ad"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/__init__.py",
+      "bytes": 1972,
+      "sha256": "aaaedfcd51bb8d37aef07d496fc95382d992b352f1ca5e594e03e63627678a66"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/action_envelope.py",
+      "bytes": 8865,
+      "sha256": "e333d8cc158e3ad45e05204c8018a03c3a3a83417384dbc122a830647ff7bd2f"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/authz.py",
+      "bytes": 4183,
+      "sha256": "06057cebdd9f5bbca6a4f08ce1ffd14b97e93d212b90ae067d8a1b9b8ba6cf82"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/circuit_breaker.py",
+      "bytes": 21834,
+      "sha256": "36399f72492cad72e732cad8df5808cb96eade39501d91ab1d0142f72cc59185"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/evidence.py",
+      "bytes": 3582,
+      "sha256": "9436821c13eb448f7ee948f1c77f28f343bdff779c742d3d38dbf7e32dfd05ce"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/idempotency.py",
+      "bytes": 2743,
+      "sha256": "d022d3ff76687f1ab70b15892af03876d99a8fca9304c5323769551f4f98698d"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/mfa.py",
+      "bytes": 10890,
+      "sha256": "d602ca625eea343b4aa03192f39ea4ddc9b7b69731862d9c3def21ba38415550"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/pause.py",
+      "bytes": 12426,
+      "sha256": "d3af2578f63704e3b8b85d5c55cdb6b532539c9b92bc5f93446974704fa8366c"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/readiness.py",
+      "bytes": 4950,
+      "sha256": "d41f368e994925c372c4348e042945c697b9b4864a36e0128f882c262dbaff31"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/sandbox.py",
+      "bytes": 18464,
+      "sha256": "46e28bf849d4aca9d52d83163a5d5e09b447cd3aec8b67e3e8b295386a1ca073"
+    },
+    {
+      "group": "agent",
+      "path": "backend/aegisbank_api/trust/state_machine.py",
+      "bytes": 8378,
+      "sha256": "02569cd9a5b61c08afdf2fc836a4cf4bb0c321487df12d602103c4cb192c3f5f"
+    },
+    {
+      "group": "agent",
+      "path": "docs/SECURITY.md",
+      "bytes": 29903,
+      "sha256": "0a8ccf879404337b82efaf46457704c0bb14f5bf8b047e8f1295cd97e73ce760"
+    }
+  ]
+}

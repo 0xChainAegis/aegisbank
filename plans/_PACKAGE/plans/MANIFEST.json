@@ -1,0 +1,60 @@
+{
+  "source_commit": "654c986ffcac5aa2b5e42baf8bbfa144c6b6eaec",
+  "group": "plans",
+  "files": [
+    {
+      "group": "plans",
+      "path": "AGENTS.md",
+      "bytes": 9649,
+      "sha256": "b19c82b2ece6ac58a352bd097f7632adb69fada57551577bc187dc185887bd28"
+    },
+    {
+      "group": "plans",
+      "path": "README.md",
+      "bytes": 8680,
+      "sha256": "bfc5f0a7b14d68f274a07c369d6aa5218a4b46e82ff31b7578b9003eb26a5513"
+    },
+    {
+      "group": "plans",
+      "path": "backend/aegisbank_api/planning/__init__.py",
+      "bytes": 698,
+      "sha256": "da2fb193de9b3558f75a8eb6d95ffde24556d4076e02ec1b860d8afe470cd309"
+    },
+    {
+      "group": "plans",
+      "path": "backend/aegisbank_api/planning/compiler.py",
+      "bytes": 5462,
+      "sha256": "024388648bb8310c86d8e3df83928544bb6d9110149599894759f9ea2d991a32"
+    },
+    {
+      "group": "plans",
+      "path": "backend/aegisbank_api/planning/contracts.py",
+      "bytes": 2371,
+      "sha256": "2b25edd970691c59cb1d208e7a9f576ae47368fa0ede1c99dec5fed6b47066b2"
+    },
+    {
+      "group": "plans",
+      "path": "docs/ARCHITECTURE.md",
+      "bytes": 29464,
+      "sha256": "7f481edad4c1f8bd7813f5b480eea257a1381353edc334a113cb8a1977071d89"
+    },
+    {
+      "group": "plans",
+      "path": "docs/MASTER-PLAN.md",
+      "bytes": 74318,
+      "sha256": "177903e3493456d0775e9119378d7b696bf29e8530379a3a38b8e2998b0b1fe6"
+    },
+    {
+      "group": "plans",
+      "path": "docs/ROADMAP.md",
+      "bytes": 15836,
+      "sha256": "d70fb63d68c1f08e877eb6d48ad7b542bcac62068d08a4421c87cdb291ac7b50"
+    },
+    {
+      "group": "plans",
+      "path": "docs/TECH-STACK.md",
+      "bytes": 6908,
+      "sha256": "ce415164c19fd0052c789d941569b324062ff8331c13f4c49c5e4910ed69093e"
+    }
+  ]
+}

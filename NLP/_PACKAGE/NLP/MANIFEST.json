@@ -1,0 +1,54 @@
+{
+  "source_commit": "654c986ffcac5aa2b5e42baf8bbfa144c6b6eaec",
+  "group": "NLP",
+  "files": [
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/amounts.py",
+      "bytes": 7566,
+      "sha256": "e87f62e7e6ae1e1eb97115f7764f519f2484f51228ed189b13d5f3fb262e5c32"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/factory.py",
+      "bytes": 2179,
+      "sha256": "c9a179f6cd246504bbe5e9bbd2b0e226bfcfd144b4e80f9672e6b0b68098929e"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/intents.py",
+      "bytes": 2567,
+      "sha256": "c7be7030ab283abbfff0b0063095601136c6a74ff9902062e1a762512b7965a2"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/llm.py",
+      "bytes": 14078,
+      "sha256": "b9ed2c4c1095762c887be5d27b225b0194b15c381d877859d3c5ba5f24e234d9"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/rule.py",
+      "bytes": 15256,
+      "sha256": "d63357bf5de8c9409d0a280f32e0ea552ff2a368dab3b3ef3ebd16fd4c3b0143"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/safety.py",
+      "bytes": 5889,
+      "sha256": "4c7f75e53fc5b25f9e2557aa3a19e48fd74f86dcb26b3d810db01176cc313da0"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/trust/clarification.py",
+      "bytes": 2132,
+      "sha256": "1124c4bb75c4f8a122649306cfe2be55db2dcb539b5e8e473d392dfd600e2611"
+    },
+    {
+      "group": "NLP",
+      "path": "docs/NLP-ASSESSMENT-AND-PLAN-2026-10-25.md",
+      "bytes": 14705,
+      "sha256": "009b789e7d0b4b7b9636e137e081335c4319996c91bc19bcb9b147c62df8a9cc"
+    }
+  ]
+}

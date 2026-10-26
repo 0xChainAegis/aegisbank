@@ -1,0 +1,78 @@
+{
+  "source_commit": "654c986ffcac5aa2b5e42baf8bbfa144c6b6eaec",
+  "group": "skills",
+  "files": [
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/registry.py",
+      "bytes": 3482,
+      "sha256": "e7a8a0093a6c63d9a3f38dbcba116724bf9afb6a3749f856227f75c4002f21d7"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/scenarios/README.md",
+      "bytes": 3626,
+      "sha256": "aaa23a1cddbf63ff7bc54eb558adf0a13ca2b300fc73080ee95f02cd8c259caa"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/scenarios/__init__.py",
+      "bytes": 4525,
+      "sha256": "adb4995696576b765b9984857b7fa6b257f350f1d8e1860cc862a185f2478ffa"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/scenarios/automation.py",
+      "bytes": 85079,
+      "sha256": "851e6c775d3a98c83c627c15f631c60a7aeb2b787f55dc614d4bf727624c778a"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/scenarios/bills.py",
+      "bytes": 48451,
+      "sha256": "443d7b5e5141765c30a328ad45d22de26c2b1e494a6e4dd96a660b430d552c47"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/scenarios/cards.py",
+      "bytes": 26545,
+      "sha256": "bf2d1e2039246ef641c43cb180da8544f08bdd6abaadd63cc075ca5d625e8116"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/scenarios/transfers.py",
+      "bytes": 30746,
+      "sha256": "9ed9a87834f1eb1878ab5f519dc67d243c22d6372808a48f166069ba56533129"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/scenarios/wealth.py",
+      "bytes": 47053,
+      "sha256": "99dd4aa5f8deaff21ad8aa196f2fa0536660fee9a5abf81749e552cedab7314e"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/tool_outputs.py",
+      "bytes": 4735,
+      "sha256": "bbc95f553997d7391cc140bdbfa78fc6833143fe80325aedd02e62664e39f745"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/tools/__init__.py",
+      "bytes": 184,
+      "sha256": "8e232300a52ab38f4794a93a161a0021f3f3058f9d34a6bb8035a4101f6e0b05"
+    },
+    {
+      "group": "skills",
+      "path": "backend/aegisbank_api/tools/finance.py",
+      "bytes": 13389,
+      "sha256": "6e2fbcbf23874416269fcfe30f4963eee2ce6ae22158a634686df58ca75eaf78"
+    },
+    {
+      "group": "skills",
+      "path": "docs/BANKING-DOMAIN.md",
+      "bytes": 27263,
+      "sha256": "803b50d8fdcc16ab1f09e257179dcdbc75d4cbd89581676dd403f4b44df8f18c"
+    }
+  ]
+}
