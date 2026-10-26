@@ -57,6 +57,11 @@ describe('pending snapshot (UX-17)', () => {
       [PENDING_STORAGE_KEY]: JSON.stringify({ pending: { status: 'x' }, instruction: 'i', savedAt: 's' }),
     });
     expect(loadPendingSnapshot(missingConfirmation)).toBeNull();
+
+    const invalidExpiry = memoryStorage({
+      [PENDING_STORAGE_KEY]: JSON.stringify(snapshot('invalid-date')),
+    });
+    expect(loadPendingSnapshot(invalidExpiry)).toBeNull();
   });
 
   it('clears the snapshot after a decision', () => {
@@ -80,6 +85,7 @@ describe('confirmation countdown (UX-16)', () => {
     const expires = '2026-10-23T08:05:00+00:00';
     expect(remainingSeconds(expires, now)).toBe(300);
     expect(remainingSeconds(expires, now + 300_000)).toBe(0);
+    expect(remainingSeconds(expires, now + 299_800)).toBe(1);
   });
 
   it('marks expired snapshots so the UI can stop accepting decisions', () => {
@@ -90,6 +96,28 @@ describe('confirmation countdown (UX-16)', () => {
 });
 
 describe('pending queue integrity', () => {
+  it('prunes expired entries and restores the next active confirmation', () => {
+    const storage = memoryStorage();
+    const expired = snapshot(new Date(Date.now() - 1000).toISOString());
+    const active = snapshot(new Date(Date.now() + 300_000).toISOString());
+    active.pending.confirmation!.id = 'active-next';
+    savePendingSnapshot(expired, storage);
+    savePendingSnapshot(active, storage);
+
+    expect(loadPendingSnapshot(storage)?.pending.confirmation?.id).toBe('active-next');
+    expect(loadPendingSnapshots(storage)).toHaveLength(1);
+  });
+
+  it('never restores an expired confirmation when cleanup cannot be saved', () => {
+    const expired = snapshot(new Date(Date.now() - 1000).toISOString());
+    const storage: StorageLike = {
+      getItem: () => JSON.stringify([expired]),
+      setItem: () => { throw new Error('storage blocked'); },
+      removeItem: () => { throw new Error('storage blocked'); },
+    };
+    expect(loadPendingSnapshot(storage)).toBeNull();
+  });
+
   it('retains an earlier action when saving a second pending action', () => {
     const storage = memoryStorage();
     const first = snapshot(new Date(Date.now() + 300_000).toISOString());

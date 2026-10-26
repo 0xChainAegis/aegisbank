@@ -2,10 +2,11 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
+import App, { initialRole } from './App';
 import { useResource } from './components/ScenariosPage';
-import { ApiError, runAgent, resolveConfirmation, fetchReadiness, fetchTrustAction } from './api';
-import { loadPendingSnapshots, loadSubmission } from './session';
+import { ApiError, runAgent, resolveConfirmation, fetchReadiness, fetchTrustAction, fetchMfaProviders } from './api';
+import { loadPendingSnapshots, loadSubmission, savePendingSnapshot, saveSubmission } from './session';
+import { ROLE_STORAGE_KEY } from './roles';
 import type { RunResponse } from './types';
 
 vi.mock('./api', async (importOriginal) => {
@@ -66,11 +67,17 @@ beforeEach(() => {
   vi.mocked(runAgent).mockResolvedValue(completed);
   vi.mocked(resolveConfirmation).mockResolvedValue(completed);
   vi.mocked(fetchReadiness).mockResolvedValue({ status: 'ready', components: {} });
+  vi.mocked(fetchMfaProviders).mockResolvedValue({ providers: [], enabled: [], default: 'otp', kinds: [] });
   container = document.createElement('div'); document.body.append(container);
 });
 afterEach(async () => { await unmount(); container.remove(); });
 
 describe('submission and confirmation security', () => {
+  it('restores the submission role when another tab has changed the preferred role', () => {
+    window.localStorage.setItem(ROLE_STORAGE_KEY, 'auditor');
+    saveSubmission({ key: 'original-key', input: { instruction: '向妈妈转账 100 元' }, role: 'user' });
+    expect(initialRole()).toBe('user');
+  });
   it('persists the original key before sending, and blocks editing an unresolved submission', async () => {
     vi.mocked(runAgent).mockImplementation(async () => {
       expect(loadSubmission()?.key).toBeTruthy();
@@ -124,6 +131,67 @@ describe('submission and confirmation security', () => {
     await mount(); await click('继续处理');
     expect(fetchTrustAction).toHaveBeenCalledWith('pending-one');
     expect(container.querySelector('[role="dialog"]')?.textContent).toContain('ACC-9003');
+  });
+  it('shows the completed server receipt when a deferred confirmation was resolved elsewhere', async () => {
+    savePendingSnapshot({ pending: pending(), instruction: '原始转账指令', savedAt: new Date().toISOString() });
+    window.location.hash = '#/overview';
+    vi.mocked(fetchTrustAction).mockResolvedValue({
+      action_id: 'pending-one', user_id: 'demo-user', status: 'completed', state: 'COMPLETED',
+      risk_level: 'yellow', requires_reauth: false, instruction: '原始转账指令',
+      created_at: '', expires_at: new Date(Date.now() + 300_000).toISOString(), history: [], envelopes: [],
+      result: { ...completed, run_id: 'pending-one', reason: '服务端已完成该笔转账' },
+      plan: { intent: 'transfer', planner: 'rule', confidence: 1, assumptions: [], steps: [step] },
+    });
+    await mount(); await click('继续处理');
+
+    expect(container.querySelector('#instruction')).not.toBeNull();
+    expect(container.textContent).toContain('服务端已完成该笔转账');
+    expect(container.textContent).toContain('pending-one');
+    expect(loadPendingSnapshots()).toHaveLength(0);
+    expect(resolveConfirmation).not.toHaveBeenCalled();
+    expect(runAgent).not.toHaveBeenCalled();
+  });
+  it('advances the recovery banner to the next confirmation when its countdown expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const first = pending('expires-first');
+      first.confirmation!.expires_at = new Date(Date.now() + 2000).toISOString();
+      savePendingSnapshot({ pending: first, instruction: '即将过期的任务', savedAt: new Date().toISOString() });
+      savePendingSnapshot({ pending: pending('still-active'), instruction: '后续有效任务', savedAt: new Date().toISOString() });
+      await mount();
+      expect(container.querySelector('.restore-banner')?.textContent).toContain('剩余 0:02');
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(container.querySelector('.restore-banner')?.textContent).toContain('剩余 0:01');
+      await act(async () => { vi.advanceTimersByTime(1000); });
+      expect(container.querySelector('.restore-banner')?.textContent).toContain('后续有效任务');
+      expect(loadPendingSnapshots()).toHaveLength(1);
+      await unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('freezes MFA method and token controls while verification is in flight', async () => {
+    const red = pending('red-one');
+    red.risk_level = 'red';
+    red.confirmation!.requires_reauth = true;
+    vi.mocked(runAgent).mockResolvedValue(red);
+    vi.mocked(fetchMfaProviders).mockResolvedValue({
+      providers: [
+        { name: 'otp', kind: 'otp', title: '验证码', enabled: true, default: true },
+        { name: 'biometric', kind: 'biometric', title: '模拟人脸', enabled: true },
+      ], enabled: ['otp', 'biometric'], default: 'otp', kinds: ['otp', 'biometric'],
+    });
+    let finish!: (result: RunResponse) => void;
+    vi.mocked(resolveConfirmation).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    await mount(); await submit('挂失 CARD-9902');
+    await click('填入演示令牌'); await click('验证并执行');
+
+    const modal = container.querySelector('[role="dialog"]')!;
+    expect(modal.querySelector<HTMLInputElement>('input')!.disabled).toBe(true);
+    expect([...modal.querySelectorAll<HTMLButtonElement>('[role="radio"]')].every(button => button.disabled)).toBe(true);
+    const fill = [...modal.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === '填入演示令牌')!;
+    expect(fill.disabled).toBe(true);
+    await act(async () => { finish(completed); });
   });
   it('requires an explicit choice to submit a clarification follow-up', async () => {
     vi.mocked(runAgent).mockResolvedValueOnce({ status: 'needs_clarification', run_id: 'clarify-one', reason: '请提供金额' })

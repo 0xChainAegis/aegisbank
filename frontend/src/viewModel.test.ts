@@ -25,6 +25,18 @@ import {
 } from './viewModel';
 
 describe('banking overview normalizer', () => {
+  it('keeps cancelled subscriptions in history without repeating an active anomaly alert', () => {
+    const overview = normalizeBankingOverview({
+      accounts: [], cards: [], monthly_spend_cny: 0, daily_transfer_total_cny: 0,
+      subscriptions: [
+        { subscription_id: 'SUB-cancelled', merchant: 'AI 工具', amount_cny: 99, status: 'cancelled', risk_flag: '上涨 120%' },
+        { subscription_id: 'SUB-active', merchant: '云存储', amount_cny: 30, status: 'active', risk_flag: '重复扣费' },
+      ],
+      abnormal_subscriptions: ['SUB-cancelled'],
+    });
+    expect(overview.subscriptions).toHaveLength(2);
+    expect(overview.abnormalSubscriptions.map((item) => item.id)).toEqual(['SUB-active']);
+  });
   it('normalizes nested overview payloads and flags abnormal subscriptions', () => {
     const overview = normalizeBankingOverview({
       data: {
@@ -164,6 +176,7 @@ describe('scenario display formatters', () => {
     expect(wealthRiskLevel('R1')).toBe('green');
     expect(wealthRiskLevel('R3')).toBe('yellow');
     expect(wealthRiskLevel('R5')).toBe('red');
+    expect(wealthRiskLevel('unknown')).toBe('red');
     expect(wealthRiskLabel('R2')).toContain('稳健');
     expect(evidenceSourceLabel('mock_bank')).toBe('Mock 数据');
     expect(evidenceSourceLabel('audit_chain')).toBe('审计哈希链');
@@ -226,6 +239,14 @@ describe('evidence normalizer', () => {
 });
 
 describe('confirmation summary (UX-10)', () => {
+  it('shows the daily card limit from the actual tool argument', () => {
+    const summary = confirmationSummary({
+      id: 'limit-1', tool_name: 'set_transaction_limit', depends_on: [],
+      arguments: { card_id: 'CARD-8821', daily_limit_cny: 3000 },
+    });
+    expect(summary.headline).toContain('每日');
+    expect(summary.details.join(' ')).toContain('3,000');
+  });
   it('turns raw transfer arguments into a human readable sentence', () => {
     const summary = confirmationSummary({
       id: 'step-1',
@@ -292,6 +313,11 @@ describe('receipt headline (UX-14)', () => {
     expect(receiptHeadline(rejected)).toContain('拒绝');
     expect(receiptHeadline(unknown)).toContain('人工对账');
     expect(resultExecutedAt(rejected)).toBe('');
+  });
+  it('does not infer an unchanged balance from a failed status alone', () => {
+    const failed: RunResponse = { status: 'failed', run_id: 'run-failed', reason: '工具执行失败' };
+    expect(receiptHeadline(failed)).toContain('核对');
+    expect(receiptHeadline(failed)).not.toContain('未产生资金变动');
   });
 });
 

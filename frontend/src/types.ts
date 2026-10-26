@@ -543,6 +543,7 @@ export interface AutomationRunDueItem {
 
 export interface AutomationRunDueResult {
   status: string;
+  reason?: string;
   risk_level?: RiskLevel;
   now?: string | null;
   executed: AutomationRunDueItem[];
