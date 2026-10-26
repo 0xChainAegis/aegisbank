@@ -28,6 +28,7 @@ import PermissionsPage from './components/PermissionsPage';
 import ReadinessBanner from './components/ReadinessBanner';
 import ScenariosPage from './components/ScenariosPage';
 import TaskConsolePage from './components/TaskConsolePage';
+import TrialGuide from './components/TrialGuide';
 import type { AegisRole } from './roles';
 import {
   AEGIS_ROLES,
@@ -134,6 +135,7 @@ export default function App() {
   const [lastRun, setLastRun] = useState<RunResponse | null>(null);
   const [pending, setPending] = useState<RunResponse | null>(null);
   const [lastActionId, setLastActionId] = useState<string | null>(null);
+  const [trustActionId, setTrustActionId] = useState<string | null>(null);
   const [trustAction, setTrustAction] = useState<TrustActionDetail | null>(null);
   const [trustActionLoading, setTrustActionLoading] = useState(false);
   const [trustActionError, setTrustActionError] = useState('');
@@ -400,6 +402,7 @@ export default function App() {
           plan: canonical.plan, risk_level: canonical.risk_level,
         });
         setLastActionId(actionId);
+        setTrustActionId(actionId);
         setTrustAction(canonical);
         setTrustActionError('');
         setInstruction(canonical.instruction);
@@ -418,6 +421,7 @@ export default function App() {
       setPending(restored);
       setLastRun(restored);
       setLastActionId(actionId);
+      setTrustActionId(actionId);
       setInstruction(canonical.instruction);
       setRestoredPending(null);
       setMfaToken('');
@@ -491,6 +495,7 @@ export default function App() {
     // 新一轮提交不再展示上一轮回执（UX-09）；失败也不会伪装成上一次的结果。
     setLastRun(null);
     setLastActionId(null);
+    setTrustActionId(null);
     const idempotencyKey = submission.key;
     try {
       const result = await runAgent(input, { idempotencyKey });
@@ -499,6 +504,7 @@ export default function App() {
       clearSubmission();
       setLastRun(result);
       setLastActionId(result.confirmation?.id ?? result.run_id ?? null);
+      setTrustActionId(result.confirmation?.id ?? null);
       if (result.status === 'awaiting_confirmation' && result.confirmation) {
         setMfaToken('');
         setMfaProvider(defaultMfaProvider(mfaProviders?.providers ?? [], 'otp'));
@@ -555,6 +561,7 @@ export default function App() {
       setRestoredPending(loadPendingSnapshot());
       setLastRun(result);
       setLastActionId(actionId);
+      setTrustActionId(actionId);
       setPending(null);
       setMfaToken('');
       setNotice(result.reason);
@@ -579,6 +586,7 @@ export default function App() {
         setMfaToken('');
         setLastRun(null);
         setLastActionId(null);
+        setTrustActionId(null);
         setActionError('');
         setNotice(
           explanation.action === 'reconfirm'
@@ -593,11 +601,11 @@ export default function App() {
   }
 
   async function inspectTrustAction() {
-    if (!lastActionId || trustActionLoading) return;
+    if (!trustActionId || trustActionLoading) return;
     setTrustActionLoading(true);
     setTrustActionError('');
     try {
-      setTrustAction(await fetchTrustAction(lastActionId));
+      setTrustAction(await fetchTrustAction(trustActionId));
     } catch (error) {
       setTrustActionError(messageOf(error, '无法读取信任详情'));
     } finally {
@@ -678,6 +686,11 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      <p className="simulation-note">
+        <strong>模拟银行演示</strong>
+        账户、资金和身份验证均为演示数据，操作不会影响真实银行账户。
+      </p>
 
       <ReadinessBanner
         snapshot={readiness}
@@ -768,6 +781,14 @@ export default function App() {
 
         <main>
           {page === 'overview' && (
+            <TrialGuide disabled={busy || Boolean(pending) || Boolean(unresolvedSubmission)}
+              onPrepare={(value) => {
+                navigate('console');
+                setInstruction(value);
+                setNotice('指令已填入，请检查内容后点击“交给 Agent”。');
+              }} />
+          )}
+          {page === 'overview' && (
             <BankOverviewPage
               overview={overview}
               loading={overviewLoading}
@@ -800,6 +821,7 @@ export default function App() {
               writesBlocked={writesBlocked}
               blockReason={blockReason}
               lastActionId={lastActionId}
+              hasTrustAction={Boolean(trustActionId)}
               trustAction={trustAction}
               trustActionLoading={trustActionLoading}
               trustActionError={trustActionError}

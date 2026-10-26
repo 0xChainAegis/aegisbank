@@ -163,7 +163,7 @@ textarea:focus-visible {
   .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { min-width: 0; }
   .sidebar nav { min-width: 0; }
-  .sidebar nav button { min-width: 0; }
+  .sidebar nav button { min-width: 0; flex: 0 0 auto; min-height: 44px; }
 }
 
 @media (max-width: 820px) {
@@ -203,3 +203,29 @@ textarea:focus-visible {
   padding: 10px; border-radius: 8px;
 }
 .error-boundary-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+.simulation-note {
+  margin: 10px clamp(14px, 4vw, 58px);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.simulation-note strong { margin-right: 10px; color: var(--teal); }
+.trial-guide { margin-bottom: 24px; padding: 24px; }
+.trial-guide h2 { margin: 0 0 8px; font-size: 20px; }
+.trial-guide > p, .trial-grid p { color: var(--ink-soft); line-height: 1.7; }
+.trial-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+.trial-grid article { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.trial-grid h3 { font-size: 16px; margin: 7px 0; }
+.trial-grid p { flex: 1; margin: 0 0 14px; font-size: 13px; }
+.business-receipt { margin: 20px 0; padding: 18px 0; border-top: 1px solid var(--line); }
+.business-receipt h3 { margin: 0 0 10px; }
+.business-receipt > p strong { font-size: 24px; color: var(--teal); margin-left: 8px; }
+.bill-categories { display: flex; gap: 18px 30px; flex-wrap: wrap; }
+.bill-categories dt, .business-receipt small { font-size: 12px; color: var(--ink-soft); }
+.bill-categories dd { margin: 6px 0; font-weight: 700; }
+.business-receipt ul { padding-left: 20px; line-height: 1.8; }
+@media (max-width: 620px) {
+  .trial-guide { padding: 18px; }
+  .trial-grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+}

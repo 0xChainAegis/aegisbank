@@ -73,6 +73,27 @@ beforeEach(() => {
 afterEach(async () => { await unmount(); container.remove(); });
 
 describe('submission and confirmation security', () => {
+  it('prefills the trial task without sending a banking request', async () => {
+    window.location.hash = '#/overview';
+    await mount();
+    await click('填入转账880元任务');
+    expect(container.querySelector<HTMLTextAreaElement>('#instruction')?.value)
+      .toBe('向 ACC-2002 转账 880 元');
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('请检查内容后点击');
+  });
+  it('keeps a green journal without offering a pending-only trust lookup', async () => {
+    await mount(); await submit('分析我的本月账单');
+    expect(container.textContent).not.toContain('查看信任详情');
+    expect(container.textContent).toContain('completed-run');
+    expect(fetchTrustAction).not.toHaveBeenCalled();
+  });
+  it('retains trust inspection after a confirmed action is resolved', async () => {
+    vi.mocked(runAgent).mockResolvedValue(pending());
+    await mount(); await submit('向 ACC-2002 转账 880 元');
+    await click('拒绝执行');
+    expect(container.textContent).toContain('查看信任详情');
+  });
   it('restores the submission role when another tab has changed the preferred role', () => {
     window.localStorage.setItem(ROLE_STORAGE_KEY, 'auditor');
     saveSubmission({ key: 'original-key', input: { instruction: '向妈妈转账 100 元' }, role: 'user' });

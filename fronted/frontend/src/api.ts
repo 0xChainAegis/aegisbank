@@ -16,7 +16,7 @@ import type {
   BreakerStatus,
   CardApplicationsResponse,
   ContactsResponse,
-  ExecutionPlan,
+  PlanPreviewResponse,
   ImHelp,
   ImMessageInput,
   ImMessageReply,
@@ -201,8 +201,8 @@ export async function fetchTrustAction(actionId: string): Promise<TrustActionDet
   return payload;
 }
 
-export async function previewPlan(input: AgentRunInput): Promise<ExecutionPlan> {
-  return request<ExecutionPlan>('/planner/plan', {
+export async function previewPlan(input: AgentRunInput): Promise<PlanPreviewResponse> {
+  return request<PlanPreviewResponse>('/planner/plan', {
     method: 'POST',
     body: JSON.stringify({ user_id: 'demo-user', ...input }),
   });

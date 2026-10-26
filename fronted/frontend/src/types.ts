@@ -71,6 +71,19 @@ export interface ExecutionPlan {
   rollback_blocked_reason?: string;
 }
 
+/** /planner/plan returns a preview envelope, without an execution run_id. */
+export type PlanPreviewResponse = {
+  reason: string;
+  risk_level?: RiskLevel;
+  risk?: RiskAssessment | null;
+  evidence?: EvidenceItem[];
+  evidence_list?: EvidenceItem[];
+} & (
+  | { status: 'planned'; plan: ExecutionPlan }
+  | { status: 'needs_clarification'; plan: ExecutionPlan }
+  | { status: 'blocked'; plan?: ExecutionPlan; matched_rules?: string[] }
+);
+
 export type RunStatus =
   | 'completed'
   | 'awaiting_confirmation'
