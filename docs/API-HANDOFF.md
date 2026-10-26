@@ -1,8 +1,8 @@
 # AegisBank API 交接文档
 
-> 状态：**Stage 1 基线版**。本文档先锁定版本、组装、启动与后端地址；关键接口的完整请求/返回示例在 Stage 2 补齐。
+> 状态：**已完成**。覆盖组装、启动、后端地址、核心接口请求/返回示例、错误码、排障与验证记录。
 >
-> 适用版本：`0xChainAegis/aegisbank` `main` @ `bad8e64`。
+> 文档修订基线：`main` @ `120f70f`（PR #2 合并后）。API 验证代码基线：`bad8e64`。
 > 验证日期：2026-10-26。
 > 后端运行环境：Linux / WSL Ubuntu 24.04。
 
@@ -24,6 +24,17 @@ skills/   工具 SDK、工具注册与银行场景
 不要直接修改 `.runtime/`。它是 `scripts/assemble.py` 生成的运行目录，已被 `.gitignore` 忽略。
 
 ## 2. 组装
+
+### 2.1 获取源码
+
+```bash
+git clone https://github.com/0xChainAegis/aegisbank.git
+cd aegisbank
+```
+
+环境前提：Python 3.11+、`git`；前端需要 Node.js `^22.22.2 || ^24.15.0 || >=26.0.0` 与 `pnpm`。后端必须运行在 Linux / WSL，原因见 3.5 节。
+
+### 2.2 运行组装
 
 在仓库根目录执行：
 
@@ -55,9 +66,11 @@ python3 -m unittest discover -s tests -q
 
 ## 3. 启动
 
+环境要求：Python 3.11+、`uv`、Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`、`pnpm`；后端必须在 Linux / WSL 运行。首次启动前先执行 `bash scripts/bootstrap.sh` 安装锁定依赖。
+
 ### 3.1 一键方式（推荐）
 
-根目录脚本会先自动组装，再执行 `.runtime/` 内的对应脚本：
+从零开始时，按 2.1 clone、2.2 组装，再执行本节命令。根目录脚本会先自动组装，再执行 `.runtime/` 内的对应脚本：
 
 ```bash
 bash scripts/bootstrap.sh
@@ -215,6 +228,7 @@ Idempotency-Key: <uuid>
 - `X-Aegis-Role` 仅用于本地演示，不是生产认证。
 - `Idempotency-Key` 建议用于 `POST /api/agent/run` 与 `POST /api/confirmations/{action_id}`；同一逻辑请求重试时复用同一个 key。
 - 审计接口建议使用最小权限角色 `X-Aegis-Role: auditor`。
+- 本文档只列核心接口；其余场景、信任与运维接口以 Swagger `/docs` 或 [架构文档第 7 节](ARCHITECTURE.md) 为准。
 
 | 接口 | 用途 | 典型业务状态 |
 |---|---|---|
@@ -226,6 +240,9 @@ Idempotency-Key: <uuid>
 | `POST /api/confirmations/{action_id}` | 确认黄色/红色操作 | `completed` / `blocked`；错误 OTP 403 |
 | `GET /api/audit` | 审计列表 | HTTP 200 |
 | `GET /api/audit/verify` | SHA-256 哈希链校验 | `valid=true/false` |
+| `GET /api/tools` | 工具目录与授权状态 | HTTP 200 |
+| `GET /api/permissions` | 当前用户工具授权 | HTTP 200 |
+| `PUT /api/permissions/{tool_name}` | 授予/撤回工具权限 | 200 / 403 / 404 |
 ### 7.1 `GET /api/health`
 
 ```bash
@@ -819,6 +836,70 @@ curl -s http://127.0.0.1:8000/api/audit/verify \
 ```
 
 `checked` 随操作数量变化；示例中为上述完整流程后的条数。
+### 7.10 `GET /api/tools`
+
+返回当前用户可见的工具目录与授权状态。完整目录当前为 50 个工具，示例只展示第一个。
+
+```bash
+curl -s http://127.0.0.1:8000/api/tools   -H 'X-Aegis-Role: user'
+```
+
+```json
+{
+  "tools": [
+    {
+      "name": "add_contact",
+      "title": "新增联系人",
+      "description": "把姓名、手机号和收款账户写入联系人簿，属于会修改数据的黄色操作。",
+      "risk_level": "yellow",
+      "permission": "contact:manage",
+      "compensable": false,
+      "compensation_tool": null,
+      "internal_only": false,
+      "granted": true
+    }
+  ]
+}
+```
+
+实际响应还包含每个工具的 `input_schema`、`output_schema` 等字段。前端可用它渲染工具能力与权限状态。
+
+### 7.11 `GET /api/permissions` 与 `PUT /api/permissions/{tool_name}`
+
+查询当前用户的工具授权：
+
+```bash
+curl -s http://127.0.0.1:8000/api/permissions   -H 'X-Aegis-Role: user'
+```
+
+```json
+{
+  "permissions": [
+    {
+      "name": "add_contact",
+      "title": "新增联系人",
+      "granted": true
+    }
+  ]
+}
+```
+
+授予或撤回某个工具的权限（会写入审计）：
+
+```bash
+curl -s -X PUT http://127.0.0.1:8000/api/permissions/query_bill   -H 'Content-Type: application/json'   -H 'X-Aegis-Role: user'   -d '{"granted":false}'
+```
+
+```json
+{
+  "tool_name": "query_bill",
+  "title": "分析账单",
+  "granted": false
+}
+```
+
+恢复授权把 `granted` 改回 `true` 即可。撤回后再次调用对应工具会被统一网关拒绝并记录审计。
+
 ## 8. 错误码与典型响应
 
 ### 8.1 状态码总表
@@ -984,6 +1065,7 @@ bash scripts/seed-demo.sh
 AEGIS_DATABASE_PATH="$PWD/.runtime/backend/data/dogfood.db" bash scripts/dev.sh
 ```
 
+- 正常停止：在 `dev.sh` 终端按 `Ctrl+C`。残留进程可用 `pkill -f '[u]vicorn aegisbank_api.main:app'` 与 `pkill -f vite` 清理，再用 `ss -ltnp | grep -E ':8000|:5173'` 确认端口释放。
 - 重置数据库前先停止后端，避免 SQLite 文件锁。
 - 端口冲突时检查 8000 / 5173：
 
@@ -1115,6 +1197,17 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 - 前端契约通过阅读 `fronted/frontend/src/api.ts` 与 `types.ts` 核对，未做浏览器联调；
 - 应用 252/73/29/15 等数字来自 2026-10-25 历史验证记录，不是本次 docs-only 变更的新输出；
 - 本次不宣称生产认证、真实 MFA、OS 级沙箱或通用 NLP 已完成。
+
+### 11.6 收尾修订验证
+
+- `git diff --check`：通过；
+- 文档相对链接：12 个，缺失 0；
+- Markdown 代码围栏：136 个，成对闭合；
+- `GET /api/tools`：200，返回 50 个工具；
+- `GET /api/permissions`：200，返回 50 条授权记录；
+- `PUT /api/permissions/query_bill`：200，`granted=false` 与恢复 `granted=true` 均验证；
+- dsh-workflow docs-only gate：encoding / lint / security pass，test 按 docs fast path 跳过；
+- 本次收尾只修改 `docs/API-HANDOFF.md`，不修改业务代码、依赖或 `.runtime/`。
 ## 12. 参考资料
 
 - [根 README](../README.md)
