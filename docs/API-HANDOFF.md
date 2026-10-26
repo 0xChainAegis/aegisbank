@@ -2,8 +2,8 @@
 
 > 状态：**Stage 1 基线版**。本文档先锁定版本、组装、启动与后端地址；关键接口的完整请求/返回示例在 Stage 2 补齐。
 >
-> 适用版本：`0xChainAegis/aegisbank` `main` @ `bad8e64`。  
-> 验证日期：2026-10-26。  
+> 适用版本：`0xChainAegis/aegisbank` `main` @ `bad8e64`。
+> 验证日期：2026-10-26。
 > 后端运行环境：Linux / WSL Ubuntu 24.04。
 
 ## 1. 版本与源码位置
