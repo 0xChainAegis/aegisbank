@@ -81,10 +81,14 @@ const navigation: Array<{ id: Page; index: string; label: string; hint: string }
   { id: 'audit', index: '07', label: '操作审计', hint: '哈希链证据' },
 ];
 
-const CROSS_SCENARIO_INSTRUCTION = '分析我的本月账单和所有订阅，找出异常订阅并取消它';
+const CROSS_SCENARIO_INSTRUCTION = '分析我的账单并取消异常订阅';
 
-function initialRole(): AegisRole {
+export function initialRole(): AegisRole {
   if (typeof window === 'undefined') return 'user';
+  // A lost submission must be recovered under its original role. localStorage
+  // is shared by tabs, so a different tab may have changed the preferred role.
+  const submission = loadSubmission();
+  if (submission) return submission.role;
   try {
     return roleFromStorage(window.localStorage.getItem(ROLE_STORAGE_KEY));
   } catch {
@@ -141,6 +145,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [auditVerifyError, setAuditVerifyError] = useState('');
   const [restoredPending, setRestoredPending] = useState<PendingSnapshot | null>(null);
+  const [recoveryNow, setRecoveryNow] = useState(() => Date.now());
   const [reconciling, setReconciling] = useState(false);
   const [auditFilter, setAuditFilter] = useState('');
   const submissionRef = useRef(loadSubmission());
@@ -262,14 +267,24 @@ export default function App() {
   useEffect(() => {
     const snapshot = loadPendingSnapshot();
     if (!snapshot) return;
-    if (isSnapshotExpired(snapshot)) {
-      removePendingSnapshot(snapshot.pending.confirmation!.id);
-      setNotice('之前有一笔待确认操作已过期，已自动清理。');
-      return;
-    }
     setRestoredPending(snapshot);
     setNotice('检测到一笔未完成的确认，可在顶部继续处理或放弃。');
   }, []);
+
+  useEffect(() => {
+    if (!restoredPending) return;
+    setRecoveryNow(Date.now());
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setRecoveryNow(now);
+      if (isSnapshotExpired(restoredPending, now)) {
+        removePendingSnapshot(restoredPending.pending.confirmation!.id);
+        setRestoredPending(loadPendingSnapshot());
+        setNotice('待确认操作已过期，已清理该恢复提示。');
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [restoredPending]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -379,8 +394,18 @@ export default function App() {
       if (!['AWAITING_CONFIRMATION', 'AWAITING_REAUTH'].includes(canonical.state)) {
         removePendingSnapshot(actionId);
         setRestoredPending(loadPendingSnapshot());
-        setLastRun(canonical.result);
+        setLastRun(canonical.result ?? {
+          status: canonical.state.toLowerCase(), run_id: actionId,
+          reason: `服务端当前状态：${canonical.state}。请结合步骤记录核对结果。`,
+          plan: canonical.plan, risk_level: canonical.risk_level,
+        });
+        setLastActionId(actionId);
+        setTrustAction(canonical);
+        setTrustActionError('');
+        setInstruction(canonical.instruction);
+        setRoute('console');
         setNotice(`该动作当前状态：${canonical.state}，未再次执行。`);
+        await refreshAll();
         return;
       }
       const restored: RunResponse = {
@@ -690,7 +715,7 @@ export default function App() {
             <small>
               剩余{' '}
               {formatRemaining(
-                remainingSeconds(restoredPending.pending.confirmation?.expires_at),
+                remainingSeconds(restoredPending.pending.confirmation?.expires_at, recoveryNow),
               )}{' '}
               · 刷新不会自动执行，需要你明确确认或拒绝
             </small>

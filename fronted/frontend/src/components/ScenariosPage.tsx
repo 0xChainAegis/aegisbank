@@ -255,13 +255,15 @@ export default function ScenariosPage({ writesBlocked, blockReason, onDataChange
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState('');
   const [runResult, setRunResult] = useState<AutomationRunDueResult | null>(null);
+  const [simulationTime, setSimulationTime] = useState('');
 
   async function handleRunDue() {
     if (runBusy || writesBlocked) return;
     setRunBusy(true);
     setRunError('');
+    setRunResult(null);
     try {
-      const result = await runAutomationDue();
+      const result = await runAutomationDue(simulationTime ? new Date(simulationTime).toISOString() : undefined);
       setRunResult(result);
       await Promise.all([schedules.reload(), goals.reload(), gifts.reload()]);
       onDataChanged?.();
@@ -850,18 +852,34 @@ export default function ScenariosPage({ writesBlocked, blockReason, onDataChange
         }
       >
         <div className="automation-toolbar">
+          <label>
+            <span>模拟调度截止时间（本机时区）</span>
+            <input
+              type="datetime-local"
+              aria-label="模拟调度截止时间"
+              value={simulationTime}
+              disabled={runBusy || writesBlocked}
+              onChange={(event) => {
+                setSimulationTime(event.target.value);
+                setRunResult(null);
+                setRunError('');
+              }}
+            />
+          </label>
           <button
             className="primary-button small-button"
             onClick={() => void handleRunDue()}
             disabled={runBusy || writesBlocked}
             title={writesBlocked ? blockReason : 'POST /api/automation/run-due'}
           >
-            {runBusy ? '时间快进中…' : '时间快进 · 执行到期任务'}
+            {runBusy ? '调度执行中…' : simulationTime ? '时间快进 · 执行到期任务' : '执行当前到期任务'}
           </button>
           <small>
             {writesBlocked
               ? `写操作已禁用：${blockReason}`
-              : '调用 POST /api/automation/run-due；只执行 run_at 已到期的模拟任务，失败会如实返回，不会假装成功。'}
+              : simulationTime
+                ? '将执行所选时间及之前到期的模拟任务；包含定时转账与礼物下单，执行结果写入审计。'
+                : '留空时使用当前时间；选择未来时间可演示定时转账与生日预订到期后的执行。'}
           </small>
         </div>
 
@@ -872,10 +890,12 @@ export default function ScenariosPage({ writesBlocked, blockReason, onDataChange
         )}
 
         {runResult && (
-          <div className={`run-due-result ${runResult.failed_count > 0 ? 'has-failures' : ''}`}>
+          <div className={`run-due-result ${runResult.failed_count > 0 || runResult.status !== 'completed' ? 'has-failures' : ''}`} role="status">
             <span className="eyebrow">RUN-DUE RESULT · {statusLabel(runResult.status)}</span>
             <p>
-              {runResult.executed_count + runResult.failed_count === 0
+              {runResult.status !== 'completed'
+                ? `本次未完成调度：${runResult.reason || statusLabel(runResult.status)}。`
+                : runResult.executed_count + runResult.failed_count === 0
                 ? '本次没有到期的定时任务，调度器已正常返回。'
                 : `已执行 ${runResult.executed_count} 项，失败 ${runResult.failed_count} 项。`}
               {runResult.now ? ` 模拟时间：${formatDateTime(runResult.now)}。` : ''}

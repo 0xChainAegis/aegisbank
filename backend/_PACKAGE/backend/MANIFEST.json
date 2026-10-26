@@ -1,120 +1,304 @@
 {
+  "schema_version": "aegisbank-package-manifest/v2",
   "source_commit": "654c986ffcac5aa2b5e42baf8bbfa144c6b6eaec",
+  "source_commit_role": "Original upstream export baseline; not the integration commit.",
   "group": "backend",
+  "integration_note": "Six categorized modules remain the source of truth. Tests and validation scripts were restored, and frontend fixes were integrated; these are not unchanged exports.",
+  "current_hashes": {
+    "meaning": "bytes and sha256 describe current allowlisted working-tree source files.",
+    "discovery": "Git tracked/unignored source; without .git, the same safe archive allowlist. Git errors never trigger archive fallback.",
+    "path_base": "backend/",
+    "runtime_mapping": "Remove the module prefix; backend/.env.example is the sole special mapping.",
+    "excludes": "_PACKAGE, hidden files, dependency/cache/build output, backend/data, runtime databases and lock caches",
+    "license_metadata": "The unchanged MIT LICENSE is retained beside this manifest, outside runtime source hashes."
+  },
   "files": [
     {
       "group": "backend",
       "path": ".env.example",
+      "runtime_path": "backend/.env.example",
       "bytes": 499,
       "sha256": "5ea88c07bc5c76bcad9c280402d86dd344bbb99b6f3817efe1bab5b06c780664"
     },
     {
       "group": "backend",
       "path": "backend/README.md",
+      "runtime_path": "backend/README.md",
       "bytes": 237,
       "sha256": "e634319a5e6c53a00b341d1a91bd80695c1b48d5314280eeef8fc6197da3167c"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/__init__.py",
+      "runtime_path": "backend/aegisbank_api/__init__.py",
       "bytes": 58,
       "sha256": "59a51af3a1f8886de4f8f950a8a22416d607b892905afe2c6e681637fdad37bd"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/banking/__init__.py",
+      "runtime_path": "backend/aegisbank_api/banking/__init__.py",
       "bytes": 344,
       "sha256": "fafd9f30cad32351ad9b489db64c1f1f6c68c50f7a6af1e4ed42075a34ca0f53"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/banking/models.py",
+      "runtime_path": "backend/aegisbank_api/banking/models.py",
       "bytes": 1408,
       "sha256": "fad7d257e07eacbaafc8584af9c6a9541e3d87523cfcee8744cf003239f3a943"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/banking/repository.py",
+      "runtime_path": "backend/aegisbank_api/banking/repository.py",
       "bytes": 23249,
       "sha256": "87148e4d630b9ac941e0e9956978ee9d651c51e7163687e7327d4cfe54cae827"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/config.py",
+      "runtime_path": "backend/aegisbank_api/config.py",
       "bytes": 1589,
       "sha256": "21443a9bcf0239e0a8e4814d85684b44cc17c5d6b453aece2d6e5670fb5cfef7"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/db.py",
+      "runtime_path": "backend/aegisbank_api/db.py",
       "bytes": 18111,
       "sha256": "7c472825938953a1f290620b535bf346092344e5905b7a408944a39903f81fc7"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/demo_seed.py",
+      "runtime_path": "backend/aegisbank_api/demo_seed.py",
       "bytes": 3846,
       "sha256": "88a7f21df90e5db9016c016be4715af3a52844ddec59ddd883ff54c8c2f46da7"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/main.py",
+      "runtime_path": "backend/aegisbank_api/main.py",
       "bytes": 20001,
       "sha256": "705e066efe6652f663eb899abc86efe98e0475bbfafdbe2895f8bb3cf6ba1be6"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/schemas.py",
+      "runtime_path": "backend/aegisbank_api/schemas.py",
       "bytes": 896,
       "sha256": "02cf14b887334664b6b98ca0c4d266f6fc865a8e8f37f5fa200c928682293131"
     },
     {
       "group": "backend",
       "path": "backend/aegisbank_api/services.py",
+      "runtime_path": "backend/aegisbank_api/services.py",
       "bytes": 1805,
       "sha256": "5363860354fe1f015e35ac7661877a0d8d6ec70a7fc2d978f1c8b9cb03b1fa48"
     },
     {
       "group": "backend",
       "path": "backend/pyproject.toml",
+      "runtime_path": "backend/pyproject.toml",
       "bytes": 632,
       "sha256": "54f90afbbec8b67300c45c7be66604415bcc98cb1a0e353679a6754f984a7a13"
     },
     {
       "group": "backend",
+      "path": "backend/tests/conftest.py",
+      "runtime_path": "backend/tests/conftest.py",
+      "bytes": 2663,
+      "sha256": "8b9a347211e2abff1a2de428700da30b13d5b436d28b382653688d2f9a1d18ae"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_api.py",
+      "runtime_path": "backend/tests/test_api.py",
+      "bytes": 12334,
+      "sha256": "054b0f64fcc089ce4e7b1a215a76e9e739b96317120ca4a5d03a35ead063b217"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_authz.py",
+      "runtime_path": "backend/tests/test_authz.py",
+      "bytes": 8001,
+      "sha256": "ae037423547d928a15b32b56b7ef3678e8fd9f27c2ce69c95efe87e93bfd5905"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_automation.py",
+      "runtime_path": "backend/tests/test_automation.py",
+      "bytes": 22940,
+      "sha256": "f8c38991a31e0a1559a57f3baa006ddb03d21f287e7e8d482fd20ab30eb85bf4"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_bills.py",
+      "runtime_path": "backend/tests/test_bills.py",
+      "bytes": 9256,
+      "sha256": "e808d37b7e667900791f4affe2bd4b82493333b5b9de36aea0e87b9e9fd2651d"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_breaker.py",
+      "runtime_path": "backend/tests/test_breaker.py",
+      "bytes": 11479,
+      "sha256": "8eee88c8adc0cbcd399e397c84d0abedb79a28e1ad3cb069514cea4a535dc80e"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_cards.py",
+      "runtime_path": "backend/tests/test_cards.py",
+      "bytes": 11060,
+      "sha256": "26fd5f2441d803f7cfa6803be3e2c303670452c21bbcbb29e47cf66c73b5937a"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_compensation.py",
+      "runtime_path": "backend/tests/test_compensation.py",
+      "bytes": 16733,
+      "sha256": "5f8eb1071ebb12129b49bad09d3f4602e4ff232105b28eb8417204b738a56176"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_im_channel.py",
+      "runtime_path": "backend/tests/test_im_channel.py",
+      "bytes": 8480,
+      "sha256": "2686ed580fb13c836f15bf37c7f38822e731f00e89787ddb0c0a26bed42a6961"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_mfa.py",
+      "runtime_path": "backend/tests/test_mfa.py",
+      "bytes": 12010,
+      "sha256": "02932deca0b2fbac368fae66458a5e486abb6d9eb25ca10fae70f8cbd55ac3b6"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_nlp_safety.py",
+      "runtime_path": "backend/tests/test_nlp_safety.py",
+      "bytes": 13699,
+      "sha256": "32596f6732bd70870eba1cbf63a35bd7540243ebf1859d29e8660030e54d0ddd"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_planner.py",
+      "runtime_path": "backend/tests/test_planner.py",
+      "bytes": 6138,
+      "sha256": "c48ffd6cbc7d71a5895f800f89752586a7dde2101e85f10e6092e842370d7a80"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_sandbox.py",
+      "runtime_path": "backend/tests/test_sandbox.py",
+      "bytes": 8407,
+      "sha256": "9a9fbf0819a54d9cb62994a16ce0a098a052f96edc407a32a6de9566b08bc3e8"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_security_regressions.py",
+      "runtime_path": "backend/tests/test_security_regressions.py",
+      "bytes": 36652,
+      "sha256": "d786fe9f50962be97f9fc9b355a26dd7813f2ab8b60a8258687a981e2aa4d6d7"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_subscription_cancel.py",
+      "runtime_path": "backend/tests/test_subscription_cancel.py",
+      "bytes": 4835,
+      "sha256": "0bc911e1762b7dc398ef8e388c39031daca780182bfed689d4cb2e891ae4f3d3"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_transfers.py",
+      "runtime_path": "backend/tests/test_transfers.py",
+      "bytes": 9523,
+      "sha256": "b8f0e16a7f1edd0703a9e1a610b83319ca4c9739c0f438414714089da4d432b0"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_trust.py",
+      "runtime_path": "backend/tests/test_trust.py",
+      "bytes": 25995,
+      "sha256": "36279580fab6e0352895dfd31c078a54bd82efdf63c3b771b2515639db48eb37"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_wealth.py",
+      "runtime_path": "backend/tests/test_wealth.py",
+      "bytes": 13919,
+      "sha256": "715cd506ff96032125369b882cfc65ec96b9304efa4c791fcb5bdf0f9b7f67e0"
+    },
+    {
+      "group": "backend",
       "path": "backend/uv.lock",
+      "runtime_path": "backend/uv.lock",
       "bytes": 230151,
       "sha256": "85d44a558fd639a9dcc1aa0fee564e49cf7f76665c472960c64e119e7aa412b2"
     },
     {
       "group": "backend",
       "path": "docs/DEVELOPMENT-ENVIRONMENT.md",
+      "runtime_path": "docs/DEVELOPMENT-ENVIRONMENT.md",
       "bytes": 5375,
       "sha256": "5b2c119a9b93efae94767bcd40ffca38be7b5dfc3ba63421e462c15496301c9e"
     },
     {
       "group": "backend",
       "path": "scripts/bootstrap.sh",
+      "runtime_path": "scripts/bootstrap.sh",
       "bytes": 371,
       "sha256": "46cb6ce9627c474156bae6c9d72873fe0ed2542cf85facc0655e60308a30f0b8"
     },
     {
       "group": "backend",
       "path": "scripts/build.sh",
+      "runtime_path": "scripts/build.sh",
       "bytes": 289,
       "sha256": "b0b2c17cf45635f72e4ccff4d30d5e76aeff603051d3662190a81109ea518de1"
     },
     {
       "group": "backend",
       "path": "scripts/dev.sh",
+      "runtime_path": "scripts/dev.sh",
       "bytes": 574,
       "sha256": "649a3de9433b167d2bb37f4906efc8e28654eafc5771c1667bedf418412e8897"
     },
     {
       "group": "backend",
+      "path": "scripts/lint.sh",
+      "runtime_path": "scripts/lint.sh",
+      "bytes": 266,
+      "sha256": "9cc0bf4047ef9d30ccbaa66a0a5e5b9775c06e0f1543a792d1fb888a67e78922"
+    },
+    {
+      "group": "backend",
+      "path": "scripts/scenario-check.py",
+      "runtime_path": "scripts/scenario-check.py",
+      "bytes": 12321,
+      "sha256": "d9f37ad3bf5b342424f30aff0c787ab47f6251df3462009205106e56bd632631"
+    },
+    {
+      "group": "backend",
       "path": "scripts/seed-demo.sh",
+      "runtime_path": "scripts/seed-demo.sh",
       "bytes": 767,
       "sha256": "0e3d0021c93fea00766cc98209a2b03315277362a16605e891c049d8a41c5c0e"
+    },
+    {
+      "group": "backend",
+      "path": "scripts/smoke.sh",
+      "runtime_path": "scripts/smoke.sh",
+      "bytes": 1227,
+      "sha256": "39d7e34213197347c74b267d27b4e2844c01d1ec575b8dbac79cd57e6a7eeb0b"
+    },
+    {
+      "group": "backend",
+      "path": "scripts/test.sh",
+      "runtime_path": "scripts/test.sh",
+      "bytes": 238,
+      "sha256": "138975904937c78f0744951792d29deb1b5befa24b534a97c98c8c79c0b40545"
     }
   ]
 }

@@ -139,6 +139,7 @@ export const argumentLabels: Record<string, string> = {
   merchant: '商户',
   subscription_id: '订阅',
   limit_cny: '限额（元）',
+  daily_limit_cny: '每日交易限额（元）',
   transaction_limit_cny: '交易限额（元）',
   status: '状态',
   total_due_cny: '应还金额',
@@ -374,9 +375,17 @@ export function normalizeBankingOverview(payload: unknown): BankingOverview {
     .filter((item) => asRecord(item) !== null)
     .map(mapSubscription);
   const abnormalById = new Map<string, Subscription>();
-  for (const item of abnormal) abnormalById.set(item.id, item);
+  const inactiveStatuses = new Set(['cancelled', 'canceled', 'inactive', 'expired', 'terminated', '已取消', '已终止', '已过期']);
+  const inactiveIds = new Set(subscriptions
+    .filter((item) => inactiveStatuses.has(item.status.trim().toLowerCase()))
+    .map((item) => item.id));
+  for (const item of abnormal) {
+    if (!inactiveIds.has(item.id) && !inactiveStatuses.has(item.status.trim().toLowerCase())) {
+      abnormalById.set(item.id, item);
+    }
+  }
   for (const item of subscriptions) {
-    if (item.abnormal || abnormalIds.has(item.id)) {
+    if (!inactiveIds.has(item.id) && (item.abnormal || abnormalIds.has(item.id))) {
       abnormalById.set(item.id, item.abnormal ? item : { ...item, abnormal: true });
     }
   }
@@ -583,7 +592,7 @@ export function wealthRiskLevel(riskLevel: string): RiskLevel {
     case 'R5':
       return 'red';
     default:
-      return 'green';
+      return 'red';
   }
 }
 
@@ -753,11 +762,11 @@ export function confirmationSummary(step: PlanStep): StepSummary {
     case 'set_transaction_limit': {
       const card = text('card_id');
       return {
-        headline: '调整单笔交易限额',
+        headline: '调整每日交易限额',
         details: [
           card ? `卡片：${card}` : '卡片在执行时确定',
-          args.limit_cny !== undefined
-            ? `新限额：${argumentValue(args.limit_cny, 'limit_cny')}`
+          args.daily_limit_cny !== undefined
+            ? `新限额：${argumentValue(args.daily_limit_cny, 'daily_limit_cny')}`
             : '',
           reversibleNote,
         ].filter(Boolean),
@@ -800,7 +809,7 @@ export function receiptHeadline(run: RunResponse): string {
   const firstMessage = run.results?.[0]?.message?.trim();
   if (run.status === 'completed') return firstMessage || '操作已完成';
   if (run.status === 'rejected') return '操作已拒绝，未执行任何工具';
-  if (run.status === 'failed') return '执行失败，未产生资金变动';
+  if (run.status === 'failed') return '执行失败，请核对步骤记录和账户结果';
   if (run.status === 'unknown') return '结果未知：需要人工对账';
   if (run.status === 'rolled_back') return '补偿链已完成，请核对逐步结果';
   if (run.status === 'rollback_blocked') return '回滚被阻止：存在不可撤销步骤';

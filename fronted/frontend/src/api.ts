@@ -123,7 +123,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
         ...(headers ?? {}),
       },
     });
-    const payload: unknown = await response.json();
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      // A proxy or server can return an HTML/plain-text error. Preserve its HTTP
+      // status so a definite rejection is not treated as a lost write response.
+      if (!response.ok && !controller.signal.aborted) {
+        throw new ApiError(`请求失败（HTTP ${response.status}），服务未返回有效的 JSON 错误详情。`, response.status);
+      }
+      throw error;
+    }
     if (!response.ok) {
       const detail = payload && typeof payload === 'object' && 'detail' in payload
         ? (payload as { detail: unknown }).detail : null;
@@ -555,6 +565,7 @@ export async function runAutomationDue(now?: string): Promise<AutomationRunDueRe
   return {
     status: payload.status ?? 'unknown',
     risk_level: payload.risk_level,
+    reason: payload.reason,
     now: payload.now ?? null,
     executed: payload.executed ?? [],
     failed: payload.failed ?? [],

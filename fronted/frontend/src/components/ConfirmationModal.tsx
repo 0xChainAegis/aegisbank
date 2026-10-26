@@ -252,7 +252,7 @@ export default function ConfirmationModal({
                         setMfaProvider(provider.name);
                         setMfaToken('');
                       }}
-                      disabled={writesBlocked}
+                      disabled={busy || writesBlocked || expired}
                     >
                       <span className="mfa-provider-option-top">
                         <strong>{provider.title}</strong>
@@ -281,7 +281,7 @@ export default function ConfirmationModal({
                 placeholder={mfaTokenPlaceholder(selectedProvider)}
                 value={mfaToken}
                 onChange={(event) => setMfaToken(sanitizeMfaToken(selectedProvider, event.target.value))}
-                disabled={writesBlocked || expired}
+                disabled={busy || writesBlocked || expired}
               />
               <span className="otp-help">
                 演示环境使用固定令牌；生产环境必须接入银行真实 MFA。
@@ -289,7 +289,7 @@ export default function ConfirmationModal({
                   type="button"
                   className="text-button otp-fill"
                   onClick={() => setMfaToken(MFA_DEMO_TOKENS[selectedProvider] ?? '')}
-                  disabled={writesBlocked || expired}
+                  disabled={busy || writesBlocked || expired}
                 >
                   填入演示令牌
                 </button>
