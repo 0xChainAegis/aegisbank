@@ -75,7 +75,7 @@ bash scripts/bootstrap.sh
 bash scripts/dev.sh
 ```
 
-打开 [产品控制台](http://127.0.0.1:5173)、[API 文档](http://127.0.0.1:8000/docs) 或 [就绪检查](http://127.0.0.1:8000/api/health/ready)。默认规则 Planner 无需模型密钥；可选 LLM 配置见组装后的 `.runtime/backend/.env.example`，需要覆盖时复制为同目录 `.env`。演示 OTP 为 `246810`。
+打开 [产品控制台](http://127.0.0.1:5173)、[API 文档](http://127.0.0.1:8000/docs) 或 [就绪检查](http://127.0.0.1:8000/api/health/ready)。完整的组装、启动与接口请求/返回示例见 [API 交接文档](docs/API-HANDOFF.md)。默认规则 Planner 无需模型密钥；可选 LLM 配置见组装后的 `.runtime/backend/.env.example`，需要覆盖时复制为同目录 `.env`。演示 OTP 为 `246810`。
 
 建议先查询本月账单，再发起 880 元转账并核对确认内容，最后查看审计哈希链。写操作会改变本地模拟状态，重复演示前应核对余额、累计转账和订阅状态。
 

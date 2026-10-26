@@ -2,7 +2,7 @@
 
 > 状态：**已完成**。覆盖组装、启动、后端地址、核心接口请求/返回示例、错误码、排障与验证记录。
 >
-> 文档修订基线：`main` @ `120f70f`（PR #2 合并后）。API 验证代码基线：`bad8e64`。
+> 文档修订基线：`main` @ `778c9c7`（PR #3 合并后）。API 验证代码基线：`bad8e64`。
 > 验证日期：2026-10-26。
 > 后端运行环境：Linux / WSL Ubuntu 24.04。
 
@@ -45,7 +45,7 @@ python3 scripts/assemble.py
 预期输出：
 
 ```text
-Assembled 140 files into <repo>/.runtime
+Assembled 141 files into <repo>/.runtime
 ```
 
 组装规则：
@@ -136,7 +136,7 @@ pnpm dev
 ### 5.1 组装
 
 ```text
-Assembled 140 files into /home/lqz5885/work/aegisbank-day1/.runtime (140 written, 0 removed).
+Assembled 141 files into /home/lqz5885/work/aegisbank-day1/.runtime (141 written, 0 removed).
 ```
 
 ### 5.2 组装器测试
@@ -1097,6 +1097,10 @@ ss -ltnp | grep -E ':8000|:5173'
 | `fetchReadiness()` | `GET /api/health/ready` | `status`、`components` |
 | `fetchAudit(limit, runId)` | `GET /api/audit` | `entries`、`count` |
 | `verifyAudit()` | `GET /api/audit/verify` | `valid`、`checked` |
+| `fetchTools()` | `GET /api/tools` | `tools` |
+| `fetchPermissions()` | `GET /api/permissions` | `permissions` |
+| `updatePermission(toolName, granted)` | `PUT /api/permissions/{tool_name}` | `tool_name`、`title`、`granted` |
+| `fetchAuthzMe()` | `GET /api/authz/me` | `role`、`capabilities` |
 
 前端 `RunResponse` 类型已覆盖 `completed`、`awaiting_confirmation`、`needs_clarification`、`blocked` 等业务状态。接口字段变更时，必须同步 `fronted/frontend/src/api.ts` 与 `types.ts`。
 ### 10.2 NLP 能力边界
@@ -1128,7 +1132,7 @@ ss -ltnp | grep -E ':8000|:5173'
 
 ```text
 python3 scripts/assemble.py
-Assembled 140 files into /tmp/aegisbank-stage4-check/.runtime (140 written, 0 removed).
+Assembled 141 files into /tmp/aegisbank-stage4-check/.runtime (141 written, 0 removed).
 
 python3 -m unittest discover -s tests -q
 Ran 18 tests in 0.452s
@@ -1208,6 +1212,13 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 - `PUT /api/permissions/query_bill`：200，`granted=false` 与恢复 `granted=true` 均验证；
 - dsh-workflow docs-only gate：encoding / lint / security pass，test 按 docs fast path 跳过；
 - 本次收尾只修改 `docs/API-HANDOFF.md`，不修改业务代码、依赖或 `.runtime/`。
+### 11.7 P0 契约守卫
+
+- 新增 `scripts/check_api_contract.py`：从 `fronted/frontend/src/api.ts` 提取 39 个前端 `/api` 路径，与后端 OpenAPI 的 49 个路径比对，当前全部匹配。
+- 新增 `backend/tests/test_api_handoff_examples.py`：覆盖本文档的健康/概览/Planner/澄清/绿黄红执行/确认/OTP/审计/tools/permissions 示例。
+- 前端 `api.test.ts` 增加 409 幂等错误和 503 未就绪 JSON 错误用例；前端测试由 73 项增至 75 项。
+- CI 在组装后执行 `scripts/check_api_contract.py`，防止前端调用路径与后端 OpenAPI 漂移。
+
 ## 12. 参考资料
 
 - [根 README](../README.md)

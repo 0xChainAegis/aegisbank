@@ -10,7 +10,7 @@ FastAPI 入口、配置、SQLite 与 Mock Bank Core、依赖、运行脚本和�
 
 本次整合恢复或更新必要的验证与说明材料；业务执行链没有新增旁路。
 
-当前运行白名单包含 **41 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
+当前运行白名单包含 **42 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
 
 根 `docs/` 和 `deliverables/` 是团队阅读、验收及比赛材料入口；包内旧文档保留背景，不单独维护新主线。旧 `plans/README.md` 和 `plans/AGENTS.md` 属历史来源说明，不进入运行组装白名单。`_PACKAGE` 为来源、许可与校验元数据，不复制进 `.runtime/`。
 
@@ -39,6 +39,7 @@ Git checkout 中扫描已跟踪或未被忽略的新文件；没有 `.git` 的�
 - `backend/pyproject.toml`
 - `backend/tests/conftest.py`
 - `backend/tests/test_api.py`
+- `backend/tests/test_api_handoff_examples.py`
 - `backend/tests/test_authz.py`
 - `backend/tests/test_automation.py`
 - `backend/tests/test_bills.py`
