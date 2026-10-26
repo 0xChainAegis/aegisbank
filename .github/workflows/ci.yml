@@ -47,6 +47,8 @@ jobs:
         run: uv lock --check
       - name: Install locked dependencies
         run: uv sync --frozen --dev
+      - name: Check frontend/backend API contract
+        run: uv run --frozen python ../../scripts/check_api_contract.py
       - name: Lint Python
         run: uv run --frozen ruff check aegisbank_api tests
       - name: Compile Python

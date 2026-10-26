@@ -52,8 +52,8 @@
       "group": "fronted",
       "path": "frontend/src/api.test.ts",
       "runtime_path": "frontend/src/api.test.ts",
-      "bytes": 1771,
-      "sha256": "46a10917ffac5dd67889ee9d476ca0a4503f9d6338ab044a95f8ae0ee1ccacaa"
+      "bytes": 2827,
+      "sha256": "55df87751a85fa607e9e70b13fba2174d7e1caccd85db81a534a6af24f786e47"
     },
     {
       "group": "fronted",

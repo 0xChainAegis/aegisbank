@@ -42,6 +42,7 @@ bash scripts/lint.sh    # ruff + TypeScript 类型检查
 bash scripts/build.sh   # 后端 compileall + Vite 生产构建
 bash scripts/test.sh    # pytest + Vitest
 bash scripts/smoke.sh   # 启动 API，跑绿色链路并校验审计哈希链
+bash scripts/check-api-contract.sh  # 前端调用路径 vs 后端 OpenAPI
 ```
 
 推送或 PR 后，GitHub CI 在 Linux 中分别验证后端和前端，使用冻结锁文件安装依赖。必须查看实际通过结果，不把新增工作流等同于验证通过。若在原作者机器使用 DSH 工作流，仍按其 `gate.ps1` / `checkpoint.ps1` 约定执行；该外部工作流不是其他成员的必需安装项。

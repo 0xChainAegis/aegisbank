@@ -28,6 +28,7 @@
 
 ## 协作与交付
 
+- [API 交接文档](API-HANDOFF.md)
 - [团队工作流](TEAM-WORKFLOW.md)
 - [本轮可提交材料](../deliverables/current/README.md)
 - [来源与参考边界](UPSTREAM-NOTES.md)

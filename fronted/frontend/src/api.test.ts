@@ -32,4 +32,34 @@ describe('API response boundaries', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ accounts: [{}] }) })));
     await expect(fetchBankingOverview()).rejects.toThrow('账户标识缺失');
   });
+
+  it('preserves structured 409 idempotency errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        detail: {
+          code: 'IDEMPOTENCY_KEY_REUSED',
+          message: '同一个 Idempotency-Key 携带了不同的请求内容，拒绝处理。',
+        },
+      }),
+    })));
+    await expect(runAgent({ instruction: '查询余额' })).rejects.toMatchObject({
+      status: 409,
+      code: 'IDEMPOTENCY_KEY_REUSED',
+    });
+  });
+  it('preserves structured 503 readiness errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({
+        detail: '系统未就绪，写操作已按 fail closed 拒绝（sqlite: 模拟 SQLite 未就绪）。',
+      }),
+    })));
+    await expect(runAgent({ instruction: '查询余额' })).rejects.toMatchObject({
+      status: 503,
+      message: '系统未就绪，写操作已按 fail closed 拒绝（sqlite: 模拟 SQLite 未就绪）。',
+    });
+  });
 });
