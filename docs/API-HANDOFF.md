@@ -1038,7 +1038,84 @@ ss -ltnp | grep -E ':8000|:5173'
 - 职责包组装器测试：18 项通过。
 - 以上数字来自对应版本的历史记录；当前变更后应重新运行并引用实际输出，不能用旧数字代替新验证。
 
-## 11. 参考资料
+## 11. Stage 4 验证记录
+
+验证日期：2026-10-26。验证对象：分支 `docs/day1-api-handoff`，文档提交 `4ae990a`，干净 clone 到 `/tmp/aegisbank-stage4-check`。
+
+### 11.1 组装与组装器测试
+
+```text
+python3 scripts/assemble.py
+Assembled 140 files into /tmp/aegisbank-stage4-check/.runtime (140 written, 0 removed).
+
+python3 -m unittest discover -s tests -q
+Ran 18 tests in 0.452s
+OK
+```
+
+### 11.2 后端 API 验证
+
+在 fresh DB 上启动 `.runtime/backend`，逐项执行文档中的方法、路径、请求体与请求头。共 **20 项检查通过**：
+
+- health 200 / ok
+- ready 200 / ready
+- overview 200 / accounts
+- planner planned
+- planner clarification 且 steps 为空
+- agent run green completed
+- agent run yellow awaiting_confirmation
+- yellow confirmation completed
+- agent run red awaiting_confirmation / requires_reauth
+- wrong OTP 403
+- correct OTP 246810 completed / mfa_verified
+- audit list entries
+- audit verify valid=true
+- 400 confirm nonexistent
+- 403 user reset breaker
+- 409 idempotency key reused
+- 413 body too large
+- 422 validation
+- 503 readiness not_ready
+- 503 write blocked
+
+### 11.3 curl 可复制性抽查
+
+在 fresh DB 上直接执行文档中的 curl 命令，以下链路通过：
+
+```text
+GET  /api/health                 200
+GET  /api/health/ready           200 / ready
+GET  /api/banking/overview       200
+POST /api/planner/plan           200 / planned / yellow / transfer
+POST /api/agent/run green        200 / completed / green
+POST /api/agent/run yellow       200 / awaiting_confirmation
+POST /api/confirmations/{id}     200 / completed / simulated=true
+GET  /api/audit/verify           200 / valid=true / checked=8
+```
+
+注意：如果同一个数据库已经执行过 880 元与 1200 元转账，再次执行 880 元可能因日累计升级为红色；复现示例前应使用 fresh DB。
+
+### 11.4 门禁结果
+
+```text
+gate.ps1 -Repo /tmp/aegisbank-stage4-check -DocsOnly
+encoding  pass
+lint      pass
+build     skip
+test      skip（docs fast path）
+security  pass（扫描 209 个文件，HIGH=0 MEDIUM=0）
+GATE 结果: UNVERIFIED
+```
+
+docs-only 变更按快速通道跳过测试，因此标记 unverified；提交时已在 checkpoint 中写明原因。
+
+### 11.5 本次未覆盖
+
+- 未重新运行浏览器 E2E、前端 Vitest 和真实 LLM 测评；
+- 前端契约通过阅读 `fronted/frontend/src/api.ts` 与 `types.ts` 核对，未做浏览器联调；
+- 应用 252/73/29/15 等数字来自 2026-10-25 历史验证记录，不是本次 docs-only 变更的新输出；
+- 本次不宣称生产认证、真实 MFA、OS 级沙箱或通用 NLP 已完成。
+## 12. 参考资料
 
 - [根 README](../README.md)
 - [贡献指南](../CONTRIBUTING.md)
