@@ -1,0 +1,103 @@
+flowchart TB
+    subgraph UX["交互层 · React Console"]
+        CHAT["对话与任务输入"]
+        PLANVIEW["结构化计划预览"]
+        CONFIRM["黄/红风险确认"]
+        PERM["权限控制台"]
+        AUDITUI["操作审计与哈希校验"]
+    end
+
+    subgraph API["接入与编排层 · FastAPI"]
+        API["REST API / OpenAPI"]
+        PIF["Planner Interface"]
+        RULE["RuleBasedPlanner"]
+        LLM["OpenAI-Compatible Planner"]
+        COMPILER["Deterministic Plan Compiler\nSchema / Tool / DAG / Cycle"]
+        SCHED["DAG Scheduler\nTopological Execution"]
+        STATE["Confirmation State Machine"]
+    end
+
+    subgraph TRUST["信任边界 · Trust Gateway"]
+        ID["Identity & Context"]
+        PERMGW["Permission Gateway\nCapability + Scope"]
+        RISK["Risk Engine\nGreen / Yellow / Red"]
+        INJECT["Injection & Overreach Guard"]
+        FACT["Fact / Intent Consistency Check (Phase 2)"]
+        ENVELOPE["Action Envelope\nPlan hash + nonce + expiry"]
+        BREAKER["Anomaly Circuit Breaker (Phase 2)"]
+        DECISION["Policy Decision\nallow / confirm / reauth / deny"]
+    end
+
+    subgraph TOOLS["工具运行时 · Tool SDK"]
+        SDK["Tool Registry & Manifest"]
+        BILL["query_bill\nGREEN"]
+        REPAY["adjust_repayment_date\nYELLOW"]
+        TRANSFER["transfer\nRED"]
+        SANDBOX["Sandbox / Timeout / Idempotency"]
+        ADAPTER["Bank Adapter Interface\nMock -> Core Banking"]
+    end
+
+    subgraph DATA["数据与证据层"]
+        PERMDB["Permission Store"]
+        PENDING["Pending Actions\nDAG + Plan Snapshot"]
+        AUDITDB["Audit Hash Chain\nSHA-256"]
+        POLICYCFG["Policy & Planner Config"]
+        WORM["Signed / WORM Audit Vault (Phase 2)"]
+    end
+
+    subgraph EXT["外部系统"]
+        LLMAPI["LLM Provider\nOpenAI-compatible"]
+        IDP["Identity Provider / MFA"]
+        BANK["Core Banking Sandbox (Phase 2)"]
+        VAULT["KMS / Audit Vault (Phase 2)"]
+    end
+
+    CHAT --> API
+    API --> PIF
+    PIF --> RULE
+    PIF --> LLM
+    RULE --> COMPILER
+    LLM --> COMPILER
+    COMPILER --> SCHED
+    SCHED --> PERMGW
+    SCHED --> STATE
+    PERMGW --> RISK
+    PERMGW --> INJECT
+    PERMGW --> FACT
+    PERMGW --> ENVELOPE
+    PERMGW --> BREAKER
+    RISK --> DECISION
+    INJECT --> DECISION
+    FACT --> DECISION
+    ENVELOPE --> DECISION
+    BREAKER --> DECISION
+    DECISION --> CHAT
+    DECISION --> CONFIRM
+    DECISION --> SDK
+    SDK --> BILL
+    SDK --> REPAY
+    SDK --> TRANSFER
+    BILL --> SANDBOX
+    REPAY --> SANDBOX
+    TRANSFER --> SANDBOX
+    SANDBOX --> ADAPTER
+    PERMGW --> PERMDB
+    SCHED --> PENDING
+    SDK --> AUDITDB
+    DECISION --> AUDITDB
+    PERM --> PERMDB
+    AUDITUI --> AUDITDB
+    LLM --> LLMAPI
+    PERMGW --> IDP
+    ADAPTER -. Phase 2 .-> BANK
+    AUDITDB -. Phase 2 .-> WORM
+    WORM -.-> VAULT
+    PLANVIEW --> COMPILER
+    STATE --> PENDING
+
+    classDef current fill:#e5f0eb,stroke:#0f5c53,color:#172525,stroke-width:1.5px;
+    classDef future fill:#fbf4e6,stroke:#a96713,color:#5d410f,stroke-width:1.3px,stroke-dasharray:5 4;
+    classDef data fill:#eef1eb,stroke:#54615f,color:#172525,stroke-width:1.2px;
+    class CHAT,PLANVIEW,CONFIRM,PERM,AUDITUI,API,PIF,RULE,COMPILER,SCHED,STATE,ID,PERMGW,RISK,INJECT,ENVELOPE,DECISION,SDK,BILL,REPAY,TRANSFER,SANDBOX current;
+    class LLM,FACT,BREAKER,ADAPTER,BANK,WORM,VAULT,LLMAPI,IDP future;
+    class PERMDB,PENDING,AUDITDB,POLICYCFG data;

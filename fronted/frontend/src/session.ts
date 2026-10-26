@@ -46,7 +46,8 @@ export function isValidSnapshot(value: unknown): value is PendingSnapshot {
   if (!pending || typeof pending !== 'object') return false;
   const confirmation = pending.confirmation;
   if (!confirmation || typeof confirmation.id !== 'string' || !confirmation.id) return false;
-  if (typeof pending.status !== 'string') return false;
+  if (pending.status !== 'awaiting_confirmation') return false;
+  if (typeof confirmation.expires_at !== 'string' || !Number.isFinite(Date.parse(confirmation.expires_at))) return false;
   return typeof record.instruction === 'string' && typeof record.savedAt === 'string';
 }
 
@@ -68,7 +69,16 @@ export function savePendingSnapshot(
 export function loadPendingSnapshot(
   storage: StorageLike | null = defaultStorage(),
 ): PendingSnapshot | null {
-  return loadPendingSnapshots(storage)[0] ?? null;
+  const snapshots = loadPendingSnapshots(storage);
+  const now = Date.now();
+  const active = snapshots.filter((snapshot) => !isSnapshotExpired(snapshot, now));
+  if (storage && active.length !== snapshots.length) {
+    try {
+      if (active.length) storage.setItem(PENDING_STORAGE_KEY, JSON.stringify(active));
+      else storage.removeItem(PENDING_STORAGE_KEY);
+    } catch { /* Even if storage is unavailable, do not restore an expired action. */ }
+  }
+  return active[0] ?? null;
 }
 
 export function loadPendingSnapshots(
@@ -139,7 +149,7 @@ export function remainingSeconds(
   if (!expiresAt) return 0;
   const parsed = Date.parse(expiresAt);
   if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, Math.round((parsed - now) / 1000));
+  return Math.max(0, Math.ceil((parsed - now) / 1000));
 }
 
 /** 倒计时展示：4:32 / 0:09；超过 1 小时显示 1:02:03。 */

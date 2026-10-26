@@ -54,6 +54,8 @@ const actionRiskMap: Record<string, RiskLevel> = {
   'card-lost': 'red',
   'card-unlock': 'red',
   'subscription-rescue': 'yellow',
+  'wealth-purchase': 'red',
+  'birthday-plan': 'yellow',
 };
 
 const scenarioGroups: ScenarioGroup[] = [
@@ -67,7 +69,7 @@ const scenarioGroups: ScenarioGroup[] = [
         id: 'bill-analyze',
         title: '分析本月账单',
         description: '查询 ACC-1001 本月账单与近期交易，快速了解消费结构。',
-        instruction: '查询并分析我的本月账单',
+        instruction: '分析我的本月账单',
         toolName: 'query_bill',
         arguments: { account_id: 'ACC-1001', period: 'current_month' },
         requiredTools: ['query_bill'],
@@ -142,8 +144,8 @@ const scenarioGroups: ScenarioGroup[] = [
       {
         id: 'card-limit',
         title: '调整交易限额',
-        description: '把 CARD-8821 的单笔交易限额调整为 8,000 元。',
-        instruction: '把 CARD-8821 的单笔交易限额调整为 8000 元',
+        description: '把 CARD-8821 的单日交易限额调整为 8,000 元。',
+        instruction: '把 CARD-8821 的单日交易限额调整为 8000 元',
         requiredTools: ['set_transaction_limit'],
         hint: '额度超过 ¥5,000 时触发红色规则。',
       },
@@ -157,17 +159,65 @@ const scenarioGroups: ScenarioGroup[] = [
       },
       {
         id: 'card-unlock',
-        title: '解锁卡片',
-        description: '解除 CARD-8821 的锁定状态。',
-        instruction: '解锁我的卡片 CARD-8821',
+        title: '解挂卡片',
+        description: '解除 CARD-8821 的挂失状态。',
+        instruction: '解挂卡片 CARD-8821',
         requiredTools: ['unlock_card'],
         hint: '解挂属于高风险卡片操作，必须 MFA 二次校验。',
       },
     ],
   },
   {
-    id: 'cross',
+    id: 'wealth',
     index: '04',
+    title: '理财操作',
+    caption: '模拟产品 · 申购强验证',
+    actions: [
+      {
+        id: 'wealth-products',
+        title: '查看理财产品',
+        description: '查看模拟产品的风险等级、期限与起购金额。',
+        instruction: '有哪些理财产品',
+        requiredTools: ['list_wealth_products'],
+        hint: '只读产品查询；产品与收益全部为模拟数据。',
+      },
+      {
+        id: 'wealth-purchase',
+        title: '申购稳健短债A ¥1,000',
+        description: '演示结构化申购计划与红色 MFA 确认。',
+        instruction: '买 1000 元稳健短债A',
+        requiredTools: ['purchase_wealth'],
+        hint: '申购始终需要强验证，确认前不会变更模拟持仓。',
+      },
+    ],
+  },
+  {
+    id: 'subscriptions',
+    index: '05',
+    title: '订阅与代扣',
+    caption: '扣费识别 · 续费管理',
+    actions: [
+      {
+        id: 'subscription-list',
+        title: '查看我的订阅',
+        description: '读取订阅清单、扣费金额、续费日期与异常标记。',
+        instruction: '查看我的订阅',
+        requiredTools: ['list_subscriptions'],
+        hint: '只读查询；取消订阅仍需另行明确确认。',
+      },
+      {
+        id: 'subscription-charges',
+        title: '识别订阅扣费',
+        description: '从模拟交易中识别订阅扣费与未登记代扣。',
+        instruction: '识别我的订阅扣费',
+        requiredTools: ['identify_subscription_charges'],
+        hint: '基于实际模拟流水分析，不修改订阅状态。',
+      },
+    ],
+  },
+  {
+    id: 'cross',
+    index: '06',
     title: '跨场景分析',
     caption: 'DAG 串联账单与订阅',
     actions: [
@@ -175,9 +225,17 @@ const scenarioGroups: ScenarioGroup[] = [
         id: 'subscription-rescue',
         title: '分析并取消异常订阅',
         description: '读取账单与订阅，识别异常订阅后由 DAG 串联取消操作。',
-        instruction: '分析我的本月账单和所有订阅，找出异常订阅并取消它',
-        requiredTools: ['list_subscriptions', 'cancel_subscription'],
+        instruction: '分析我的账单并取消异常订阅',
+        requiredTools: ['query_bill', 'list_subscriptions', 'cancel_subscription'],
         hint: '跨节点 DAG 会串联查询、识别与取消；取消动作按实际风险进入确认。',
+      },
+      {
+        id: 'birthday-plan',
+        title: '安排妈妈生日 ¥1,000',
+        description: '查询联系人生日、锁定预算，并预约鲜花和蛋糕。',
+        instruction: '帮我准备下个月妈妈的生日，预算 1000 元',
+        requiredTools: ['query_contact_birthday', 'lock_budget_funds', 'schedule_flower_order', 'schedule_cake_order'],
+        hint: '四步 DAG；确认后锁定模拟预算，礼物在生日前两天下单。',
       },
     ],
   },
@@ -396,7 +454,7 @@ export default function TaskConsolePage({
               setQuickNotice('');
             }}
             rows={3}
-            placeholder="例如：分析我的本月账单和所有订阅，找出异常订阅并取消它"
+            placeholder="例如：分析我的账单并取消异常订阅"
           />
           <button
             className="primary-button"
@@ -706,7 +764,7 @@ export default function TaskConsolePage({
                       <div key={key}>
                         <dt>{argumentLabels[key] ?? key}</dt>
                         <dd>
-                          {key.includes('amount') || key.includes('balance') || key.includes('limit') || key.includes('due')
+                          {key.endsWith('_cny')
                             ? formatCny(value)
                             : typeof value === 'object'
                               ? <pre>{formatDisplayValue(value)}</pre>
@@ -855,7 +913,7 @@ export default function TaskConsolePage({
           <li><span>01</span><strong>意图解析</strong><small>规则规划器生成 DAG</small></li>
           <li><span>02</span><strong>权限网关</strong><small>授权 / 注入 / 越权 / 风险</small></li>
           <li><span>03</span><strong>分级确认</strong><small>绿放行 · 黄确认 · 红 MFA</small></li>
-          <li><span>04</span><strong>签名审计</strong><small>SHA-256 哈希链留痕</small></li>
+          <li><span>04</span><strong>哈希审计</strong><small>SHA-256 哈希链留痕</small></li>
         </ol>
       </div>
     </section>

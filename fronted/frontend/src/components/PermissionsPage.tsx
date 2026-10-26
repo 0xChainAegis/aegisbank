@@ -34,6 +34,9 @@ export default function PermissionsPage({
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const canManage = !writesBlocked && canManagePermissions(role);
+  const manageBlockReason = writesBlocked
+    ? '系统尚未就绪，工具授权变更已暂停。'
+    : rolePermissionBlockReason(role);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -82,7 +85,7 @@ export default function PermissionsPage({
 
       {!canManage && (
         <div className="alert alert-warn" role="status">
-          {rolePermissionBlockReason(role)} 当前角色：{role}。
+          {manageBlockReason} 当前角色：{role}。
         </div>
       )}
 
@@ -150,8 +153,8 @@ export default function PermissionsPage({
                     <button
                       className={tool.granted ? 'danger-button' : 'primary-button small-button'}
                       onClick={() => onToggle(tool)}
-                      disabled={Boolean(busyTool) || !canManage}
-                      title={canManage ? undefined : '审计员只读：不能修改工具授权'}
+                      disabled={loading || Boolean(busyTool) || !canManage}
+                      title={loading ? '正在同步最新权限，请稍候。' : canManage ? undefined : manageBlockReason}
                     >
                       {busyTool === tool.name ? '处理中…' : tool.granted ? '撤回' : '授予'}
                     </button>

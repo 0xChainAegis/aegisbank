@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AegisBank：安全自治的银行 AI 智能体原型。可解释动态风险、统一权限网关、跨场景 DAG、确认/MFA 与 SHA-256 审计链。">
+  <title>AegisBank · 可信银行 AI 智能体</title>
+  <style>
+    :root {
+      --ink: #0b1728;
+      --ink-soft: #43536a;
+      --muted: #6d7c91;
+      --paper: #f4f7fb;
+      --white: #ffffff;
+      --navy: #07111f;
+      --navy-2: #0c1d33;
+      --line: #dce5f0;
+      --mint: #27c2ad;
+      --mint-dark: #0d8f80;
+      --gold: #e5ac47;
+      --coral: #e46767;
+      --blue: #6c9ff8;
+      --radius: 20px;
+      --shadow: 0 18px 50px rgba(26, 52, 88, 0.10);
+      --max: 1180px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap { width: min(calc(100% - 48px), var(--max)); margin: 0 auto; }
+    .skip-link {
+      position: fixed; left: 16px; top: -80px; z-index: 100;
+      padding: 10px 16px; border-radius: 10px; background: var(--white); color: var(--ink);
+      box-shadow: var(--shadow); transition: top .2s ease;
+    }
+    .skip-link:focus { top: 16px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-size: 12px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase;
+      color: var(--mint-dark);
+    }
+    .eyebrow::before { content: ""; width: 22px; height: 2px; background: currentColor; }
+    .section { padding: 92px 0; }
+    .section-head { max-width: 760px; margin-bottom: 38px; }
+    .section-head h2 { margin: 12px 0 12px; font-size: clamp(30px, 4vw, 46px); line-height: 1.16; letter-spacing: -.03em; }
+    .section-head p { margin: 0; color: var(--ink-soft); font-size: 17px; }    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(7, 17, 31, 0.92); color: #eaf3ff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+      backdrop-filter: blur(14px);
+    }
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 70px; }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: .02em; }
+    .brand svg { width: 34px; height: 34px; flex: 0 0 auto; }
+    .brand small { display: block; color: #8fa6c1; font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    .nav-links { display: flex; gap: 26px; color: #b9c8da; font-size: 14px; }
+    .nav-links a:hover, .nav-links a:focus-visible { color: var(--mint); }
+    .nav-pill {
+      display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
+      border: 1px solid rgba(39, 194, 173, .45); border-radius: 999px;
+      color: #a9f2e5; background: rgba(39, 194, 173, .10); font-size: 12px; font-weight: 700;
+    }
+    .nav-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px rgba(39,194,173,.15); }
+    .hero {
+      position: relative; overflow: hidden; color: #f4f9ff;
+      background:
+        radial-gradient(circle at 82% 22%, rgba(39,194,173,.20), transparent 26%),
+        radial-gradient(circle at 12% 75%, rgba(108,159,248,.16), transparent 28%),
+        linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 58%, #102944 100%);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+      background-size: 52px 52px; mask-image: linear-gradient(to bottom, rgba(0,0,0,.7), transparent 88%);
+      pointer-events: none;
+    }
+    .hero-inner {
+      position: relative; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(340px, .88fr);
+      gap: 46px; align-items: center; padding: 86px 0 66px;
+    }
+    .hero .eyebrow { color: #79e6d6; }
+    .hero h1 { margin: 16px 0 20px; font-size: clamp(42px, 6vw, 70px); line-height: 1.06; letter-spacing: -.045em; }
+    .hero h1 span { color: #78ead9; }
+    .hero-lead { max-width: 630px; margin: 0; color: #c1d1e2; font-size: 18px; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      min-height: 46px; padding: 0 20px; border-radius: 12px; border: 1px solid transparent;
+      font-weight: 800; font-size: 14px; cursor: pointer; transition: transform .2s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: var(--mint); color: #042a27; box-shadow: 0 12px 30px rgba(39,194,173,.25); }
+    .btn-ghost { color: #e7f1fc; border-color: rgba(255,255,255,.24); background: rgba(255,255,255,.06); }
+    .hero-points { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 24px; color: #9fb3c9; font-size: 13px; }
+    .hero-points span::before { content: "✓"; color: var(--mint); font-weight: 900; margin-right: 7px; }
+    .hero-visual { display: flex; justify-content: center; }
+    .hero-visual svg { width: min(100%, 500px); height: auto; filter: drop-shadow(0 26px 44px rgba(0,0,0,.3)); }
+    .stats {
+      position: relative; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px; margin: -28px 0 0; overflow: hidden; border-radius: 18px;
+      background: var(--line); box-shadow: var(--shadow);
+    }
+    .stat { background: var(--white); padding: 22px 24px; }
+    .stat strong { display: block; font-size: 26px; line-height: 1.1; letter-spacing: -.02em; }
+    .stat span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .notice {
+      display: flex; gap: 12px; align-items: flex-start; margin: 24px 0 0; padding: 16px 18px;
+      border: 1px solid #f0d8a9; border-radius: 14px; color: #74521d; background: #fff9ed; font-size: 14px;
+    }
+    .notice b { color: #5f3f0b; }    .pain-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .pain-card { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); box-shadow: 0 8px 28px rgba(26,52,88,.045); }
+    .pain-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 18px; border-radius: 12px; color: var(--mint-dark); background: rgba(39,194,173,.11); }
+    .pain-icon svg { width: 22px; height: 22px; }
+    .pain-card h3 { margin: 0 0 8px; font-size: 17px; }
+    .pain-card p { margin: 0; color: var(--ink-soft); font-size: 14px; }
+    .answer-strip {
+      display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center;
+      margin-top: 28px; padding: 32px; border-radius: var(--radius); color: #eaf6ff;
+      background: linear-gradient(120deg, #0d233b, #103a4c);
+    }
+    .answer-strip h3 { margin: 0 0 10px; font-size: 25px; letter-spacing: -.02em; }
+    .answer-strip p { margin: 0; color: #b9cfdf; font-size: 15px; }
+    .answer-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .answer-list span { padding: 10px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; color: #d7e7f2; background: rgba(255,255,255,.04); font-size: 13px; }
+    .scenario-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .scenario-card {
+      display: flex; flex-direction: column; min-height: 100%; padding: 26px;
+      border: 1px solid var(--line); border-radius: var(--radius); background: var(--white);
+      box-shadow: 0 12px 34px rgba(26,52,88,.06); transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .scenario-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+    .scenario-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+    .scenario-index { font-size: 12px; font-weight: 900; letter-spacing: .14em; color: var(--mint-dark); }
+    .scenario-card h3 { margin: 0 0 10px; font-size: 23px; letter-spacing: -.02em; }
+    .scenario-card > p { margin: 0 0 16px; color: var(--ink-soft); font-size: 14px; }
+    .tag { display: inline-flex; align-items: center; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .tag-green { color: #087266; background: #e3f8f4; }
+    .tag-yellow { color: #845813; background: #fff3d9; }
+    .tag-red { color: #9b2d2d; background: #fde8e8; }
+    .command {
+      display: block; margin: 0 0 14px; padding: 12px 14px; overflow-wrap: anywhere;
+      border: 1px dashed #c9d8e8; border-radius: 11px; color: #1e3c5c; background: #f7fafd;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px;
+    }
+    .mini-flow { display: grid; gap: 7px; margin-top: auto; }
+    .mini-flow span { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+    .mini-flow b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; color: var(--mint-dark); background: #e8f8f5; font-size: 10px; }
+    .dag-panel {
+      display: grid; grid-template-columns: .8fr 1.2fr; gap: 32px; align-items: center;
+      margin-top: 22px; padding: 32px; border: 1px solid #bfe7e1; border-radius: var(--radius);
+      background: linear-gradient(120deg, #effbf9, #f8fcfd);
+    }
+    .dag-panel h3 { margin: 0 0 10px; font-size: 26px; letter-spacing: -.02em; }
+    .dag-panel p { margin: 0; color: var(--ink-soft); font-size: 14px; }
+    .dag-flow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; }
+    .dag-node { padding: 16px; border: 1px solid #b9ded8; border-radius: 14px; background: var(--white); box-shadow: 0 8px 20px rgba(13,143,128,.08); }
+    .dag-node small { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .dag-node strong { display: block; margin-top: 4px; font-size: 15px; }
+    .dag-node code { display: block; margin-top: 7px; color: var(--mint-dark); font-size: 11px; overflow-wrap: anywhere; }
+    .dag-arrow { color: var(--mint-dark); font-size: 26px; font-weight: 900; }    .risk-section { background: #0a182a; color: #eff8ff; }
+    .risk-section .eyebrow { color: #78ead9; }
+    .risk-section .section-head p { color: #abc0d4; }
+    .risk-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 42px; align-items: start; }
+    .risk-copy p { margin: 0 0 16px; color: #b6c8d9; }
+    .factor-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .factor-list span { padding: 7px 11px; border: 1px solid rgba(121,230,214,.25); border-radius: 999px; color: #bff6ec; background: rgba(39,194,173,.08); font-size: 12px; }
+    .risk-ladder { display: grid; gap: 12px; }
+    .risk-tier {
+      display: grid; grid-template-columns: 92px 1fr auto; gap: 16px; align-items: center;
+      padding: 20px; border: 1px solid rgba(255,255,255,.11); border-radius: 16px; background: rgba(255,255,255,.045);
+    }
+    .risk-level { font-size: 13px; font-weight: 900; letter-spacing: .08em; }
+    .risk-tier h4 { margin: 0 0 4px; font-size: 17px; }
+    .risk-tier p { margin: 0; color: #a9bfd2; font-size: 13px; }
+    .risk-tier .tag { align-self: start; }
+    .tier-green { border-left: 4px solid var(--mint); }
+    .tier-green .risk-level { color: #7ce8d8; }
+    .tier-yellow { border-left: 4px solid var(--gold); }
+    .tier-yellow .risk-level { color: #f4c66f; }
+    .tier-red { border-left: 4px solid var(--coral); }
+    .tier-red .risk-level { color: #ff9e9e; }
+    .risk-note { margin-top: 16px; padding: 14px 16px; border: 1px dashed rgba(255,255,255,.18); border-radius: 12px; color: #a9bfd2; font-size: 12px; }
+    .arch-flow { display: grid; gap: 10px; }
+    .arch-layer {
+      display: grid; grid-template-columns: 166px 1fr; gap: 18px; align-items: center;
+      padding: 16px 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--white);
+      box-shadow: 0 7px 22px rgba(26,52,88,.045);
+    }
+    .arch-label { color: var(--mint-dark); font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+    .arch-boxes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .arch-box { padding: 8px 11px; border: 1px solid #d7e5f2; border-radius: 9px; color: #29445f; background: #f7fafd; font-size: 12px; }
+    .arch-box strong { color: var(--ink); }
+    .arch-arrow { width: 2px; height: 18px; margin-left: 46px; background: linear-gradient(var(--mint), transparent); }
+    .arch-foot { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    .arch-foot span { padding: 8px 12px; border-radius: 9px; color: #31516f; background: #e9f1f9; font-size: 12px; font-weight: 700; }
+    .trust-section { background: linear-gradient(180deg, #eef4fa, #f8fafc); }
+    .trust-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .trust-card { padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--white); box-shadow: 0 10px 30px rgba(26,52,88,.05); }
+    .trust-card h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 22px; }
+    .trust-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    .trust-card li { position: relative; padding-left: 24px; color: var(--ink-soft); font-size: 14px; }
+    .trust-card li::before { position: absolute; left: 0; top: 1px; font-weight: 900; }
+    .trust-yes li::before { content: "✓"; color: var(--mint-dark); }
+    .trust-no { border-color: #f0d8b1; background: #fffdf8; }
+    .trust-no li::before { content: "×"; color: var(--coral); }
+    .trust-banner { margin-top: 20px; padding: 18px 20px; border-radius: 14px; color: #6e4c14; background: #fff6e3; border: 1px solid #f0d8a9; font-size: 14px; }
+    .footer { padding: 40px 0 50px; color: #8ea3b8; background: #07111f; font-size: 13px; }
+    .footer-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: center; }
+    .footer strong { color: #edf6ff; }
+    @media (max-width: 960px) {
+      .hero-inner, .risk-grid, .dag-panel { grid-template-columns: 1fr; }
+      .hero-visual { order: -1; }
+      .hero-visual svg { width: min(78%, 380px); }
+      .pain-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .scenario-grid { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 700px) {
+      .wrap { width: min(calc(100% - 30px), var(--max)); }
+      .nav { min-height: 62px; }
+      .nav-links { display: none; }
+      .section { padding: 64px 0; }
+      .hero-inner { padding: 54px 0 58px; }
+      .hero h1 { font-size: clamp(38px, 12vw, 54px); }
+      .hero-lead { font-size: 16px; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stat { padding: 17px 16px; }
+      .stat strong { font-size: 21px; }
+      .pain-grid, .answer-strip, .answer-list, .trust-grid { grid-template-columns: 1fr; }
+      .dag-flow { grid-template-columns: 1fr; }
+      .dag-arrow { transform: rotate(90deg); justify-self: center; }
+      .risk-tier { grid-template-columns: 1fr; gap: 7px; }
+      .arch-layer { grid-template-columns: 1fr; gap: 8px; }
+      .arch-arrow { margin-left: 18px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+    }
+  </style>
+</head><body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="topbar">
+    <div class="wrap nav">
+      <a class="brand" href="#top" aria-label="AegisBank 首页">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <path d="M24 3.5 41 10v12.6c0 10-6.7 18.2-17 21.9-10.3-3.7-17-11.9-17-21.9V10L24 3.5Z" fill="#0f3d4a" stroke="#5de2d1" stroke-width="1.8"/>
+          <path d="M24 14.2 32.5 34h-4.6l-1.7-4.2h-6.4L18.1 34h-4.6L24 14.2Zm0 7.1-2.2 5.1h4.4L24 21.3Z" fill="#9cf3e7"/>
+        </svg>
+        <span>AegisBank<small>Trusted agent console</small></span>
+      </a>
+      <nav class="nav-links" aria-label="页面导航">
+        <a href="#pain">为什么</a>
+        <a href="#scenarios">三场景</a>
+        <a href="#risk">动态风险</a>
+        <a href="#architecture">架构</a>
+        <a href="#trust">可信边界</a>
+      </nav>
+      <span class="nav-pill">本地演示 · Mock Data</span>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="wrap hero-inner">
+        <div>
+          <span class="eyebrow">AegisBank · Trusted Agent Control Plane</span>
+          <h1>让银行 Agent 的每一步，<br><span>都过信任闸门。</span></h1>
+          <p class="hero-lead">把自然语言意图编译为可校验的 DAG 计划，在工具执行前完成动态风险判断、最小权限校验与分级确认，并把完整过程写入 SHA-256 审计链。</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#scenarios">查看三场景 <span aria-hidden="true">→</span></a>
+            <a class="btn btn-ghost" href="#trust">了解可信边界</a>
+          </div>
+          <div class="hero-points">
+            <span>Mock Bank Core 模拟数据</span>
+            <span>9 个银行工具节点</span>
+            <span>跨场景 DAG 编排</span>
+            <span>SHA-256 运行证据</span>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <svg viewBox="0 0 500 470" role="img" aria-label="AegisBank 控制平面示意图">
+            <defs>
+              <linearGradient id="shieldFill" x1="160" y1="110" x2="350" y2="350" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#1b6a73"/>
+                <stop offset="1" stop-color="#0c2d46"/>
+              </linearGradient>
+              <linearGradient id="edge" x1="80" y1="80" x2="430" y2="400" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#5de2d1"/>
+                <stop offset="1" stop-color="#6c9ff8"/>
+              </linearGradient>
+            </defs>
+            <circle cx="250" cy="235" r="184" fill="none" stroke="#31536f" stroke-width="1" stroke-dasharray="3 9"/>
+            <circle cx="250" cy="235" r="144" fill="none" stroke="#28465f" stroke-width="1"/>
+            <path d="M250 82 355 124v76c0 61-41 111-105 134-64-23-105-73-105-134v-76L250 82Z" fill="url(#shieldFill)" stroke="url(#edge)" stroke-width="2"/>
+            <path d="M250 124 320 153v47c0 42-28 77-70 94-42-17-70-52-70-94v-47l70-29Z" fill="#07111f" opacity=".36" stroke="#77e7d8" stroke-width="1.2"/>
+            <text x="250" y="262" text-anchor="middle" fill="#a9f7ec" font-size="76" font-family="Avenir Next, Segoe UI, sans-serif" font-weight="800">A</text>
+            <path d="M250 126V72M321 155l40-27M179 155l-40-27M321 315l40 26M179 315l-40 26M250 343v54" stroke="#4d7c97" stroke-width="1.3"/>
+            <circle cx="250" cy="54" r="9" fill="#27c2ad"/><circle cx="250" cy="54" r="17" fill="none" stroke="#27c2ad" opacity=".25"/>
+            <circle cx="374" cy="122" r="8" fill="#6c9ff8"/>
+            <circle cx="126" cy="122" r="8" fill="#6c9ff8"/>
+            <circle cx="374" cy="351" r="8" fill="#e5ac47"/>
+            <circle cx="126" cy="351" r="8" fill="#e5ac47"/>
+            <circle cx="250" cy="411" r="8" fill="#27c2ad"/>
+            <g fill="#a9c1d7" font-family="Avenir Next, Segoe UI, sans-serif" font-size="11" font-weight="700" letter-spacing="2">
+              <text x="250" y="35" text-anchor="middle">PLANNER</text>
+              <text x="397" y="118">RISK</text>
+              <text x="53" y="118">POLICY</text>
+              <text x="397" y="355">GATEWAY</text>
+              <text x="50" y="355">CONFIRM</text>
+              <text x="250" y="439" text-anchor="middle">AUDIT</text>
+            </g>
+            <g fill="#7be9da">
+              <rect x="84" y="205" width="5" height="5" rx="1"/>
+              <rect x="410" y="210" width="5" height="5" rx="1"/>
+              <rect x="97" y="292" width="4" height="4" rx="1" opacity=".6"/>
+              <rect x="399" y="286" width="4" height="4" rx="1" opacity=".6"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <div class="stats" aria-label="产品关键数字">
+        <div class="stat"><strong>9</strong><span>银行工具节点</span></div>
+        <div class="stat"><strong>3</strong><span>动态风险等级</span></div>
+        <div class="stat"><strong>2-step</strong><span>跨场景 DAG 示例</span></div>
+        <div class="stat"><strong>SHA-256</strong><span>审计哈希链</span></div>
+      </div>
+      <div class="notice"><span aria-hidden="true">⚠</span><div><b>演示边界：</b>所有账户、卡片、账单、订阅与转账均为 Mock Bank Core 模拟数据，不连接真实银行系统；演示 OTP 仅用于本地流程展示，不代表生产级 MFA。</div></div>
+    </div>    <section class="section" id="pain">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">The Gap</span>
+          <h2>Agent 能调用工具，不等于银行敢让它执行。</h2>
+          <p>当自然语言进入真实金融场景，真正的难题不是生成一句回答，而是让每一次工具调用都可知、可控、可拒绝、可追溯。</p>
+        </div>
+        <div class="pain-grid">
+          <article class="pain-card">
+            <div class="pain-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M7 6v12h10V6M10 10v4M14 10v4"/></svg></div>
+            <h3>意图不可控</h3>
+            <p>模型直接选择函数、拼接参数，缺少确定性 Schema 与 DAG 校验，错误调用难以及时发现。</p>
+          </article>
+          <article class="pain-card">
+            <div class="pain-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 20 6v5c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-3Z"/><path d="M9 12l2 2 4-4"/></svg></div>
+            <h3>风险一刀切</h3>
+            <p>只看工具名称，无法结合金额、当日累计与账户状态动态升降级，体验与安全难以平衡。</p>
+          </article>
+          <article class="pain-card">
+            <div class="pain-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="15" r="3"/><path d="M10.5 12.5 20 3M15 5l4 4M12 8l3 3"/></svg></div>
+            <h3>权限不可见</h3>
+            <p>用户不知道 Agent 被授予了什么能力，也无法在操作前撤回某个工具的访问权。</p>
+          </article>
+          <article class="pain-card">
+            <div class="pain-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></div>
+            <h3>过程不可证</h3>
+            <p>谁在何时基于哪份计划、什么风险原因执行了什么操作，事后缺少可校验的证据链。</p>
+          </article>
+        </div>
+        <div class="answer-strip">
+          <div>
+            <h3>AegisBank 的答案：把 Agent 放进控制平面</h3>
+            <p>Planner 只产出计划，Compiler 先校验，风险引擎给出理由，权限网关统一裁决，确认状态机承接人机边界，审计链同步留痕。</p>
+          </div>
+          <div class="answer-list">
+            <span>Plan 不直接执行工具</span>
+            <span>风险只升不降</span>
+            <span>权限逐工具授权</span>
+            <span>DAG 变量受控解析</span>
+            <span>确认后再次复检</span>
+            <span>哈希链可验证</span>
+          </div>
+        </div>
+      </div>
+    </section>    <section class="section" id="scenarios" style="padding-top: 18px;">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Three Scenarios</span>
+          <h2>三个高频银行场景，一条统一的治理链路。</h2>
+          <p>从转账到账单洞察再到卡片安全操作，每个入口都经过同一套 Planner、Compiler、动态风险、权限网关与审计管线。</p>
+        </div>
+        <div class="scenario-grid">
+          <article class="scenario-card">
+            <div class="scenario-top"><span class="scenario-index">01 · TRANSFER</span><span class="tag tag-yellow">动态风险</span></div>
+            <h3>智能转账</h3>
+            <p>根据金额与当日累计自动升级风险；黄色确认，红色强验证，执行后更新模拟余额与流水。</p>
+            <code class="command">向 ACC-2002 转账 880 元</code>
+            <div class="mini-flow">
+              <span><b>1</b> 解析账户、金额与计划哈希</span>
+              <span><b>2</b> 动态风险：880 元 → 黄色确认</span>
+              <span><b>3</b> 同日再转 500 元 → 累计 1380 元 → 红色</span>
+              <span><b>4</b> 确认 / 演示 OTP 后模拟执行</span>
+            </div>
+          </article>
+          <article class="scenario-card">
+            <div class="scenario-top"><span class="scenario-index">02 · BILL</span><span class="tag tag-green">自动执行</span></div>
+            <h3>账单分析</h3>
+            <p>读取 Mock Bank Core 的账单与订阅事实，给出支出分类、近期交易和异常订阅提示。</p>
+            <code class="command">分析我的本月账单</code>
+            <div class="mini-flow">
+              <span><b>1</b> 只读查询，绿色直接执行</span>
+              <span><b>2</b> 聚合本月消费分类</span>
+              <span><b>3</b> 识别可疑订阅 SUB-3002</span>
+              <span><b>4</b> 返回可疑订阅 ID 与原因</span>
+            </div>
+          </article>
+          <article class="scenario-card">
+            <div class="scenario-top"><span class="scenario-index">03 · CARD</span><span class="tag tag-red">高风险动作</span></div>
+            <h3>卡片管理</h3>
+            <p>调整还款日、额度与交易限额，或执行挂失与解挂；敏感设置变更必须经过分级确认。</p>
+            <code class="command">把信用卡额度调整到 8000 元</code>
+            <div class="mini-flow">
+              <span><b>1</b> 额度 8000 元超过 5000 元阈值</span>
+              <span><b>2</b> 动态升级为红色强验证</span>
+              <span><b>3</b> 确认 + 演示 OTP 后更新模拟卡片</span>
+              <span><b>4</b> 变更写入审计哈希链</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="dag-panel">
+          <div>
+            <span class="eyebrow">Cross-scenario DAG</span>
+            <h3>分析账单，然后取消异常订阅。</h3>
+            <p>步骤 2 不猜测订阅 ID，而是通过受控变量引用上一步的真实分析结果；整个 DAG 取最高风险等级，任一步骤需确认则整体先暂停。</p>
+          </div>
+          <div class="dag-flow" aria-label="账单分析到取消订阅的两步 DAG">
+            <div class="dag-node">
+              <small>Step 1 · Green</small>
+              <strong>分析本月账单</strong>
+              <code>query_bill → anomalies</code>
+            </div>
+            <div class="dag-arrow" aria-hidden="true">→</div>
+            <div class="dag-node">
+              <small>Step 2 · Yellow</small>
+              <strong>取消异常订阅</strong>
+              <code>${steps.step-1.data.<br>suspicious_subscription_id}</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>    <section class="section risk-section" id="risk">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Dynamic Risk</span>
+          <h2>风险不是提示词里的一句话。</h2>
+          <p>工具 Manifest 给出基线风险，动态风险引擎基于确定性事实只保持或上调等级。LLM 不参与风险判断，确认执行前还会重新评估。</p>
+        </div>
+        <div class="risk-grid">
+          <div class="risk-copy">
+            <p>每次操作都会得到可解释的风险评分与原因，并同时出现在计划步骤、Agent 响应、确认动作和审计记录中。</p>
+            <div class="factor-list" aria-label="风险因子">
+              <span>单笔金额</span><span>当日累计转账</span><span>卡片操作类型</span><span>额度阈值</span><span>订阅状态变更</span><span>只读 / 写入</span>
+            </div>
+            <div class="risk-note">风险输出：level · score · reasons · base_risk · requires_reauth。任一 DAG 节点被拒绝，整个任务阻断；任一步骤需确认，整个 DAG 先暂停。</div>
+          </div>
+          <div class="risk-ladder">
+            <div class="risk-tier tier-green">
+              <span class="risk-level">GREEN</span>
+              <div><h4>自动执行</h4><p>账单分析、订阅查询等只读操作，在最小权限满足后直接执行。</p></div>
+              <span class="tag tag-green">ALLOW</span>
+            </div>
+            <div class="risk-tier tier-yellow">
+              <span class="risk-level">YELLOW</span>
+              <div><h4>一次确认</h4><p>小额转账、还款日/交易限额调整、取消订阅等设置变更，创建待确认动作。</p></div>
+              <span class="tag tag-yellow">CONFIRM</span>
+            </div>
+            <div class="risk-tier tier-red">
+              <span class="risk-level">RED</span>
+              <div><h4>强验证</h4><p>大额或累计超限转账、超额额度调整、挂失/解挂：确认之外还需演示 OTP。</p></div>
+              <span class="tag tag-red">REAUTH</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>    <section class="section" id="architecture">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Architecture</span>
+          <h2>Planner 不可信，工具入口只有一个。</h2>
+          <p>可插拔 Planner 只生成结构化计划；Compiler、风险引擎、权限网关、调度器与审计服务共同构成金融操作控制面。</p>
+        </div>
+        <div class="arch-flow" aria-label="AegisBank 架构分层">
+          <div class="arch-layer">
+            <div class="arch-label">Experience</div>
+            <div class="arch-boxes"><span class="arch-box"><strong>React 19</strong> 银行概览</span><span class="arch-box">任务控制台</span><span class="arch-box">权限控制台</span><span class="arch-box">操作审计</span></div>
+          </div>
+          <div class="arch-arrow" aria-hidden="true"></div>
+          <div class="arch-layer">
+            <div class="arch-label">API · FastAPI</div>
+            <div class="arch-boxes"><span class="arch-box">/api/banking/overview</span><span class="arch-box">/api/agent/run</span><span class="arch-box">/api/planner/plan</span><span class="arch-box">/api/confirmations</span><span class="arch-box">/api/audit/verify</span></div>
+          </div>
+          <div class="arch-arrow" aria-hidden="true"></div>
+          <div class="arch-layer">
+            <div class="arch-label">Agent Control</div>
+            <div class="arch-boxes"><span class="arch-box"><strong>Planner</strong> rule / LLM / auto fallback</span><span class="arch-box"><strong>Plan Compiler</strong> Schema · DAG · plan_hash</span><span class="arch-box"><strong>DagScheduler</strong> 依赖 · 变量解析</span></div>
+          </div>
+          <div class="arch-arrow" aria-hidden="true"></div>
+          <div class="arch-layer">
+            <div class="arch-label">Trust Gates</div>
+            <div class="arch-boxes"><span class="arch-box"><strong>DynamicRiskEngine</strong> 绿 / 黄 / 红</span><span class="arch-box"><strong>PermissionGateway</strong> 最小权限 · 注入拦截</span><span class="arch-box"><strong>Confirmation</strong> TTL · 演示 OTP</span></div>
+          </div>
+          <div class="arch-arrow" aria-hidden="true"></div>
+          <div class="arch-layer">
+            <div class="arch-label">Execution & Proof</div>
+            <div class="arch-boxes"><span class="arch-box"><strong>9 Tools</strong> 转账 · 账单 · 卡片 · 订阅</span><span class="arch-box"><strong>BankingRepository</strong> SQLite Mock Bank Core</span><span class="arch-box"><strong>AuditService</strong> SHA-256 哈希链</span></div>
+          </div>
+        </div>
+        <div class="arch-foot"><span>Planner 不触碰数据库</span><span>工具调用统一过网关</span><span>确认后重新复检</span><span>审计与操作同步写入</span></div>
+      </div>
+    </section>    <section class="section trust-section" id="trust">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Trust Boundary</span>
+          <h2>清晰展示能力，也清晰标注边界。</h2>
+          <p>AegisBank 是安全自治 Agent 的可运行原型，而不是生产银行系统。可信来自可验证的控制点，而不是夸张的安全承诺。</p>
+        </div>
+        <div class="trust-grid">
+          <article class="trust-card">
+            <h3>原型中已落地</h3>
+            <ul class="trust-yes">
+              <li>Mock Bank Core：账户、卡片、交易、订阅与账单事实由 SQLite 仓库提供</li>
+              <li>9 个工具 Manifest：最小权限、输入 Schema 与基线风险声明</li>
+              <li>确定性 Plan Compiler：工具注册、参数校验、DAG 环检测与 plan_hash</li>
+              <li>动态风险引擎：金额、当日累计与操作类型触发绿/黄/红等级与原因</li>
+              <li>统一权限网关：逐工具授权、Prompt 注入拦截、拒绝即阻断</li>
+              <li>跨场景 DAG：前序结果变量解析，账单分析后取消异常订阅</li>
+              <li>确认状态机：TTL、拒绝、过期、确认后权限与风险复检</li>
+              <li>SHA-256 审计哈希链与完整性校验 API</li>
+            </ul>
+          </article>
+          <article class="trust-card trust-no">
+            <h3>不声称具备</h3>
+            <ul>
+              <li>不连接真实银行核心、支付网络或客户数据，不产生真实资金变动</li>
+              <li>不提供生产级登录、设备指纹、真实短信/人脸/U 盾 MFA</li>
+              <li>动态风险不是生产反欺诈或信用决策模型</li>
+              <li>SQLite 不满足银行级高可用、隔离、容灾与 WORM 审计要求</li>
+              <li>尚无步骤级回滚、补偿交易、异常熔断与工具执行沙箱</li>
+              <li>注入检测、限流、CSRF/mTLS 与渗透测试仍需生产化补齐</li>
+            </ul>
+          </article>
+        </div>
+        <div class="trust-banner"><strong>演示账号与数据：</strong>固定用户 demo-user；默认演示 OTP 为 246810；所有金额与账户均为模拟。请勿将本项目直接用于真实金融业务。</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div><strong>AegisBank</strong> · 安全自治的银行 AI 智能体原型</div>
+      <div>FastAPI · Pydantic · React 19 · TypeScript · Vite · SQLite</div>
+      <div>MIT License · Copyright (c) 2026 LQZ5885</div>
+    </div>
+  </footer>
+</body>
+</html>

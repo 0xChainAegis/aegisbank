@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend and assembly checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: .runtime/backend
+    env:
+      AEGIS_PLANNER_MODE: rule
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Test assembly boundaries
+        working-directory: .
+        run: python3 -m unittest discover -s tests -v
+      - name: Verify module source manifests
+        working-directory: .
+        run: python3 scripts/update_manifests.py --check
+      - name: Assemble the six source modules
+        working-directory: .
+        run: python3 scripts/assemble.py
+      - name: Set up Python and uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: '0.13.5'
+          python-version: '3.14.4'
+          enable-cache: true
+          cache-dependency-glob: backend/backend/uv.lock
+      - name: Check lockfile consistency
+        run: uv lock --check
+      - name: Install locked dependencies
+        run: uv sync --frozen --dev
+      - name: Lint Python
+        run: uv run --frozen ruff check aegisbank_api tests
+      - name: Compile Python
+        run: uv run --frozen python -m compileall -q aegisbank_api
+      - name: Run backend tests
+        run: uv run --frozen pytest -o addopts= -q
+      - name: Verify six banking scenarios
+        run: uv run --frozen python ../scripts/scenario-check.py
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: .runtime/frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Assemble the six source modules
+        working-directory: .
+        run: python3 scripts/assemble.py
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: '10.11.0'
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24.22.0'
+          cache: pnpm
+          cache-dependency-path: fronted/frontend/pnpm-lock.yaml
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run frontend tests
+        run: pnpm test
+      - name: Build production frontend
+        run: pnpm build

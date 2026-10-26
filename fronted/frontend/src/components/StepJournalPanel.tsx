@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pauseAction, resumeAction, rollbackAction, fetchActionJournal } from '../api';
 import { canExecuteTools, type AegisRole } from '../roles';
 import type { ActionJournal, RunResponse } from '../types';
@@ -41,28 +41,45 @@ export default function StepJournalPanel({
   const [busyAction, setBusyAction] = useState<JournalAction | ''>('');
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
+  const requestSequence = useRef(0);
+  const contextGeneration = useRef(0);
+  const contextKey = `${role}:${actionId}`;
+  const currentContext = useRef(contextKey);
+  currentContext.current = contextKey;
 
   // Re-read after a confirmation changes the same action from pending to executed.
   const runStatus = run?.status ?? '';
 
   const loadJournal = useCallback(async (): Promise<ActionJournal | null> => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     setError('');
     try {
       const next = await fetchActionJournal(actionId);
+      if (requestId !== requestSequence.current || currentContext.current !== contextKey) return null;
       setJournal(next);
       return next;
     } catch (caught) {
+      if (requestId !== requestSequence.current || currentContext.current !== contextKey) return null;
       setJournal(null);
       setError(messageOf(caught, '无法读取步骤日志'));
       return null;
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current && currentContext.current === contextKey) setLoading(false);
     }
-  }, [actionId, runStatus]);
+  }, [actionId, contextKey, runStatus]);
 
   useEffect(() => {
+    contextGeneration.current += 1;
+    setJournal(null);
+    setActionError('');
+    setActionNotice('');
+    setBusyAction('');
     void loadJournal();
+    return () => {
+      requestSequence.current += 1;
+      contextGeneration.current += 1;
+    };
   }, [loadJournal]);
 
   const summary = useMemo(
@@ -79,6 +96,8 @@ export default function StepJournalPanel({
 
   async function perform(action: JournalAction) {
     if (controlBlocked || busyAction) return;
+    const generation = contextGeneration.current;
+    const isCurrent = () => generation === contextGeneration.current && currentContext.current === contextKey;
     setBusyAction(action);
     setActionError('');
     setActionNotice('');
@@ -86,20 +105,23 @@ export default function StepJournalPanel({
       let response: unknown = null;
       if (action === 'pause') {
         response = await pauseAction(actionId);
+        if (!isCurrent()) return;
         setActionNotice('暂停请求已生效：剩余节点不会再执行，可稍后恢复或回滚。');
       } else if (action === 'resume') {
         response = await resumeAction(actionId);
+        if (!isCurrent()) return;
         setActionNotice('已恢复执行：只执行剩余节点，已执行步骤不会重复执行。');
       } else {
         response = await rollbackAction(actionId);
+        if (!isCurrent()) return;
         setActionNotice('回滚请求已处理：补偿按相反顺序执行，结论已写入审计链。');
       }
       const next = await loadJournal();
-      if (next) onChanged(next, response);
+      if (next && isCurrent()) onChanged(next, response);
     } catch (caught) {
-      setActionError(messageOf(caught, `${action} 操作失败`));
+      if (isCurrent()) setActionError(messageOf(caught, `${action} 操作失败`));
     } finally {
-      setBusyAction('');
+      if (isCurrent()) setBusyAction('');
     }
   }
 

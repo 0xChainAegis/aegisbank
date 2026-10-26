@@ -1,0 +1,31 @@
+# dependencies / environments
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+coverage/
+dist/
+build/
+out/
+.runtime/
+
+# local data and secrets
+.env
+.env.*
+!.env.example
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.dsh-local/
