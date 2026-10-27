@@ -59,8 +59,8 @@
       "group": "skills",
       "path": "backend/aegisbank_api/scenarios/transfers.py",
       "runtime_path": "backend/aegisbank_api/scenarios/transfers.py",
-      "bytes": 32654,
-      "sha256": "620f23c2634ff8c6d54da878c90afaa456893f0abfad180e192383c6728dc6ea"
+      "bytes": 33352,
+      "sha256": "e592cfa68fb487f291076b41c58a8d8b8337cc0eb9ada41e8e83663ba1a0bdda"
     },
     {
       "group": "skills",

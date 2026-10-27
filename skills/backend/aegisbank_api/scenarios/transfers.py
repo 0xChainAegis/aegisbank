@@ -911,7 +911,27 @@ def semantic_entities(repository, user_id, kind):
     if kind != "contact":
         return []
     # Use phone as the canonical lookup key to disambiguate duplicate names.
-    return [
-        (c.phone or c.name, [c.name, c.alias or c.name, c.phone or c.name])
-        for c in contact_rows(repository.db, user_id)
-    ]
+    # Spoken kin terms are facts derived from the contact's actual name/alias;
+    # they are not a model guess and still require a unique SQLite match.
+    rows = []
+    for contact in contact_rows(repository.db, user_id):
+        canonical = {
+            contact.name.casefold(),
+            (contact.alias or "").casefold(),
+        }
+        spoken = [
+            term
+            for term, target in _CONTACT_RELATION_ALIASES.items()
+            if target.casefold() in canonical
+        ]
+        names: list[str] = []
+        for name in [
+            contact.name,
+            contact.alias or contact.name,
+            contact.phone or contact.name,
+            *spoken,
+        ]:
+            if name and name not in names:
+                names.append(name)
+        rows.append((contact.phone or contact.name, names))
+    return rows
