@@ -1230,3 +1230,9 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 - [NLP 待办](NLP-BACKLOG.md)
 - [部署说明](../deliverables/06-部署说明.md)
 - [测试与复现](../deliverables/07-测试与复现.md)
+
+## P1 增量：语义报告（2026-10-27）
+
+现有请求字段和路由保持兼容。Planner/执行响应的 `plan.semantic` 可包含 `SemanticAnalysis/v1`：`status`（verified / clarification / legacy）、`instruction_hash`、候选 `frame`、`slots`、`reason`、`reference_date`、`timezone`。每个槽位有原文 span、服务端规范值、source、verified、verification_kind，歧义时可有候选选项。旧计划或关闭语义模块时该字段可为 null；前端应容忍此情况。
+
+这是服务端验证报告，客户端不能把该对象作为授权或把 verified 等同于已执行。用户仍需通过原有确认链；报告已绑定 plan_hash，内容篡改和非法结构均返回 409。时间目前为 UTC；模板之外的表达可能澄清或保留 legacy 状态。模型与前端不可自行补成“已验证事实”。字段说明、复现命令和测试边界见 [P1 报告](NLP-P1-2026-10-27.md)。

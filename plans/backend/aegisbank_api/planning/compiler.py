@@ -25,6 +25,7 @@ class CompiledPlan:
     nodes: list[PlanNode]
     step_meta: dict[str, dict[str, Any]]
     plan_hash: str
+    semantic: dict[str, Any] | None = None
 
     @property
     def dag_path(self) -> str:
@@ -37,6 +38,7 @@ class CompiledPlan:
             item.update(self.step_meta.get(node.id, {}))
             steps.append(item)
         return {
+            "semantic": self.semantic,
             "intent": self.intent,
             "planner": self.planner,
             "confidence": self.confidence,
@@ -111,9 +113,13 @@ class PlanCompiler:
 
         ordered_ids = self._topological_order(node_by_id)
         nodes = [node_by_id[step_id] for step_id in ordered_ids]
+        hashed = {"intent": plan.intent, "steps": normalized_steps}
+        semantic = plan.semantic.model_dump(mode="json") if plan.semantic else None
+        if semantic is not None:
+            hashed["semantic"] = semantic
         plan_hash = hashlib.sha256(
             json.dumps(
-                {"intent": plan.intent, "steps": normalized_steps},
+                hashed,
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
@@ -127,6 +133,7 @@ class PlanCompiler:
             nodes=nodes,
             step_meta=step_meta,
             plan_hash=plan_hash,
+            semantic=semantic,
         )
 
     @staticmethod

@@ -1261,3 +1261,33 @@ def router(services: CoreServices) -> APIRouter:
         }
 
     return api
+
+
+def semantic_intents():
+    from ..planning.semantic_catalog import CURRENCY, ENTITY, MONEY, SemanticSpec
+
+    return [
+        SemanticSpec(
+            "wealth_purchase",
+            (
+                rf"(?:用|拿)(?P<amount>{MONEY}){CURRENCY}(?:买入|买|配置|投入)(?P<product>{ENTITY})",
+                rf"投(?P<amount>{MONEY}){CURRENCY}(?:到|买)(?P<product>{ENTITY})",
+            ),
+            "买入{product}，金额为{amount}元",
+            {"product": "product", "amount": "money"},
+            tools=("purchase_wealth",),
+        ),
+        SemanticSpec(
+            "wealth_holdings",
+            (r"(?:我的?)?(?:投资|理财)(?:现在)?(?:怎么样|现状|持有情况)",),
+            "查询理财持仓",
+            read_anchor=r"投资|理财|持仓",
+            tools=("query_wealth_holdings",),
+        ),
+    ]
+
+
+def semantic_entities(repository, user_id, kind):
+    if kind != "product":
+        return []
+    return [(p["product_id"], [p["product_id"], p["name"]]) for p in _products(repository.db)]

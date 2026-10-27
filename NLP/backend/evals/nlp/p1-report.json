@@ -1,0 +1,759 @@
+{
+  "dataset": "development regression; not held-out or real-model evaluation",
+  "corpus_sha256": "8461be0fae9412a9e387ced73b889eeeaaf28668a32c1cbfef67c1995f09dba6",
+  "metric": "tool sequence and annotated first-step arguments; rejection for negative cases",
+  "cases": 41,
+  "positive_cases": 24,
+  "negative_cases": 17,
+  "modes": {
+    "p0_rules": {
+      "matched": 19,
+      "positive_matched": 7,
+      "negative_matched": 12,
+      "results": [
+        {
+          "id": "p1-001",
+          "family": "bill_colloquial",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-002",
+          "family": "bill_colloquial",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-003",
+          "family": "bill_period",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-004",
+          "family": "bill_period",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-005",
+          "family": "transfer_synonym",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-006",
+          "family": "transfer_synonym",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-007",
+          "family": "transfer_synonym",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-008",
+          "family": "balance_alias",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-009",
+          "family": "balance_alias",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-010",
+          "family": "subscription_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-011",
+          "family": "subscription_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-012",
+          "family": "card_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-013",
+          "family": "card_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-014",
+          "family": "card_date",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-015",
+          "family": "wealth_synonym",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-016",
+          "family": "wealth_synonym",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-017",
+          "family": "wealth_read",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_wealth_holdings"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-018",
+          "family": "cross_birthday",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-019",
+          "family": "cross_bill",
+          "matched": false,
+          "status": "planned",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-020",
+          "family": "schedule",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-021",
+          "family": "schedule",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-022",
+          "family": "negation",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-023",
+          "family": "negation",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-024",
+          "family": "negation",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-025",
+          "family": "missing",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-026",
+          "family": "unknown_entity",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-027",
+          "family": "unknown_entity",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-028",
+          "family": "unknown_entity",
+          "matched": false,
+          "status": "planned",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-029",
+          "family": "unknown_entity",
+          "matched": false,
+          "status": "planned",
+          "tools": [
+            "list_wealth_products"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-030",
+          "family": "invalid_date",
+          "matched": false,
+          "http_status": 400,
+          "status": "error",
+          "tools": []
+        },
+        {
+          "id": "p1-031",
+          "family": "invalid_date",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-032",
+          "family": "condition",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-033",
+          "family": "composition",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-034",
+          "family": "composition",
+          "matched": false,
+          "status": "planned",
+          "tools": [
+            "query_balance"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-035",
+          "family": "composition",
+          "matched": false,
+          "status": "planned",
+          "tools": [
+            "query_balance"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-036",
+          "family": "money",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-037",
+          "family": "money",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-038",
+          "family": "negation",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-039",
+          "family": "negation",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-040",
+          "family": "money",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "p1-041",
+          "family": "injection",
+          "matched": true,
+          "status": "blocked",
+          "tools": [],
+          "semantic_status": null
+        }
+      ]
+    },
+    "p1_semantics": {
+      "matched": 41,
+      "positive_matched": 24,
+      "negative_matched": 17,
+      "results": [
+        {
+          "id": "p1-001",
+          "family": "bill_colloquial",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "bill_report"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-002",
+          "family": "bill_colloquial",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "bill_report"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-003",
+          "family": "bill_period",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "bill_report"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-004",
+          "family": "bill_period",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "bill_report"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-005",
+          "family": "transfer_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-006",
+          "family": "transfer_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-007",
+          "family": "transfer_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-008",
+          "family": "balance_alias",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_balance"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-009",
+          "family": "balance_alias",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_balance"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-010",
+          "family": "subscription_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-011",
+          "family": "subscription_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-012",
+          "family": "card_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-013",
+          "family": "card_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-014",
+          "family": "card_date",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-015",
+          "family": "wealth_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-016",
+          "family": "wealth_synonym",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-017",
+          "family": "wealth_read",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_wealth_holdings"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-018",
+          "family": "cross_birthday",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-019",
+          "family": "cross_bill",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_bill",
+            "cancel_subscription"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-020",
+          "family": "schedule",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "schedule_transfer"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-021",
+          "family": "schedule",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "schedule_transfer"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-022",
+          "family": "negation",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_balance"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-023",
+          "family": "negation",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_balance"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-024",
+          "family": "negation",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_balance"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "p1-025",
+          "family": "missing",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-026",
+          "family": "unknown_entity",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-027",
+          "family": "unknown_entity",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-028",
+          "family": "unknown_entity",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-029",
+          "family": "unknown_entity",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-030",
+          "family": "invalid_date",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-031",
+          "family": "invalid_date",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-032",
+          "family": "condition",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-033",
+          "family": "composition",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-034",
+          "family": "composition",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-035",
+          "family": "composition",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-036",
+          "family": "money",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-037",
+          "family": "money",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-038",
+          "family": "negation",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-039",
+          "family": "negation",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-040",
+          "family": "money",
+          "matched": true,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "p1-041",
+          "family": "injection",
+          "matched": true,
+          "status": "blocked",
+          "tools": [],
+          "semantic_status": null
+        }
+      ]
+    }
+  }
+}

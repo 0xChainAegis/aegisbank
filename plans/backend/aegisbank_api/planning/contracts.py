@@ -6,6 +6,8 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .semantic_contracts import SemanticAnalysis
+
 
 class PlanningRequest(BaseModel):
     """Everything a planner may use; tool access is deliberately absent."""
@@ -35,6 +37,7 @@ class ExecutionPlan(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    semantic: SemanticAnalysis | None = None
     intent: str = Field(min_length=1, max_length=64)
     steps: list[PlanStep] = Field(default_factory=list, max_length=12)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)

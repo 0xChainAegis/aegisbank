@@ -59,3 +59,10 @@ AEGIS_SCENARIO_STRICT=0 uv run pytest -q
 ```
 
 默认（无环境变量）加载全部场景且严格失败，与比赛演示一致。
+
+## 可选的 P1 语义发现钩子
+
+- `semantic_intents()` 返回 `SemanticSpec` 列表：唯一 kind、完整表达 patterns（命名捕获槽位）、可信 canonical template、slot_types、允许的工具序列 tools。`read_anchor` 仅标记可与否定动作并列的查询，不允许跳过完整表达校验。
+- `semantic_entities(repository, user_id, kind)` 返回 `(canonical_identity, aliases)` 列表；必须按用户限定私有实体，返回身份元数据，不执行金融动作。理财产品目录为共享 Mock 产品列表。
+
+共享校验器负责来源、覆盖、金额/日期及实体唯一性；场景维护业务词汇与工具映射。未知或重复实体需澄清。canonical template 只调用 Planner，不得调用工具；生成步骤仍由网关和统一执行链执行。无需修改核心装配文件即可发现钩子。当前支持类型与实现以 `NLP/backend/aegisbank_api/planning/semantic_catalog.py` 为准（路径从分类仓库根起算）。

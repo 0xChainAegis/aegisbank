@@ -1,0 +1,133 @@
+[
+  {
+    "id": "probe-01",
+    "family": "transfer",
+    "instruction": "麻烦给妈妈汇五百块钱",
+    "tools": [
+      "transfer_to_contact"
+    ],
+    "checks": {
+      "amount_cny": 500,
+      "to_name": "妈妈"
+    }
+  },
+  {
+    "id": "probe-02",
+    "family": "transfer",
+    "instruction": "给张三汇款人民币2000元",
+    "tools": [
+      "transfer_to_contact"
+    ],
+    "checks": {
+      "amount_cny": 2000,
+      "to_name": "张三"
+    }
+  },
+  {
+    "id": "probe-03",
+    "family": "bill",
+    "instruction": "帮我看看上个月的钱花在什么地方",
+    "tools": [
+      "bill_report"
+    ],
+    "checks": {}
+  },
+  {
+    "id": "probe-04",
+    "family": "bill",
+    "instruction": "这个月都有哪些消费",
+    "tools": [
+      "bill_report"
+    ],
+    "checks": {}
+  },
+  {
+    "id": "probe-05",
+    "family": "wealth",
+    "instruction": "帮我买1000元的稳健短债A",
+    "tools": [
+      "purchase_wealth"
+    ],
+    "checks": {
+      "amount_cny": 1000
+    }
+  },
+  {
+    "id": "probe-06",
+    "family": "wealth",
+    "instruction": "拿两千块钱买入稳健短债A",
+    "tools": [
+      "purchase_wealth"
+    ],
+    "checks": {
+      "amount_cny": 2000
+    }
+  },
+  {
+    "id": "probe-07",
+    "family": "card",
+    "instruction": "将尾号8821的额度改到三千元",
+    "tools": [
+      "adjust_card_limit"
+    ],
+    "checks": {
+      "new_limit_cny": 3000,
+      "card_id": "CARD-8821"
+    }
+  },
+  {
+    "id": "probe-08",
+    "family": "card",
+    "instruction": "把CARD-8821的还款日期改为每月18日",
+    "tools": [
+      "adjust_repayment_date"
+    ],
+    "checks": {
+      "new_day": 18
+    }
+  },
+  {
+    "id": "probe-09",
+    "family": "subscription",
+    "instruction": "以后别给AI 工具订阅续费了",
+    "tools": [
+      "cancel_subscription"
+    ],
+    "checks": {
+      "subscription_id": "SUB-3002"
+    }
+  },
+  {
+    "id": "probe-10",
+    "family": "subscription",
+    "instruction": "帮我退订云端影音",
+    "tools": [
+      "cancel_subscription"
+    ],
+    "checks": {
+      "subscription_id": "SUB-3001"
+    }
+  },
+  {
+    "id": "probe-11",
+    "family": "cross",
+    "instruction": "妈妈快过生日了，帮我用1000元准备鲜花和蛋糕",
+    "tools": [
+      "query_contact_birthday",
+      "lock_budget_funds",
+      "schedule_flower_order",
+      "schedule_cake_order"
+    ],
+    "checks": {}
+  },
+  {
+    "id": "probe-12",
+    "family": "cross",
+    "instruction": "先检查本月账单，再取消异常订阅",
+    "tools": [
+      "query_bill",
+      "cancel_subscription"
+    ],
+    "checks": {}
+  }
+]

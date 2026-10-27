@@ -725,3 +725,28 @@ def router(services: CoreServices) -> APIRouter:
         }
 
     return api
+
+
+def semantic_intents():
+    from ..planning.semantic_catalog import CARD, CURRENCY, MONEY, SemanticSpec
+
+    return [
+        SemanticSpec(
+            "card_limit",
+            (
+                rf"(?:把)?(?P<card>{CARD})(?:的)?(?:消费额度|额度)(?:调至|改为|设成)\s*(?P<amount>{MONEY}){CURRENCY}",
+            ),
+            "把{card}额度调整到{amount}元",
+            {"card": "card", "amount": "money"},
+            tools=("adjust_card_limit",),
+        ),
+        SemanticSpec(
+            "card_repayment",
+            (
+                rf"(?:把)?(?P<card>{CARD})(?:的)?还款日(?:挪到|改为|设成)(?P<day>\d{{1,2}})(?:号|日)",
+            ),
+            "把{card}还款日调整到{day}日",
+            {"card": "card", "day": "day"},
+            tools=("adjust_repayment_date",),
+        ),
+    ]

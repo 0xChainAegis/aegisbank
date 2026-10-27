@@ -136,8 +136,8 @@
       "group": "agent",
       "path": "backend/aegisbank_api/scheduler.py",
       "runtime_path": "backend/aegisbank_api/scheduler.py",
-      "bytes": 117563,
-      "sha256": "b3dc1318b71222aa4a6c19e6de9b975761d06722b78043e4090651b80c5c86ad"
+      "bytes": 117918,
+      "sha256": "8bd156f72b6e2e3d2290b8b59dfedc2b149b5ca4f40c0d37564f63218283c2dd"
     },
     {
       "group": "agent",
