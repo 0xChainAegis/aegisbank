@@ -12,6 +12,13 @@ interface Props {
   onNavigateConsole: () => void;
 }
 
+function cardStatusView(value: string): { label: string; className: string } {
+  const status = value.trim().toLowerCase();
+  if (status === 'active' || status === '正常') return { label: '正常', className: 'grant-on' };
+  if (status === 'lost' || status === '已挂失') return { label: '已挂失', className: 'grant-off' };
+  return { label: !status || status === 'unknown' ? '状态未知' : value.trim(), className: 'grant-off' };
+}
+
 export default function BankOverviewPage({
   overview,
   loading,
@@ -160,15 +167,17 @@ export default function BankOverviewPage({
             <span className="muted">{overview.cards.length} 张卡片</span>
           </div>
           <div className="card-list">
-            {overview.cards.map((card) => (
+            {overview.cards.map((card) => {
+              const status = cardStatusView(card.status);
+              return (
               <article className="bank-card-item" key={card.id}>
                 <div className="bank-card-top">
                   <div>
                     <strong>{card.name}</strong>
                     <small>{card.maskedNumber}</small>
                   </div>
-                  <span className={card.status.includes('正常') ? 'grant-on' : 'grant-off'}>
-                    {card.status}
+                  <span className={status.className}>
+                    {status.label}
                   </span>
                 </div>
                 <dl className="mini-facts">
@@ -186,7 +195,8 @@ export default function BankOverviewPage({
                   </div>
                 </dl>
               </article>
-            ))}
+              );
+            })}
             {overview.cards.length === 0 && <div className="inline-empty">暂无卡片数据。</div>}
           </div>
         </section>

@@ -25,6 +25,7 @@ import {
   stepRiskLevel,
 } from '../viewModel';
 import StepJournalPanel from './StepJournalPanel';
+import BusinessReceipt from './BusinessReceipt';
 import { CompensationBadge, EvidenceBadges, PageAlerts, RiskBadge, StatusPill } from './ui';
 
 interface ScenarioAction {
@@ -254,6 +255,7 @@ interface Props {
   writesBlocked: boolean;
   blockReason: string;
   lastActionId: string | null;
+  hasTrustAction?: boolean;
   trustAction: TrustActionDetail | null;
   trustActionLoading: boolean;
   trustActionError: string;
@@ -279,6 +281,7 @@ export default function TaskConsolePage({
   writesBlocked,
   blockReason,
   lastActionId,
+  hasTrustAction = false,
   trustAction,
   trustActionLoading,
   trustActionError,
@@ -307,6 +310,7 @@ export default function TaskConsolePage({
     return [
       all.find((action) => action.id === 'bill-analyze'),
       all.find((action) => action.id === 'transfer-small'),
+      all.find((action) => action.id === 'card-lost'),
     ].filter((action): action is ScenarioAction => Boolean(action));
   }, []);
   const resultRef = useRef<HTMLDivElement | null>(null);
@@ -426,11 +430,11 @@ export default function TaskConsolePage({
               title={action.hint}
             >
               <span>{index + 1}</span>
-              {action.id === 'bill-analyze' ? '分析本月账单' : '小额转账 ¥880'}
+              {action.id === 'transfer-small' ? '小额转账 ¥880' : action.title}
             </button>
           ))}
           <button className="demo-step" onClick={onNavigateAudit} disabled={busy}>
-            <span>3</span>
+            <span>4</span>
             查看审计与哈希链
           </button>
         </div>
@@ -664,6 +668,8 @@ export default function TaskConsolePage({
             </div>
           )}
 
+          <BusinessReceipt run={lastRun} />
+
           <details className="tech-details">
             <summary>技术详情与证据链（计划 / 入参 / 证据 / 状态机 / 步骤日志）</summary>
             <div className="result-evidence">
@@ -783,7 +789,7 @@ export default function TaskConsolePage({
             </div>
           )}
 
-          {lastActionId && (
+          {hasTrustAction && lastActionId && (
             <div className="trust-panel">
               <div className="section-head compact-head">
                 <div>

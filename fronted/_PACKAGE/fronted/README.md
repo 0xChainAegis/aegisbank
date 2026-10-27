@@ -10,7 +10,7 @@ React 控制台、API 类型与请求、确认和恢复交互、样式与前端�
 
 前端修复来自 `49201c2846a114f32ec458b295a788548be1c0ee`，组织协作与可复现性评审版本为 `e2fd54424e07d8a2e45f352509f7f306b879f27c`。
 
-当前运行白名单包含 **42 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
+当前运行白名单包含 **45 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
 
 根 `docs/` 和 `deliverables/` 是团队阅读、验收及比赛材料入口；包内旧文档保留背景，不单独维护新主线。旧 `plans/README.md` 和 `plans/AGENTS.md` 属历史来源说明，不进入运行组装白名单。`_PACKAGE` 为来源、许可与校验元数据，不复制进 `.runtime/`。
 
@@ -35,6 +35,7 @@ Git checkout 中扫描已跟踪或未被忽略的新文件；没有 `.git` 的�
 - `frontend/src/components/BankOverviewPage.tsx`
 - `frontend/src/components/BreakerBanner.tsx`
 - `frontend/src/components/BreakerPanel.tsx`
+- `frontend/src/components/BusinessReceipt.tsx`
 - `frontend/src/components/CapabilitiesPage.tsx`
 - `frontend/src/components/ConfirmationModal.tsx`
 - `frontend/src/components/ErrorBoundary.tsx`
@@ -44,7 +45,9 @@ Git checkout 中扫描已跟踪或未被忽略的新文件；没有 `.git` 的�
 - `frontend/src/components/ScenariosPage.tsx`
 - `frontend/src/components/StepJournalPanel.tsx`
 - `frontend/src/components/TaskConsolePage.tsx`
+- `frontend/src/components/TrialGuide.tsx`
 - `frontend/src/components/businessPages.test.tsx`
+- `frontend/src/components/trialReceipt.test.tsx`
 - `frontend/src/components/ui.tsx`
 - `frontend/src/errors.test.ts`
 - `frontend/src/errors.ts`

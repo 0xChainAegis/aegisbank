@@ -4,7 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchActionJournal, pauseAction, runAutomationDue } from '../api';
 import { resetRoleCapabilities, setRoleCapabilities } from '../roles';
-import type { ActionJournal, RunResponse, ToolMetadata } from '../types';
+import type { ActionJournal, BankingOverview, RunResponse, ToolMetadata } from '../types';
+import BankOverviewPage from './BankOverviewPage';
 import PermissionsPage from './PermissionsPage';
 import StepJournalPanel from './StepJournalPanel';
 import TaskConsolePage from './TaskConsolePage';
@@ -62,6 +63,46 @@ afterEach(async () => {
 });
 
 describe('business page interactions', () => {
+  it('shows active cards as normal and updates the status after loss and recovery', async () => {
+    const overview = (status: string): BankingOverview => ({
+      accounts: [], subscriptions: [], abnormalSubscriptions: [],
+      monthSpendingCny: 0, todayTransferTotalCny: 0, asOf: '',
+      cards: [{ id: 'CARD-8821', accountId: 'ACC-1001', name: '模拟银行卡',
+        maskedNumber: '**** 8821', status, creditLimitCny: 30000,
+        availableLimitCny: 21750, repaymentDay: 8 }],
+    });
+    const renderStatus = async (status: string) => {
+      await act(async () => root.render(<BankOverviewPage overview={overview(status)}
+        loading={false} error="" notice="" onRefresh={vi.fn()} onNavigateConsole={vi.fn()} />));
+      return container.querySelector('.bank-card-top > span')!;
+    };
+    let status = await renderStatus('active');
+    expect(status.textContent).toBe('正常');
+    expect(status.className).toBe('grant-on');
+    status = await renderStatus('lost');
+    expect(status.textContent).toBe('已挂失');
+    expect(status.className).toBe('grant-off');
+    status = await renderStatus('active');
+    expect(status.textContent).toBe('正常');
+    expect(status.className).toBe('grant-on');
+  });
+
+  it.each(['unknown', '', 'inactive'])('does not display an unrecognized card state %j as normal', async (cardStatus) => {
+    const overview: BankingOverview = {
+      accounts: [], subscriptions: [], abnormalSubscriptions: [],
+      monthSpendingCny: 0, todayTransferTotalCny: 0, asOf: '',
+      cards: [{ id: 'CARD-8821', accountId: 'ACC-1001', name: '模拟银行卡',
+        maskedNumber: '**** 8821', status: cardStatus, creditLimitCny: 30000,
+        availableLimitCny: 21750, repaymentDay: 8 }],
+    };
+    await act(async () => root.render(<BankOverviewPage overview={overview}
+      loading={false} error="" notice="" onRefresh={vi.fn()} onNavigateConsole={vi.fn()} />));
+    const status = container.querySelector('.bank-card-top > span')!;
+    expect(status.textContent).not.toBe('正常');
+    expect(status.className).toBe('grant-off');
+    if (!cardStatus || cardStatus === 'unknown') expect(status.textContent).toBe('状态未知');
+  });
+
   it('shows the birthday execution date and formats only currency fields as money', async () => {
     const props = taskProps();
     props.lastRun = {
