@@ -36,6 +36,7 @@ interface Props {
   error?: string;
   writesBlocked: boolean;
   blockReason: string;
+  accountLabels?: Record<string, string>;
 }
 
 export default function ConfirmationModal({
@@ -54,10 +55,16 @@ export default function ConfirmationModal({
   error,
   writesBlocked,
   blockReason,
+  accountLabels,
 }: Props) {
   const risk = runRiskLevel(pending);
   const needsOtp = Boolean(pending.confirmation?.requires_reauth) || risk === 'red';
   const reasons = collectRiskReasons(pending);
+  const fixedGatewayReason = pending.reason === '黄色操作会修改账户设置，需要在 5 分钟内完成一次轻量确认。'
+    || pending.reason === '红色操作涉及资金变动，需要二次身份校验并明确确认。';
+  const reason = fixedGatewayReason
+    ? needsOtp ? '本次操作需要身份验证和你的确认。' : '本次操作需要你的确认。'
+    : pending.reason;
   const enabledProviders = mfaProviders.filter((provider) => provider.enabled !== false);
   const fallbackProvider: MfaProvider[] = [
     { name: 'otp', kind: 'otp', title: '演示动态验证码', enabled: true, default: true },
@@ -71,9 +78,9 @@ export default function ConfirmationModal({
 
   const steps = useMemo(() => (pending.plan?.steps ?? []).map((step) => ({
     step,
-    summary: confirmationSummary(step),
+    summary: confirmationSummary(step, accountLabels),
     risk: stepRiskLevel(step.risk_level, pending),
-  })), [pending]);
+  })), [pending, accountLabels]);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -177,10 +184,12 @@ export default function ConfirmationModal({
           </div>
         </div>
 
-        <h2 id="confirm-title">
-          {risk === 'red' ? '红色操作 · 需要二次验证' : '确认这笔操作'}
+        <h2 id="confirm-title" className="confirmation-product-title">
+          {steps.length === 1 ? `确认${steps[0].summary.headline}`
+            : steps.length > 1 ? `确认这 ${steps.length} 项操作` : '确认操作'}
         </h2>
-        <p className="modal-reason">{pending.reason}</p>
+        <p className="confirmation-status"><strong>待确认 · 尚未执行</strong></p>
+        <p className="modal-reason">{reason}</p>
 
         {steps.length > 0 && (
           <div className="confirm-summary">
@@ -214,8 +223,8 @@ export default function ConfirmationModal({
           <strong>{needsOtp ? '需要二次身份验证' : '一次明确确认即可'}</strong>
           <span>
             {needsOtp
-              ? '该操作命中红色风险规则。验证失败不会执行任何工具。'
-              : '该操作会修改账户设置或资金，请在有效期内完成确认。'}
+              ? '请先核对操作对象和内容；身份验证未通过时，本次操作不会执行。'
+              : '请核对操作对象和内容，在上方显示的剩余时间内确认。'}
           </span>
         </div>
 
@@ -314,6 +323,7 @@ export default function ConfirmationModal({
 
         <details className="tech-details">
           <summary>技术详情（计划哈希 / 原始参数 / 证据分层）</summary>
+          <p>服务端原始说明：{pending.reason}</p>
           {pending.plan?.plan_hash && (
             <p>
               <span className="eyebrow">PLAN HASH</span>

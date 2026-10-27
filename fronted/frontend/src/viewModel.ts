@@ -707,27 +707,48 @@ function argumentValue(value: unknown, key: string): string {
   return formatDisplayValue(value);
 }
 
-export function confirmationSummary(step: PlanStep): StepSummary {
+export function confirmationSummary(
+  step: PlanStep,
+  accountLabels: Record<string, string> = {},
+): StepSummary {
   const args = (step.arguments ?? {}) as Record<string, unknown>;
   const unresolved = hasUnresolved(args);
   const text = (key: string): string =>
     typeof args[key] === 'string' && !/\$\{/.test(String(args[key]))
       ? String(args[key])
       : '';
-  const amount = typeof args.amount_cny === 'number' ? args.amount_cny : null;
+  const account = (id: string): string => {
+    const label = Object.hasOwn(accountLabels, id) ? accountLabels[id]?.trim() : '';
+    return label && label !== id ? `${label}（${id}）` : id;
+  };
+  const amount = typeof args.amount_cny === 'number' && Number.isFinite(args.amount_cny)
+    ? args.amount_cny : null;
   const reversibleNote = step.irreversible
-    ? step.irreversible_reason || '该步骤执行后不可撤销'
-    : '如执行后需要撤销，可在步骤日志中申请人工回退';
+    ? '该步骤不支持自动回滚，执行后如需恢复，应另行核对处理方式。'
+    : '';
 
   switch (step.tool_name) {
-    case 'transfer': {
+    case 'transfer':
+    case 'transfer_to_contact':
+    case 'schedule_transfer': {
       const from = text('from_account');
       const to = text('to_account');
+      const contact = text('to_name');
+      const phone = text('to_phone');
+      const scheduled = step.tool_name === 'schedule_transfer';
       return {
-        headline: amount !== null ? `转账 ${formatCny(amount)}` : '发起一笔转账',
+        headline: amount !== null
+          ? `${scheduled ? '定时转账' : '转账'} ${formatCny(amount)}`
+          : scheduled ? '创建定时转账' : '发起一笔转账',
         details: [
-          from && to ? `从 ${from} 转到 ${to}` : '转出与转入账户将在执行时确定',
-          to ? `收款账户 ${to}` : '',
+          from ? `转出账户：${account(from)}` : '转出账户尚未确定',
+          to ? `收款账户：${account(to)}` : '',
+          contact ? `收款联系人：${contact}` : '',
+          phone ? `收款手机号：${phone}` : '',
+          !to && !contact && !phone ? '收款对象尚未确定' : '',
+          amount === null ? '转账金额尚未确定' : '',
+          scheduled && text('run_at') ? `执行时间：${formatDateTime(text('run_at'))}` : '',
+          scheduled ? '创建任务不立即扣款；到期仍会复检权限和风险。' : '',
           text('note') ? `备注：${text('note')}` : '',
           reversibleNote,
         ].filter(Boolean),
@@ -778,13 +799,13 @@ export function confirmationSummary(step: PlanStep): StepSummary {
         headline: '挂失银行卡',
         details: [
           text('card_id') ? `卡片：${text('card_id')}` : '卡片在执行时确定',
-          '挂失后该卡将立即停止交易，属于不可撤销操作',
+          '不支持自动回滚，恢复需另发起解挂并验证。',
         ],
         unresolved,
       };
     case 'unlock_card':
       return {
-        headline: '解锁银行卡',
+        headline: '解除银行卡挂失',
         details: [
           text('card_id') ? `卡片：${text('card_id')}` : '卡片在执行时确定',
           reversibleNote,

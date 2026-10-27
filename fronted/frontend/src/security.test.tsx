@@ -73,6 +73,54 @@ beforeEach(() => {
 afterEach(async () => { await unmount(); container.remove(); });
 
 describe('submission and confirmation security', () => {
+  it('keeps primary examples as editable requests rather than executing them', async () => {
+    await mount();
+    const example = container.querySelectorAll<HTMLButtonElement>('.demo-path button')[1];
+    await act(async () => example.click());
+    expect(container.querySelector<HTMLTextAreaElement>('#instruction')?.value)
+      .toBe('向 ACC-2002 转账 880 元');
+    expect(runAgent).not.toHaveBeenCalled();
+  });
+  it('keeps the current receipt ahead of the collapsed business examples', async () => {
+    await mount(); await submit('分析我的本月账单');
+    const result = container.querySelector('.result-card')!;
+    const examples = container.querySelector<HTMLDetailsElement>('.scenario-library')!;
+    expect(result.compareDocumentPosition(examples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(examples.open).toBe(false);
+    expect(container.querySelector<HTMLDetailsElement>('.system-details')?.open).toBe(false);
+  });
+  it('ties a displayed receipt to the submitted request while the user edits a new draft', async () => {
+    await mount(); await submit('分析我的本月账单');
+    const textarea = container.querySelector<HTMLTextAreaElement>('#instruction')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '挂失我的卡片');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.querySelector('.submitted-request')?.textContent).toContain('分析我的本月账单');
+    expect(container.querySelector('.submitted-request')?.textContent).not.toContain('挂失我的卡片');
+  });
+  it('opens the assistant from accounts and prefills a task without sending a banking request', async () => {
+    window.location.hash = '#/overview';
+    await mount();
+    await click('银行助手');
+    await act(async () => container.querySelectorAll<HTMLButtonElement>('.demo-path button')[1].click());
+    expect(container.querySelector<HTMLTextAreaElement>('#instruction')?.value)
+      .toBe('向 ACC-2002 转账 880 元');
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('示例已填入');
+  });
+  it('keeps a green journal without offering a pending-only trust lookup', async () => {
+    await mount(); await submit('分析我的本月账单');
+    expect(container.textContent).not.toContain('查看信任详情');
+    expect(container.textContent).toContain('completed-run');
+    expect(fetchTrustAction).not.toHaveBeenCalled();
+  });
+  it('retains trust inspection after a confirmed action is resolved', async () => {
+    vi.mocked(runAgent).mockResolvedValue(pending());
+    await mount(); await submit('向 ACC-2002 转账 880 元');
+    await click('拒绝执行');
+    expect(container.textContent).toContain('查看信任详情');
+  });
   it('restores the submission role when another tab has changed the preferred role', () => {
     window.localStorage.setItem(ROLE_STORAGE_KEY, 'auditor');
     saveSubmission({ key: 'original-key', input: { instruction: '向妈妈转账 100 元' }, role: 'user' });

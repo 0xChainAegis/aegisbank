@@ -6,7 +6,11 @@
 
 [六类场景](#六类场景) · [安全设计](#安全设计) · [快速开始](#快速开始) · [团队协作](#团队协作) · [参赛材料](#参赛材料)
 
-![模拟转账执行回执：风险原因、MFA 后的执行结果与审计编号](docs/screenshots/receipt-verified-2026-10-25.jpg)
+![银行助手：需求输入、业务示例与按需展开的技术信息](docs/screenshots/assistant-workspace-20261027.jpg)
+
+![转账确认：真实账户、金额、剩余时间和待确认状态](docs/screenshots/assistant-confirmation-20261027.jpg)
+
+界面改造、真实联调结果及待后端核实的统计口径见 [10月27日银行助手记录](docs/FRONTEND-PRODUCT-2026-10-27.md)。
 
 > **演示边界**：账户、卡片、账单、理财和交易均来自确定性的 Mock Bank Core，不连接真实银行、不产生真实资金变动。固定 OTP、模拟生物识别和角色请求头用于本地展示；理财数据与收益均为模拟。
 
@@ -81,7 +85,9 @@ bash scripts/bootstrap.sh
 bash scripts/dev.sh
 ```
 
-打开 [产品控制台](http://127.0.0.1:5173)、[API 文档](http://127.0.0.1:8000/docs) 或 [就绪检查](http://127.0.0.1:8000/api/health/ready)。完整的组装、启动与接口请求/返回示例见 [API 交接文档](docs/API-HANDOFF.md)。默认规则 Planner 无需模型密钥；可选 LLM 配置见组装后的 `.runtime/backend/.env.example`，需要覆盖时复制为同目录 `.env`。演示 OTP 为 `246810`。
+打开 [银行助手](http://127.0.0.1:5173/#/console)、[API 文档](http://127.0.0.1:8000/docs) 或 [就绪检查](http://127.0.0.1:8000/api/health/ready)。完整的组装、启动与接口请求/返回示例见 [API 交接文档](docs/API-HANDOFF.md)。默认规则 Planner 无需模型密钥；可选 LLM 配置见组装后的 `.runtime/backend/.env.example`，需要覆盖时复制为同目录 `.env`。演示 OTP 为 `246810`。
+
+首次试用可从首页的账单、880 元转账、卡片挂失三个入口填入指令。入口仅预填，提交和风险确认仍需用户操作；同机演示准备、新模拟库及固定任务卡见 [前端联调与试用交接](docs/DAY1-FRONTEND-HANDOFF-2026-10-26.md)。`localhost` 地址仅用于运行服务的电脑，异地试用由开发者提供可访问环境或共享屏幕。
 
 建议先查询本月账单，再发起 880 元转账并核对确认内容，最后查看审计哈希链。写操作会改变本地模拟状态，重复演示前应核对余额、累计转账和订阅状态。
 
@@ -102,7 +108,7 @@ bash scripts/dev.sh
 
 应用验证基线（2026-10-25）：**后端 pytest 252 项、前端 Vitest 73 项、六场景回归 29/29、实际前端入口 15/15**。范围与环境见 [前端修复及验收记录](docs/FRONTEND-REPAIR-2026-10-25.md)。
 
-P1 集成后的验收基线为后端 317 项、前端 75 项、组装器 18 项、六场景 29/29；最终门禁与 CI 结果见 [P1 报告](docs/NLP-P1-2026-10-27.md)。
+P1 集成后的验收基线为后端 317 项、前端 120 项、组装器 18 项、六场景 29/29；最终门禁与 CI 结果见 [P1 报告](docs/NLP-P1-2026-10-27.md)。
 
 职责包组装测试单独计数。CI 先组装 `.runtime/`，再验证应用；整合后的结果以 [GitHub Actions](https://github.com/0xChainAegis/aegisbank/actions) 为准。测试覆盖已知用例，不代表生产安全认证或任意自然语言均能成功执行。
 
