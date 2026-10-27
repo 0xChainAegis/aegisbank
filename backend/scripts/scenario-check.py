@@ -25,6 +25,66 @@ def check(scenario: str, case: str, ok: bool, detail: str = "") -> None:
     print(f"{'PASS' if ok else 'FAIL':4} | {scenario:6} | {case:28} | {detail}")
 
 
+def fast_forward_result(status_code: int, payload: dict) -> tuple[bool, str]:
+    """Fail closed unless run-due reports integer counts with zero failures."""
+    if not isinstance(payload, dict):
+        return False, "响应格式错误：run-due 响应不是 JSON 对象；处理建议：检查响应构造。"
+
+    invalid: list[str] = []
+
+    def strict_count(name: str) -> int | None:
+        value = payload.get(name)
+        if type(value) is not int:
+            shown = "missing" if value is None else repr(value)
+            invalid.append(f"{name}={shown}")
+            return None
+        return value
+
+    executed = strict_count("executed_count")
+    failed = strict_count("failed_count")
+    raw_pending = payload.get("pending_reauth_count")
+    pending_reauth = (
+        raw_pending if type(raw_pending) is int and raw_pending >= 0 else 0
+    )
+    ok = (
+        status_code == 200
+        and not invalid
+        and executed is not None
+        and executed >= 1
+        and failed == 0
+    )
+
+    parts = [
+        f"HTTP={status_code}",
+        f"executed={executed if executed is not None else 'missing'}",
+        f"failed={failed if failed is not None else 'missing'}",
+    ]
+    if pending_reauth:
+        parts.append(f"pending_reauth={pending_reauth}")
+    if invalid:
+        parts.append("响应格式错误：" + "；".join(invalid))
+        parts.append(
+            "处理建议：run-due 必须返回整型 executed_count/failed_count，"
+            "并保证 executed_count>=1 且 failed_count==0。"
+        )
+    elif failed:
+        failure_notes = []
+        for item in payload.get("failed") or []:
+            task_id = item.get("task_id", "?")
+            reason = item.get("reason") or item.get("execution_status") or "unknown"
+            failure_notes.append(f"{task_id}: {reason}")
+        parts.append("失败详情：" + "；".join(failure_notes[:3]))
+        parts.append(
+            "处理建议：核对权限/余额与任务授权后修复失败原因；"
+            "若为风险升级，按 pending_reauth.action_required 重新强验证。"
+        )
+    elif status_code != 200:
+        parts.append("处理建议：检查 run-due HTTP 状态与 readiness/权限错误。")
+    elif executed < 1:
+        parts.append("处理建议：确认任务已到期、未被取消，且 run_at <= now。")
+    return ok, " ".join(parts)
+
+
 class Agent:
     def __init__(self, client: TestClient) -> None:
         self.client = client
@@ -253,11 +313,14 @@ def scenario_cross(agent: Agent) -> None:
         "/api/automation/run-due", params={"now": fast_forward.isoformat()}
     )
     payload = response.json()
+    fast_forward_ok, fast_forward_detail = fast_forward_result(
+        response.status_code, payload
+    )
     check(
         "定时/触发",
         "时间快进执行到期任务",
-        response.status_code == 200 and payload.get("executed_count", 0) >= 1,
-        f"executed={payload.get('executed_count')} failed={payload.get('failed_count')}",
+        fast_forward_ok,
+        fast_forward_detail,
     )
 
     body = agent.run("取消异常订阅")

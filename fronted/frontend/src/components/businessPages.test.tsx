@@ -248,6 +248,48 @@ describe('business page interactions', () => {
     expect(container.querySelector('.run-due-result')?.textContent).not.toContain('调度器已正常返回');
   });
 
+  it('surfaces pending re-authentication from run-due instead of claiming completion', async () => {
+    vi.mocked(runAutomationDue).mockResolvedValue({
+      status: 'completed',
+      reason: '到期任务已处理',
+      now: '2027-01-01T12:00:00+00:00',
+      executed: [],
+      failed: [],
+      executed_count: 0,
+      failed_count: 0,
+      pending_reauth: [{
+        task_id: 'TASK-REAUTH-1',
+        kind: 'transfer',
+        status: 'pending',
+        execution_status: 'needs_reauth',
+        reason: '到期复检时风险升为 red',
+        action_required: '取消该定时任务后重新创建，并完成 OTP 强验证。',
+        amount_cny: 3000,
+        reauth_required: true,
+      }],
+      pending_reauth_count: 1,
+      action_required: true,
+      simulated: true,
+    });
+    await act(async () => root.render(<ScenariosPage writesBlocked={false} blockReason="" />));
+    const run = [...container.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent === '执行当前到期任务')!;
+    await act(async () => run.click());
+
+    const result = container.querySelector('.run-due-result')!;
+    const warning = result.querySelector('.run-due-reauth')!;
+    expect(warning.getAttribute('role')).toBe('alert');
+    expect(warning.textContent).toContain('未执行、未扣款');
+    expect(warning.textContent).toContain('TASK-REAUTH-1');
+    expect(warning.textContent).toContain('到期复检时风险升为 red');
+    expect(warning.textContent).toContain('OTP');
+    expect(warning.textContent).toContain('取消');
+    expect(warning.textContent).toContain('重新创建');
+    expect(result.querySelector('.eyebrow')?.textContent).toContain('需要重新认证');
+    expect(result.querySelector('.eyebrow')?.textContent).not.toContain('已完成');
+    expect(result.textContent).not.toContain('调度器已正常返回');
+  });
+
   it('passes the selected simulation time to the scheduler', async () => {
     vi.mocked(runAutomationDue).mockResolvedValue({
       status: 'completed', now: null,

@@ -92,11 +92,18 @@ def test_three_red_runs_open_breaker_and_fourth_run_is_blocked(tmp_path: Path) -
         assert "执行熔断已触发" in status["reason"]
         assert "可疑" in status["reason"]
 
-        blocked = green_run(client)
+        allowed = green_run(client)
+        assert allowed["status"] == "completed", allowed
+        still_open = breaker_status(client)
+        assert still_open["open"] is True
+        assert still_open["trigger"] == "suspicious_red"
+
+        blocked = red_run(client)
         assert blocked["status"] == "blocked", blocked
         assert "执行熔断已触发" in blocked["reason"]
         assert "可疑" in blocked["reason"]
         assert "红色操作" in blocked["reason"]
+        assert "只读查询仍可执行" in blocked["reason"]
         assert blocked["breaker"]["trigger"] == "suspicious_red"
 
 
@@ -120,7 +127,10 @@ def test_injection_hits_open_breaker_for_suspicious_injection(tmp_path: Path) ->
         assert "可疑" in status["reason"]
         assert "注入" in status["reason"]
 
-        blocked = green_run(client)
+        allowed = green_run(client)
+        assert allowed["status"] == "completed"
+        assert breaker_status(client)["open"] is True
+        blocked = red_run(client)
         assert blocked["status"] == "blocked"
         assert "可疑" in blocked["reason"]
         assert "注入" in blocked["reason"]
@@ -266,7 +276,10 @@ def test_consecutive_failure_rule_still_opens_and_operator_recovers(
         assert status["failures"] >= 3
         assert status["trigger"] == "consecutive_failures"
 
-        blocked = green_run(client)
+        allowed = green_run(client)
+        assert allowed["status"] == "completed"
+        assert breaker_status(client)["open"] is True
+        blocked = red_run(client)
         assert blocked["status"] == "blocked"
         assert "执行熔断已触发" in blocked["reason"]
         assert "连续失败" in blocked["reason"]
@@ -289,7 +302,10 @@ def test_policy_endpoint_documents_rules_and_requires_trust_inspect(
         assert response.status_code == 200, response.text
         policy = response.json()
         assert policy["mode"] == "fail_closed"
-        assert policy["shared_open_state"] is True
+        assert policy["shared_open_state"] is False
+        assert policy["per_user"] is True
+        assert policy["read_only_bypass"] is True
+        assert policy["blocks"] == ["write", "confirmation"]
         assert policy["reason_marker"] == "执行熔断已触发"
         assert policy["thresholds"]["consecutive_failures"]["threshold"] == 3
         assert policy["thresholds"]["suspicious_red"]["threshold"] == 3

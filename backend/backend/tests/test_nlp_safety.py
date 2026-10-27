@@ -180,7 +180,7 @@ def test_normalization_in_all_money_scenarios(system):
         ("给妈妈转五百块", "transfer_to_contact", "amount_cny", 500),
         ("明天给张三转1,500", "schedule_transfer", "amount_cny", 1500),
         ("和妈妈、张三 AA 1,500", "transfer_to_contact", "amount_cny", 500),
-        ("把信用卡额度调整到1.5万元", "adjust_card_limit", "new_limit_cny", 15000),
+        ("把 CARD-8821 的信用卡额度调整到1.5万元", "adjust_card_limit", "new_limit_cny", 15000),
         ("买一千元稳健短债A", "purchase_wealth", "amount_cny", 1000),
     ]
     for instruction, tool, field, value in cases:

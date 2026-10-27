@@ -52,8 +52,8 @@
       "group": "backend",
       "path": "backend/aegisbank_api/banking/repository.py",
       "runtime_path": "backend/aegisbank_api/banking/repository.py",
-      "bytes": 23249,
-      "sha256": "87148e4d630b9ac941e0e9956978ee9d651c51e7163687e7327d4cfe54cae827"
+      "bytes": 25020,
+      "sha256": "a01d94a57d1d246aff7f268386d7583aa1384f4b283b6c8373e5edbb71470fe2"
     },
     {
       "group": "backend",
@@ -115,8 +115,8 @@
       "group": "backend",
       "path": "backend/tests/test_api.py",
       "runtime_path": "backend/tests/test_api.py",
-      "bytes": 12334,
-      "sha256": "054b0f64fcc089ce4e7b1a215a76e9e739b96317120ca4a5d03a35ead063b217"
+      "bytes": 12348,
+      "sha256": "da0a11c7e87d146b7b42bdb9dde34be0a2f8b8e1d48798eaf63bcae1a91c0844"
     },
     {
       "group": "backend",
@@ -150,15 +150,15 @@
       "group": "backend",
       "path": "backend/tests/test_breaker.py",
       "runtime_path": "backend/tests/test_breaker.py",
-      "bytes": 11479,
-      "sha256": "8eee88c8adc0cbcd399e397c84d0abedb79a28e1ad3cb069514cea4a535dc80e"
+      "bytes": 12203,
+      "sha256": "784475f5c5d748048f0a0147b764ac20bb94b1f00ee81c38c8d49d469b58d4b1"
     },
     {
       "group": "backend",
       "path": "backend/tests/test_cards.py",
       "runtime_path": "backend/tests/test_cards.py",
-      "bytes": 11060,
-      "sha256": "26fd5f2441d803f7cfa6803be3e2c303670452c21bbcbb29e47cf66c73b5937a"
+      "bytes": 12624,
+      "sha256": "c4c2240a339a3838bafa90bf92ccd1dab0861a972a14c94be468bdda29f28c98"
     },
     {
       "group": "backend",
@@ -185,15 +185,29 @@
       "group": "backend",
       "path": "backend/tests/test_nlp_safety.py",
       "runtime_path": "backend/tests/test_nlp_safety.py",
-      "bytes": 13699,
-      "sha256": "32596f6732bd70870eba1cbf63a35bd7540243ebf1859d29e8660030e54d0ddd"
+      "bytes": 13713,
+      "sha256": "1940a0e6e671cf7115787ac494b225f3f43bfee43b136db6040099bd1325da4d"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_p0_core_feedback.py",
+      "runtime_path": "backend/tests/test_p0_core_feedback.py",
+      "bytes": 17549,
+      "sha256": "2cc120c2b3771d204e0cc191fc8c844d5f535514af4ad1f7314907e757b17fb1"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_p0_nlp_feedback.py",
+      "runtime_path": "backend/tests/test_p0_nlp_feedback.py",
+      "bytes": 12630,
+      "sha256": "8399c4c487487e3462f2cde088127c0ab7ca225ffef3ef46de6e8b986e073195"
     },
     {
       "group": "backend",
       "path": "backend/tests/test_planner.py",
       "runtime_path": "backend/tests/test_planner.py",
-      "bytes": 6138,
-      "sha256": "c48ffd6cbc7d71a5895f800f89752586a7dde2101e85f10e6092e842370d7a80"
+      "bytes": 7522,
+      "sha256": "f3939391a805fbf16311b4c9268fd373eab82ea65c0edc5c4922d281b55ae9ed"
     },
     {
       "group": "backend",
@@ -206,8 +220,8 @@
       "group": "backend",
       "path": "backend/tests/test_security_regressions.py",
       "runtime_path": "backend/tests/test_security_regressions.py",
-      "bytes": 36652,
-      "sha256": "d786fe9f50962be97f9fc9b355a26dd7813f2ab8b60a8258687a981e2aa4d6d7"
+      "bytes": 37279,
+      "sha256": "831bd2111590ba449cc82bd406ec6d11ac9405d91bbed6ddb8f1e9a271449d40"
     },
     {
       "group": "backend",
@@ -227,15 +241,15 @@
       "group": "backend",
       "path": "backend/tests/test_transfers.py",
       "runtime_path": "backend/tests/test_transfers.py",
-      "bytes": 9523,
-      "sha256": "b8f0e16a7f1edd0703a9e1a610b83319ca4c9739c0f438414714089da4d432b0"
+      "bytes": 10382,
+      "sha256": "f8ca36b74738eb722ffd17f0958a42b2abf167f9ee83e7750560d9eb2b7cc1f2"
     },
     {
       "group": "backend",
       "path": "backend/tests/test_trust.py",
       "runtime_path": "backend/tests/test_trust.py",
-      "bytes": 25995,
-      "sha256": "36279580fab6e0352895dfd31c078a54bd82efdf63c3b771b2515639db48eb37"
+      "bytes": 26423,
+      "sha256": "58e6a6afe1d7969b6c7524dd7e7c40b4cf454ed7bcfd2b323cd484a533dfc7a9"
     },
     {
       "group": "backend",
@@ -290,8 +304,8 @@
       "group": "backend",
       "path": "scripts/scenario-check.py",
       "runtime_path": "scripts/scenario-check.py",
-      "bytes": 12321,
-      "sha256": "d9f37ad3bf5b342424f30aff0c787ab47f6251df3462009205106e56bd632631"
+      "bytes": 14705,
+      "sha256": "5bcf16901b3b60b99827339ad636e3948fe2165853cdce5d1b1d788652ed625d"
     },
     {
       "group": "backend",

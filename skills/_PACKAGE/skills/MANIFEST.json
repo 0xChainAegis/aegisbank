@@ -38,8 +38,8 @@
       "group": "skills",
       "path": "backend/aegisbank_api/scenarios/automation.py",
       "runtime_path": "backend/aegisbank_api/scenarios/automation.py",
-      "bytes": 86151,
-      "sha256": "5b9dfaf38b555672f16aa2778b0ef3753c65bce9c5d3f43bf687f4eb27a63956"
+      "bytes": 89184,
+      "sha256": "c2c8a54f934690b2c8b43d3d951e28a13e05e158ee0361373c38fafd03caff73"
     },
     {
       "group": "skills",
@@ -52,15 +52,15 @@
       "group": "skills",
       "path": "backend/aegisbank_api/scenarios/cards.py",
       "runtime_path": "backend/aegisbank_api/scenarios/cards.py",
-      "bytes": 27383,
-      "sha256": "ad36750b647c706f2fe7655c4537fbd4905c766d988024a5ce51d5c29a65baeb"
+      "bytes": 28017,
+      "sha256": "6760b3d7fe06ab08cae52ee878dc4e740c26a8d9c1068f8ecb531567549f8f71"
     },
     {
       "group": "skills",
       "path": "backend/aegisbank_api/scenarios/transfers.py",
       "runtime_path": "backend/aegisbank_api/scenarios/transfers.py",
-      "bytes": 31799,
-      "sha256": "076eeb35c3a0d5de126ff1d9122544fd26f68675d04b66c91244eae4eb8eed60"
+      "bytes": 32654,
+      "sha256": "620f23c2634ff8c6d54da878c90afaa456893f0abfad180e192383c6728dc6ea"
     },
     {
       "group": "skills",
@@ -87,8 +87,8 @@
       "group": "skills",
       "path": "backend/aegisbank_api/tools/finance.py",
       "runtime_path": "backend/aegisbank_api/tools/finance.py",
-      "bytes": 13389,
-      "sha256": "6e2fbcbf23874416269fcfe30f4963eee2ce6ae22158a634686df58ca75eaf78"
+      "bytes": 13305,
+      "sha256": "f4b8ba5de69c959698affb770a36e0d2ac6956620b3a00ed443757fdf9d19fff"
     },
     {
       "group": "skills",

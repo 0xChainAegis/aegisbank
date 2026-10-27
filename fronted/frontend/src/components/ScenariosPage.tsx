@@ -256,6 +256,9 @@ export default function ScenariosPage({ writesBlocked, blockReason, onDataChange
   const [runError, setRunError] = useState('');
   const [runResult, setRunResult] = useState<AutomationRunDueResult | null>(null);
   const [simulationTime, setSimulationTime] = useState('');
+  const pendingReauth = runResult?.pending_reauth ?? [];
+  const pendingReauthCount = runResult?.pending_reauth_count ?? pendingReauth.length;
+  const hasPendingReauth = pendingReauthCount > 0 || runResult?.action_required === true;
 
   async function handleRunDue() {
     if (runBusy || writesBlocked) return;
@@ -890,16 +893,45 @@ export default function ScenariosPage({ writesBlocked, blockReason, onDataChange
         )}
 
         {runResult && (
-          <div className={`run-due-result ${runResult.failed_count > 0 || runResult.status !== 'completed' ? 'has-failures' : ''}`} role="status">
-            <span className="eyebrow">RUN-DUE RESULT · {statusLabel(runResult.status)}</span>
+          <div className={`run-due-result ${runResult.failed_count > 0 || runResult.status !== 'completed' || hasPendingReauth ? 'has-failures' : ''}`} role="status">
+            <span className="eyebrow">
+              RUN-DUE RESULT · {hasPendingReauth ? '需要重新认证' : statusLabel(runResult.status)}
+            </span>
             <p>
-              {runResult.status !== 'completed'
+              {hasPendingReauth
+                ? `本次有 ${pendingReauthCount > 0 ? `${pendingReauthCount} 项` : '部分'}定时任务需要重新认证（OTP），已执行 ${runResult.executed_count} 项，失败 ${runResult.failed_count} 项。`
+                : runResult.status !== 'completed'
                 ? `本次未完成调度：${runResult.reason || statusLabel(runResult.status)}。`
                 : runResult.executed_count + runResult.failed_count === 0
                 ? '本次没有到期的定时任务，调度器已正常返回。'
                 : `已执行 ${runResult.executed_count} 项，失败 ${runResult.failed_count} 项。`}
               {runResult.now ? ` 模拟时间：${formatDateTime(runResult.now)}。` : ''}
             </p>
+            {hasPendingReauth && (
+              <div className="alert alert-warn run-due-reauth" role="alert">
+                <strong>需要重新认证：以下定时任务未执行、未扣款。</strong>
+                <p>
+                  请按 OTP 强验证指引处理：取消该定时任务后按原意图重新创建并完成 OTP 验证，
+                  再执行时间快进；原任务不会扣款或自动重放。
+                </p>
+                {pendingReauth.length > 0 ? (
+                  <ul>
+                    {pendingReauth.map((item, index) => (
+                      <li key={`pending-reauth-${item.task_id ?? index}`}>
+                        待处理 {item.task_id ?? '未知任务'}
+                        {item.kind ? `（${taskKindLabel(item.kind)}）` : ''}：{item.reason ?? '需要重新完成 OTP 强验证'}
+                        {typeof item.amount_cny === 'number' ? ` · ${formatCny(item.amount_cny)}` : ''}
+                        <br />
+                        建议操作（OTP / 取消 / 重新创建）：
+                        {item.action_required ?? '取消该定时任务后按原意图重新创建，并完成 OTP 强验证。'}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>后端未返回待处理任务明细，请刷新定时任务后按上述 OTP 指引重新创建。</p>
+                )}
+              </div>
+            )}
             {runResult.executed.length > 0 && (
               <ul>
                 {runResult.executed.map((item, index) => (

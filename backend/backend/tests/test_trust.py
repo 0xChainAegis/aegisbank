@@ -640,7 +640,7 @@ def test_circuit_breaker_opens_after_consecutive_failures(tmp_path: Path) -> Non
         assert breaker["open"] is True
         assert breaker["failures"] >= 3
 
-        blocked = client.post(
+        allowed = client.post(
             "/api/agent/run",
             json={
                 "instruction": "查询我的本月账单",
@@ -648,8 +648,19 @@ def test_circuit_breaker_opens_after_consecutive_failures(tmp_path: Path) -> Non
                 "arguments": {"account_id": "ACC-1001"},
             },
         ).json()
+        assert allowed["status"] == "completed"
+        assert client.get("/api/trust/circuit-breaker").json()["open"] is True
+
+        blocked = client.post(
+            "/api/agent/run",
+            json={
+                "instruction": "挂失我的信用卡 CARD-8821",
+                "tool_name": "report_card_lost",
+                "arguments": {"card_id": "CARD-8821"},
+            },
+        ).json()
         assert blocked["status"] == "blocked"
-        assert "熔断" in blocked["reason"]
+        assert "只读查询仍可执行" in blocked["reason"]
 
         reset = client.post(
             "/api/trust/circuit-breaker/reset",

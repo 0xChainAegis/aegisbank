@@ -138,7 +138,7 @@ class TransferTool(BaseTool):
 
 
 class AdjustRepaymentDateArgs(BaseModel):
-    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    card_id: str = Field(min_length=3, max_length=32)
     new_day: int = Field(ge=1, le=28)
 
     @field_validator("new_day")
@@ -173,7 +173,7 @@ class AdjustRepaymentDateTool(BaseTool):
 
 
 class AdjustCardLimitArgs(BaseModel):
-    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    card_id: str = Field(min_length=3, max_length=32)
     new_limit_cny: float = Field(gt=0, le=100_000)
 
 
@@ -201,7 +201,7 @@ class AdjustCardLimitTool(BaseTool):
 
 
 class SetTransactionLimitArgs(BaseModel):
-    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    card_id: str = Field(min_length=3, max_length=32)
     daily_limit_cny: float = Field(gt=0, le=100_000)
 
 
@@ -229,7 +229,7 @@ class SetTransactionLimitTool(BaseTool):
 
 
 class CardActionArgs(BaseModel):
-    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    card_id: str = Field(min_length=3, max_length=32)
 
 
 class ReportCardLostTool(BaseTool):

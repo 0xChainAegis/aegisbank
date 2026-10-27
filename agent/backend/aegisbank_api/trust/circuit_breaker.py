@@ -1,17 +1,18 @@
 """Persisted multi-rule circuit breaker (phase-1 failures + stage-2A rules).
 
-Three rules share a single open state and a single cooldown clock:
+Each user has an independent open state and cooldown clock. The rules are:
 
 * ``consecutive_failures`` - phase-1 rule: N tool failures inside a window;
 * ``suspicious_red`` - stage-2A rule: N red-risk operations inside a window;
 * ``suspicious_injection`` - stage-2A rule: N prompt-injection hits in a window.
 
-While open, every write operation is rejected with ``status=blocked`` and a
-reason that always contains 「执行熔断已触发」, names the trigger and explains
-the recovery path. Rule events live in ``breaker_events``, created by the
-``breaker`` extension's ``SCHEMA_SQL``; when that extension is disabled the
-breaker falls back to an in-memory event buffer so the core trust layer keeps
-working in isolated test runs.
+While a user's breaker is open, that user's write operations and confirmations
+are rejected with ``status=blocked`` and a reason that always contains
+「执行熔断已触发」. Green/read-only queries are explicitly allowed through and
+must not advance or clear the open state. Rule events live in
+``breaker_events``, created by the ``breaker`` extension's ``SCHEMA_SQL``; when
+that extension is disabled the breaker falls back to an in-memory event buffer
+so the core trust layer keeps working in isolated test runs.
 
 A red operation is counted when it enters the confirmation flow. Once a tool
 actually executes (success or failure) the red attempt is considered closed:
@@ -41,6 +42,7 @@ TRIGGER_LABELS: dict[str, str] = {
 }
 
 REASON_MARKER = "执行熔断已触发"
+DEFAULT_USER_ID = "demo-user"
 _MEMORY_EVENT_LIMIT = 500
 
 
@@ -83,7 +85,7 @@ class CircuitBreaker:
         self.suspicious_red_events = max(0, int(suspicious_red_events))
         self.suspicious_injection_events = max(0, int(suspicious_injection_events))
         self.suspicious_window_seconds = max(1, int(suspicious_window_seconds))
-        self._open_trigger: str | None = None
+        self._open_triggers: dict[str, str | None] = {}
         self._memory_events: list[dict[str, Any]] = []
         self._memory_seq = 0
 
@@ -129,17 +131,19 @@ class CircuitBreaker:
             return False
         return True
 
-    def _event_rows_since(self, since_iso: str) -> list[dict[str, Any]]:
+    def _event_rows_since(
+        self, since_iso: str, *, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
         try:
             with self.db.transaction() as conn:
                 rows = conn.execute(
                     """
                     SELECT id, created_at, kind, user_id, detail_json
                     FROM breaker_events
-                    WHERE created_at >= ?
+                    WHERE created_at >= ? AND (? IS NULL OR user_id = ?)
                     ORDER BY id ASC
                     """,
-                    (since_iso,),
+                    (since_iso, user_id, user_id),
                 ).fetchall()
             return [dict(row) for row in rows]
         except sqlite3.OperationalError:
@@ -155,14 +159,15 @@ class CircuitBreaker:
                 }
                 for event in self._memory_events
                 if event["created_at"] >= since_iso
+                and (user_id is None or event["user_id"] == user_id)
             ]
 
-    def _counts(self, now: datetime) -> tuple[int, int]:
-        """Return (red_events, injection_events) inside the suspicious window."""
+    def _counts(self, now: datetime, user_id: str) -> tuple[int, int]:
+        """Return (red_events, injection_events) for one user inside the window."""
         since = window_start(now, self.suspicious_window_seconds)
         red = 0
         injection = 0
-        for row in self._event_rows_since(since):
+        for row in self._event_rows_since(since, user_id=user_id):
             kind = row["kind"]
             if kind == "reset":
                 red = 0
@@ -175,22 +180,29 @@ class CircuitBreaker:
                 injection += 1
         return red, injection
 
-    def _latest_open_trigger(self) -> str | None:
-        if self._open_trigger:
-            return self._open_trigger
+    def _state_name(self, user_id: str) -> str:
+        """Use the existing primary-key table for one persisted row per user."""
+        return f"{self.name}:{user_id or 'system'}"
+
+    def _latest_open_trigger(self, user_id: str) -> str | None:
+        if user_id in self._open_triggers:
+            return self._open_triggers[user_id]
         try:
             with self.db.transaction() as conn:
                 row = conn.execute(
                     """
                     SELECT kind, detail_json
                     FROM breaker_events
-                    WHERE kind IN ('circuit_open', 'reset')
+                    WHERE user_id = ? AND kind IN ('circuit_open', 'reset')
                     ORDER BY id DESC
                     LIMIT 1
-                    """
+                    """,
+                    (user_id,),
                 ).fetchone()
         except sqlite3.OperationalError:
             for event in reversed(self._memory_events):
+                if event["user_id"] != user_id:
+                    continue
                 if event["kind"] == "circuit_open":
                     trigger = event["detail"].get("trigger")
                     return str(trigger) if trigger else None
@@ -214,7 +226,7 @@ class CircuitBreaker:
         now: datetime,
         detail: dict[str, Any],
     ) -> None:
-        self._open_trigger = trigger
+        self._open_triggers[user_id] = trigger
         self._append_event(
             "circuit_open",
             user_id,
@@ -230,22 +242,23 @@ class CircuitBreaker:
         user_id: str,
         detail: dict[str, Any],
     ) -> None:
-        row = self.db.get_circuit_breaker(self.name)
+        state_name = self._state_name(user_id)
+        row = self.db.get_circuit_breaker(state_name)
         failures = int(row["failures"]) if row else 0
         last_failure_at = row["last_failure_at"] if row else None
         self.db.save_circuit_breaker(
-            name=self.name,
+            name=state_name,
             failures=failures,
             last_failure_at=last_failure_at,
             opened_at=now.isoformat(timespec="seconds"),
         )
         self._mark_open(trigger, user_id, now, detail)
 
-    def _clear_red_flow(self, now: datetime, *, reason: str) -> None:
-        red, _ = self._counts(now)
+    def _clear_red_flow(self, now: datetime, *, user_id: str, reason: str) -> None:
+        red, _ = self._counts(now, user_id)
         if red > 0:
             self._append_event(
-                "red_cleared", "system", {"reason": reason, "red_events": red}, now
+                "red_cleared", user_id, {"reason": reason, "red_events": red}, now
             )
 
     def _reset_state(
@@ -256,12 +269,13 @@ class CircuitBreaker:
         user_id: str,
         record_event: bool = True,
     ) -> None:
-        row = self.db.get_circuit_breaker(self.name)
+        state_name = self._state_name(user_id)
+        row = self.db.get_circuit_breaker(state_name)
         failures = int(row["failures"]) if row else 0
         opened_at = row["opened_at"] if row else None
-        red, injection = self._counts(now)
-        self.db.reset_circuit_breaker(self.name)
-        self._open_trigger = None
+        red, injection = self._counts(now, user_id)
+        self.db.reset_circuit_breaker(state_name)
+        self._open_triggers[user_id] = None
         if record_event and (failures or opened_at or red or injection):
             self._append_event(
                 "reset",
@@ -276,9 +290,11 @@ class CircuitBreaker:
             )
 
     # ---------- read model ----------
-    def status(self, *, now: datetime | None = None) -> dict[str, Any]:
+    def status(
+        self, *, user_id: str = DEFAULT_USER_ID, now: datetime | None = None
+    ) -> dict[str, Any]:
         current = _as_utc(now or datetime.now(UTC))
-        row = self.db.get_circuit_breaker(self.name)
+        row = self.db.get_circuit_breaker(self._state_name(user_id))
         failures = int(row["failures"]) if row else 0
         opened_at = _parse(row["opened_at"]) if row else None
         cooled_down = False
@@ -287,15 +303,19 @@ class CircuitBreaker:
             and (current - opened_at).total_seconds() >= self.lock_seconds
         ):
             self._reset_state(
-                now=current, reason="lock_expired", user_id="system", record_event=True
+                now=current, reason="lock_expired", user_id=user_id, record_event=True
             )
             row = None
             failures = 0
             opened_at = None
             cooled_down = True
-        red, injection = self._counts(current)
+        red, injection = self._counts(current, user_id)
         payload: dict[str, Any] = {
             "name": self.name,
+            "scope": "user",
+            "user_id": user_id,
+            "read_only_bypass": True,
+            "blocks": ["write", "confirmation"],
             "open": opened_at is not None,
             "trigger": None,
             "trigger_label": None,
@@ -318,7 +338,7 @@ class CircuitBreaker:
         }
         if opened_at is None:
             return payload
-        trigger = self._resolve_trigger(failures, red, injection)
+        trigger = self._resolve_trigger(failures, red, injection, user_id)
         payload["trigger"] = trigger
         payload["trigger_label"] = TRIGGER_LABELS.get(trigger, trigger)
         payload["retry_after_seconds"] = max(
@@ -327,8 +347,10 @@ class CircuitBreaker:
         payload["reason"] = self.reason(payload)
         return payload
 
-    def _resolve_trigger(self, failures: int, red: int, injection: int) -> str:
-        stored = self._latest_open_trigger()
+    def _resolve_trigger(
+        self, failures: int, red: int, injection: int, user_id: str
+    ) -> str:
+        stored = self._latest_open_trigger(user_id)
         if stored in TRIGGER_LABELS:
             return stored
         if failures >= self.threshold:
@@ -342,14 +364,21 @@ class CircuitBreaker:
             return TRIGGER_INJECTION
         return TRIGGER_FAILURES
 
-    def is_open(self, *, now: datetime | None = None) -> bool:
-        return bool(self.status(now=now)["open"])
+    def is_open(
+        self, *, user_id: str = DEFAULT_USER_ID, now: datetime | None = None
+    ) -> bool:
+        return bool(self.status(user_id=user_id, now=now)["open"])
 
     def policy(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "mode": "fail_closed",
-            "shared_open_state": True,
+            # Kept for compatibility: the state is no longer shared across users.
+            "shared_open_state": False,
+            "per_user": True,
+            "scope": "user",
+            "read_only_bypass": True,
+            "blocks": ["write", "confirmation"],
             "lock_seconds": self.lock_seconds,
             "reason_marker": REASON_MARKER,
             "thresholds": {
@@ -370,10 +399,12 @@ class CircuitBreaker:
                 },
             },
             "rules": [
-                "连续失败：窗口内工具执行失败达到阈值后锁定写操作。",
-                "短时多次红色操作：窗口内红色风险操作达到阈值后锁定；green/yellow 忽略。",
-                "注入命中累计：窗口内 Prompt 注入或越权指令命中达到阈值后锁定。",
-                "三类规则共用同一 open 状态与冷却时间，任一规则触发即整体 fail closed。",
+                "连续失败：窗口内工具执行失败达到阈值后，仅锁定该用户的写操作。",
+                "短时多次红色操作：窗口内红色风险操作达到阈值后锁定该用户的写操作；"
+                "green/yellow 忽略。",
+                "注入命中累计：窗口内 Prompt 注入或越权指令命中达到阈值后锁定该用户的写操作。",
+                "每个用户独享 open 状态与冷却时间；green/read-only 查询始终放行，"
+                "不触发、不清除熔断。",
             ],
             "recovery": {
                 "auto": f"{self.lock_seconds} 秒锁定到期后自动冷却并清零计数。",
@@ -385,7 +416,9 @@ class CircuitBreaker:
             },
         }
 
-    def recent_events(self, limit: int = 50) -> list[dict[str, Any]]:
+    def recent_events(
+        self, limit: int = 50, *, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 200))
         try:
             with self.db.transaction() as conn:
@@ -393,10 +426,11 @@ class CircuitBreaker:
                     """
                     SELECT id, created_at, kind, user_id, detail_json
                     FROM breaker_events
+                    WHERE (? IS NULL OR user_id = ?)
                     ORDER BY id DESC
                     LIMIT ?
                     """,
-                    (limit,),
+                    (user_id, user_id, limit),
                 ).fetchall()
             items = [dict(row) for row in rows]
         except sqlite3.OperationalError:
@@ -410,8 +444,9 @@ class CircuitBreaker:
                         event["detail"], ensure_ascii=False, sort_keys=True
                     ),
                 }
-                for event in reversed(self._memory_events[-limit:])
-            ]
+                for event in reversed(self._memory_events)
+                if user_id is None or event["user_id"] == user_id
+            ][:limit]
         events: list[dict[str, Any]] = []
         for item in items:
             try:
@@ -430,9 +465,12 @@ class CircuitBreaker:
         return events
 
     # ---------- recording ----------
-    def record_failure(self, *, now: datetime | None = None) -> dict[str, Any]:
+    def record_failure(
+        self, *, user_id: str = DEFAULT_USER_ID, now: datetime | None = None
+    ) -> dict[str, Any]:
         current = _as_utc(now or datetime.now(UTC))
-        row = self.db.get_circuit_breaker(self.name)
+        state_name = self._state_name(user_id)
+        row = self.db.get_circuit_breaker(state_name)
         failures = int(row["failures"]) if row else 0
         last_failure = _parse(row["last_failure_at"]) if row else None
         if (
@@ -445,40 +483,48 @@ class CircuitBreaker:
         if failures >= self.threshold:
             opened_at = current.isoformat(timespec="seconds")
         self.db.save_circuit_breaker(
-            name=self.name,
+            name=state_name,
             failures=failures,
             last_failure_at=current.isoformat(timespec="seconds"),
             opened_at=opened_at,
         )
         self._append_event(
-            "consecutive_failure", "system", {"failures": failures}, current
+            "consecutive_failure", user_id, {"failures": failures}, current
         )
-        self._clear_red_flow(current, reason="tool_executed")
+        self._clear_red_flow(current, user_id=user_id, reason="tool_executed")
         if opened_at is not None:
             self._mark_open(
-                TRIGGER_FAILURES, "system", current, {"failures": failures}
+                TRIGGER_FAILURES, user_id, current, {"failures": failures}
             )
-        return self.status(now=current)
+        return self.status(user_id=user_id, now=current)
 
-    def record_success(self, *, now: datetime | None = None) -> dict[str, Any]:
+    def record_success(
+        self,
+        *,
+        user_id: str = DEFAULT_USER_ID,
+        read_only: bool = False,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
         current = _as_utc(now or datetime.now(UTC))
-        self._reset_state(
-            now=current, reason="tool_execution_success", user_id="system"
-        )
-        return self.status(now=current)
+        # A successful read-only bypass must not clear a write-operation breaker.
+        if not read_only:
+            self._reset_state(
+                now=current, reason="tool_execution_success", user_id=user_id
+            )
+        return self.status(user_id=user_id, now=current)
 
     def record_risk_level(
         self, *, user_id: str, level: str, now: datetime | None = None
     ) -> dict[str, Any]:
-        """Count red operations in a sliding window (green/yellow are ignored)."""
+        """Count red write operations in a sliding window (green/yellow are ignored)."""
         current = _as_utc(now or datetime.now(UTC))
         normalized = str(getattr(level, "value", level) or "").strip().lower()
         if normalized != "red":
-            return self.status(now=current)
-        if self.is_open(now=current):
-            return self.status(now=current)
+            return self.status(user_id=user_id, now=current)
+        if self.is_open(user_id=user_id, now=current):
+            return self.status(user_id=user_id, now=current)
         self._append_event("red_operation", user_id, {"level": "red"}, current)
-        red, _ = self._counts(current)
+        red, _ = self._counts(current, user_id)
         if self.suspicious_red_events > 0 and red >= self.suspicious_red_events:
             self._save_open(
                 now=current,
@@ -490,17 +536,17 @@ class CircuitBreaker:
                     "window_seconds": self.suspicious_window_seconds,
                 },
             )
-        return self.status(now=current)
+        return self.status(user_id=user_id, now=current)
 
     def record_injection(
         self, *, user_id: str, now: datetime | None = None
     ) -> dict[str, Any]:
-        """Accumulate injection hits in a sliding window."""
+        """Accumulate injection hits in a sliding window for one user."""
         current = _as_utc(now or datetime.now(UTC))
-        if self.is_open(now=current):
-            return self.status(now=current)
+        if self.is_open(user_id=user_id, now=current):
+            return self.status(user_id=user_id, now=current)
         self._append_event("injection_hit", user_id, {}, current)
-        _, injection = self._counts(current)
+        _, injection = self._counts(current, user_id)
         if (
             self.suspicious_injection_events > 0
             and injection >= self.suspicious_injection_events
@@ -515,12 +561,12 @@ class CircuitBreaker:
                     "window_seconds": self.suspicious_window_seconds,
                 },
             )
-        return self.status(now=current)
+        return self.status(user_id=user_id, now=current)
 
     def reset(
         self,
         *,
-        user_id: str = "system",
+        user_id: str = DEFAULT_USER_ID,
         reason: str = "manual_reset",
         now: datetime | None = None,
     ) -> dict[str, Any]:
@@ -528,7 +574,7 @@ class CircuitBreaker:
         self._reset_state(
             now=current, reason=reason, user_id=user_id, record_event=True
         )
-        return self.status(now=current)
+        return self.status(user_id=user_id, now=current)
 
     # ---------- presentation ----------
     @staticmethod
@@ -547,7 +593,8 @@ class CircuitBreaker:
                 f"（阈值 {suspicious.get('red_threshold', 0)}）"
             )
             return (
-                f"{REASON_MARKER}：检测到可疑行为——{source}，写操作已拒绝。"
+                f"{REASON_MARKER}：检测到可疑行为——{source}。"
+                f"只读查询仍可执行，仅写操作与确认已拒绝。"
                 f"触发来源：短时多次红色操作规则；恢复方式：{recovery}"
             )
         if trigger == TRIGGER_INJECTION:
@@ -557,13 +604,15 @@ class CircuitBreaker:
                 f"（阈值 {suspicious.get('injection_threshold', 0)}）"
             )
             return (
-                f"{REASON_MARKER}：检测到可疑行为——{source}，写操作已拒绝。"
+                f"{REASON_MARKER}：检测到可疑行为——{source}。"
+                f"只读查询仍可执行，仅写操作与确认已拒绝。"
                 f"触发来源：注入命中累计规则；恢复方式：{recovery}"
             )
         return (
             f"{REASON_MARKER}：连续失败 {status['failures']} 次"
             f"（阈值 {status['threshold']}，窗口 {status['window_seconds']} 秒），"
-            f"写操作已拒绝。触发来源：连续失败规则；恢复方式：{recovery}"
+            f"只读查询仍可执行，仅写操作与确认已拒绝。"
+            f"触发来源：连续失败规则；恢复方式：{recovery}"
         )
 
     @staticmethod

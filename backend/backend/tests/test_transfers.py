@@ -218,3 +218,21 @@ def test_add_contact_then_ambiguous_name_requires_clarification(tmp_path):
             },
         )
         assert invalid.status_code == 400
+
+def test_spoken_kin_aliases_resolve_seeded_mother(tmp_path):
+    with make_client(tmp_path) as client:
+        for instruction in ("给我妈转200", "给我老妈转200", "给我母亲转200"):
+            body = run_agent(client, instruction)
+            assert body["status"] == "awaiting_confirmation", (instruction, body)
+            step = body["plan"]["steps"][0]
+            assert step["tool_name"] == "transfer_to_contact"
+            assert step["arguments"]["to_name"] == "妈妈"
+            assert step["arguments"]["amount_cny"] == 200.0
+
+
+def test_unknown_kin_alias_is_not_guessed(tmp_path):
+    with make_client(tmp_path) as client:
+        body = run_agent(client, "给我舅舅转200")
+        assert body["status"] == "needs_clarification"
+        assert "舅舅" in (body.get("reason") or "")
+        assert body["plan"]["steps"] == []

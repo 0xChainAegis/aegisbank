@@ -81,7 +81,7 @@ def test_apply_virtual_card_is_two_step_dag_and_issues_real_card(tmp_path):
 
 def test_reset_card_password_red_with_otp_and_audit_has_no_plaintext(tmp_path):
     with make_client(tmp_path) as client:
-        body = run_agent(client, instruction="修改卡片密码")
+        body = run_agent(client, instruction="修改卡片密码 CARD-8821")
         assert body["status"] == "awaiting_confirmation"
         assert body["risk_level"] == "red"
         assert body["confirmation"]["requires_reauth"] is True
@@ -130,7 +130,7 @@ def test_unlock_transaction_limit_is_red_and_restores_default(tmp_path):
         assert setup_done.status_code == 200, setup_done.text
         assert overview_card(client, "CARD-8821")["transaction_limit_cny"] == 2000.0
 
-        body = run_agent(client, instruction="解锁交易限额")
+        body = run_agent(client, instruction="解锁交易限额 CARD-8821")
         assert body["status"] == "awaiting_confirmation"
         assert body["risk_level"] == "red"
         assert body["confirmation"]["requires_reauth"] is True
@@ -152,7 +152,7 @@ def test_unlock_transaction_limit_is_red_and_restores_default(tmp_path):
 
 def test_unlock_transaction_limit_high_target_escalates_to_red(tmp_path):
     with make_client(tmp_path) as client:
-        body = run_agent(client, instruction="把交易限额恢复到 8000 元")
+        body = run_agent(client, instruction="把 CARD-8821 的交易限额恢复到 8000 元")
         assert body["status"] == "awaiting_confirmation"
         assert body["risk_level"] == "red"
         assert body["confirmation"]["requires_reauth"] is True
@@ -229,7 +229,9 @@ def test_card_intents_route_natural_language_without_hijacking_core(tmp_path):
         assert password["plan"]["steps"][0]["arguments"]["card_id"] == "CARD-9902"
         assert password["risk_level"] == "red"
 
-        credit_limit = run_agent(client, instruction="把信用卡额度调整到 8000 元")
+        credit_limit = run_agent(
+            client, instruction="把 CARD-8821 的信用卡额度调整到 8000 元"
+        )
         assert credit_limit["plan"]["steps"][0]["tool_name"] == "adjust_card_limit"
         assert credit_limit["risk_level"] == "red"
 
@@ -248,3 +250,31 @@ def test_password_intent_tolerates_card_id_between_verb_and_noun(tmp_path):
             ], phrase
             assert body["risk_level"] == "red", phrase
             assert body["confirmation"]["requires_reauth"] is True, phrase
+
+def test_masked_card_suffix_resolves_exact_card_and_never_falls_back(tmp_path):
+    with make_client(tmp_path) as client:
+        body = run_agent(client, instruction="我那张尾号9902的卡挂失")
+        assert body["status"] == "awaiting_confirmation", body
+        assert body["risk_level"] == "red"
+        step = body["plan"]["steps"][0]
+        assert step["tool_name"] == "report_card_lost"
+        assert step["arguments"] == {"card_id": "CARD-9902"}
+        assert "CARD-8821" not in json.dumps(body["plan"], ensure_ascii=False)
+
+
+def test_card_specific_write_without_card_asks_and_lists_candidates(tmp_path):
+    with make_client(tmp_path) as client:
+        for instruction in ("挂失我的卡", "挂失尾号0000的卡", "修改卡片密码"):
+            body = run_agent(client, instruction=instruction)
+            assert body["status"] == "needs_clarification", (instruction, body)
+            assert body["plan"]["steps"] == []
+            reason = body.get("reason") or ""
+            assert "CARD-8821" in reason, (instruction, reason)
+            assert "CARD-9902" in reason, (instruction, reason)
+
+def test_card_password_intent_resolves_masked_suffix(tmp_path):
+    with make_client(tmp_path) as client:
+        body = run_agent(client, instruction="修改尾号9902的密码")
+        assert body["status"] == "awaiting_confirmation", body
+        assert body["risk_level"] == "red"
+        assert body["plan"]["steps"][0]["arguments"] == {"card_id": "CARD-9902"}
