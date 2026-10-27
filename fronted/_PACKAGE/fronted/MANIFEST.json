@@ -17,8 +17,8 @@
       "group": "fronted",
       "path": "frontend/index.html",
       "runtime_path": "frontend/index.html",
-      "bytes": 506,
-      "sha256": "3b081a9a86d58df220a7be17eefb2c8b1eabe00338cfd735c6f747ad159fd860"
+      "bytes": 541,
+      "sha256": "effc8420ebca167169aa37446d1670bfe71b5300be4c404529bc284da094c54c"
     },
     {
       "group": "fronted",
@@ -45,8 +45,8 @@
       "group": "fronted",
       "path": "frontend/src/App.tsx",
       "runtime_path": "frontend/src/App.tsx",
-      "bytes": 34144,
-      "sha256": "d005eeda0f97179f3ea7a7cac7ee3c2fc6ae30e52e74298e09d4168d153035e8"
+      "bytes": 35003,
+      "sha256": "0f68dfffd4b11c090173110a935a835c74fb7be04ffb1d92ed26f3e0da5d9a34"
     },
     {
       "group": "fronted",
@@ -73,8 +73,8 @@
       "group": "fronted",
       "path": "frontend/src/components/BankOverviewPage.tsx",
       "runtime_path": "frontend/src/components/BankOverviewPage.tsx",
-      "bytes": 9869,
-      "sha256": "530b08e3a1071fc9825b8889dc18d5ed370acb0d90fe0e3ad69e3ffd104ce500"
+      "bytes": 11608,
+      "sha256": "17e0ab33409f51ef0ea65dfd9f93a99456740c6b914c916329150005ac1c1761"
     },
     {
       "group": "fronted",
@@ -94,8 +94,8 @@
       "group": "fronted",
       "path": "frontend/src/components/BusinessReceipt.tsx",
       "runtime_path": "frontend/src/components/BusinessReceipt.tsx",
-      "bytes": 1637,
-      "sha256": "69e305311349e65637510a46630d276b3eaa22cf82a27c57291e254594656985"
+      "bytes": 4706,
+      "sha256": "abb461ede4c839bb8992993e98d62a879c63ecb99173a4eed15a04863f43afd7"
     },
     {
       "group": "fronted",
@@ -108,8 +108,8 @@
       "group": "fronted",
       "path": "frontend/src/components/ConfirmationModal.tsx",
       "runtime_path": "frontend/src/components/ConfirmationModal.tsx",
-      "bytes": 14326,
-      "sha256": "23a35944f113ad017609f6c843cc41ad4a15d756c5fd0b6eb2cfe9634952c320"
+      "bytes": 15082,
+      "sha256": "2a39d7905912facabb9e0335d0b534a8515946ca8ee87c75077bfaaad4a7bdbc"
     },
     {
       "group": "fronted",
@@ -157,8 +157,8 @@
       "group": "fronted",
       "path": "frontend/src/components/TaskConsolePage.tsx",
       "runtime_path": "frontend/src/components/TaskConsolePage.tsx",
-      "bytes": 35870,
-      "sha256": "72117615092993d4c550f343f7da1de7308f72c5cbab18e6a1755f15e1989f75"
+      "bytes": 35592,
+      "sha256": "2d6116f83d02a32fb77268e1299b12ea5b21398e86746e56071972f8604a5a96"
     },
     {
       "group": "fronted",
@@ -171,15 +171,15 @@
       "group": "fronted",
       "path": "frontend/src/components/businessPages.test.tsx",
       "runtime_path": "frontend/src/components/businessPages.test.tsx",
-      "bytes": 12175,
-      "sha256": "d7f2c596a4590b0eb0487c73a62616814eec87d8f49f6741ae8f7fe8eb131cf4"
+      "bytes": 14626,
+      "sha256": "8a53f09c1dd968569f028abba398c4a36eb602294e7c5c26195c7562515bda00"
     },
     {
       "group": "fronted",
       "path": "frontend/src/components/trialReceipt.test.tsx",
       "runtime_path": "frontend/src/components/trialReceipt.test.tsx",
-      "bytes": 2200,
-      "sha256": "bf76ae00b771e324ab9471bb0617166d6be89049a303cad5ec4aceaced2db089"
+      "bytes": 6773,
+      "sha256": "3e97d0056780e361ca6ecdd121a36358a66e5683735940f1ae975b247bf87e22"
     },
     {
       "group": "fronted",
@@ -187,6 +187,13 @@
       "runtime_path": "frontend/src/components/ui.tsx",
       "bytes": 4120,
       "sha256": "71ad0fb3f67219922c23ef84dba2005c7579a36d3c5fce4759349888f2181ed7"
+    },
+    {
+      "group": "fronted",
+      "path": "frontend/src/confirmationProduct.test.tsx",
+      "runtime_path": "frontend/src/confirmationProduct.test.tsx",
+      "bytes": 7929,
+      "sha256": "a24be33ecd81f2d9118f097b7d74420d0f4889bc48230b743ffbf53c0004a908"
     },
     {
       "group": "fronted",
@@ -206,8 +213,8 @@
       "group": "fronted",
       "path": "frontend/src/main.tsx",
       "runtime_path": "frontend/src/main.tsx",
-      "bytes": 357,
-      "sha256": "e29929f317edf670cb389bbeb87fc05e8cb72dbe3efeab63842b0ffa1f051f21"
+      "bytes": 388,
+      "sha256": "c885d35a3a2d04b3b61e1650d604d2fe6b210c83aef9d569a166570997016258"
     },
     {
       "group": "fronted",
@@ -234,8 +241,8 @@
       "group": "fronted",
       "path": "frontend/src/security.test.tsx",
       "runtime_path": "frontend/src/security.test.tsx",
-      "bytes": 14758,
-      "sha256": "6740365ce796558b7029427af5cfea948bb98978a6ac88baca2387a6af17b633"
+      "bytes": 16536,
+      "sha256": "b63d51226f9071dee62c2a0db658a62fc52ae330ddb6544176fb1cad933d80e9"
     },
     {
       "group": "fronted",
@@ -250,6 +257,13 @@
       "runtime_path": "frontend/src/session.ts",
       "bytes": 6125,
       "sha256": "0a66d329b74bb31aa926e536298974c0296c8eefa43b5a6bc6b8e504b03ae04a"
+    },
+    {
+      "group": "fronted",
+      "path": "frontend/src/styles-product.css",
+      "runtime_path": "frontend/src/styles-product.css",
+      "bytes": 20148,
+      "sha256": "c27307532db69dc8cbed1c57267246872674c392ac0ead1cb4e6300dcb3e55ce"
     },
     {
       "group": "fronted",
@@ -290,22 +304,22 @@
       "group": "fronted",
       "path": "frontend/src/useHashRoute.ts",
       "runtime_path": "frontend/src/useHashRoute.ts",
-      "bytes": 2668,
-      "sha256": "b2780dd928a2a34ecf1897fb498fc732ee56ce91f2c8c3052f53b5901d5e1fce"
+      "bytes": 2671,
+      "sha256": "b6f10a7ffd3a1aadf94369e0175a6fd5db1d7408343edeb285d631db591be7cf"
     },
     {
       "group": "fronted",
       "path": "frontend/src/viewModel.test.ts",
       "runtime_path": "frontend/src/viewModel.test.ts",
-      "bytes": 12479,
-      "sha256": "29a91fc6de573ae72f8b7fd380686e6ee090b560d221dfb7516c1e7c46a5bce9"
+      "bytes": 12574,
+      "sha256": "66e544d18c32ec93a818fbe218e6688d4b24d52ee1e7798ca910fe79af2a8a75"
     },
     {
       "group": "fronted",
       "path": "frontend/src/viewModel.ts",
       "runtime_path": "frontend/src/viewModel.ts",
-      "bytes": 30349,
-      "sha256": "fb512f3bf089997298fe2b070739f201852c712cf15d316ea03a6f0da0d1d439"
+      "bytes": 31325,
+      "sha256": "34f4a6c5be3d8db6fe980209cb7a1627be262fd1f9b9d1e9f7b96f0097c4630b"
     },
     {
       "group": "fronted",

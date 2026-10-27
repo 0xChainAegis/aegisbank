@@ -247,6 +247,7 @@ interface Props {
   tools: ToolMetadata[];
   toolsLoading: boolean;
   instruction: string;
+  lastInstruction?: string;
   setInstruction: (value: string) => void;
   lastRun: RunResponse | null;
   busy: boolean;
@@ -273,6 +274,7 @@ export default function TaskConsolePage({
   tools,
   toolsLoading,
   instruction,
+  lastInstruction = '',
   setInstruction,
   lastRun,
   busy,
@@ -340,6 +342,14 @@ export default function TaskConsolePage({
       ? { clarification_run_id: lastRun.run_id } : {}) });
   }
 
+  function prepare(action: ScenarioAction) {
+    if (busy || taskBlocked) return;
+    setFollowUp(false);
+    setInstruction(action.instruction);
+    setQuickNotice('示例已填入，请检查内容后提交。');
+    document.getElementById('instruction')?.focus();
+  }
+
   function trigger(action: ScenarioAction) {
     setFollowUp(false);
     if (busy || taskBlocked) return;
@@ -358,7 +368,7 @@ export default function TaskConsolePage({
     lastQuickInstructionRef.current = action.instruction;
     if (!canAutoRun) {
       // 不静默覆盖用户已输入的内容（UX-08）：只填入，等用户自己提交。
-      setQuickNotice(`已填入「${action.title}」指令。确认内容后点击「交给 Agent」执行。`);
+      setQuickNotice(`已填入「${action.title}」指令。确认内容后点击「提交任务」执行。`);
       return;
     }
     setQuickNotice('');
@@ -370,49 +380,18 @@ export default function TaskConsolePage({
   }
 
   return (
-    <section className="page-grid console-grid">
-      <div className="hero card">
-        <div>
-          <span className="eyebrow">AGENTIC BANKING · CONTROL PLANE</span>
-          <h1>让每一次金融操作，都经过信任闸门。</h1>
-          <p>
-            AegisBank 将意图规划、权限校验、动态风险分级与操作审计串成一条可追溯链路。
-            绿色直接执行，黄色轻量确认，红色执行 MFA（OTP / 模拟生物识别）二次校验。
-          </p>
-        </div>
-        <div className="hero-orbit" aria-hidden="true">
-          <span className="orbit-ring ring-one" />
-          <span className="orbit-ring ring-two" />
-          <span className="orbit-core">A</span>
-          <span className="orbit-label orbit-top">IDENTITY</span>
-          <span className="orbit-label orbit-right">POLICY</span>
-          <span className="orbit-label orbit-bottom">AUDIT</span>
-        </div>
-      </div>
-
-      <div className="metrics-row">
-        <div className="metric card">
-          <span>动态风险策略</span>
-          <strong>3 级</strong>
-          <small>GREEN / YELLOW / RED</small>
-        </div>
-        <div className="metric card">
-          <span>已注册工具</span>
-          <strong>{tools.length}</strong>
-          <small>{toolsLoading ? '正在同步权限' : `${tools.filter((tool) => tool.granted).length} 项已授权`}</small>
-        </div>
-        <div className="metric card">
-          <span>跨场景编排</span>
-          <strong>DAG</strong>
-          <small>依赖 / 风险 / 审计统一编排</small>
-        </div>
-      </div>
+    <section className="page-grid console-grid assistant-workspace">
+      <header className="assistant-intro">
+        <span className="eyebrow">银行助手</span>
+        <h1>今天想办理什么？</h1>
+        <p>查账单、准备转账或管理卡片。涉及资金与账户变更时，请核对后确认。</p>
+      </header>
 
       <div className="card command-card">
         <div className="section-head">
           <div>
-            <span className="eyebrow">INTENT CONSOLE</span>
-            <h2>发起一项任务</h2>
+            <span className="eyebrow">描述你的需求</span>
+            <h2>输入需求</h2>
           </div>
           <button className="text-button" onClick={onRefresh} disabled={busy || toolsLoading}>
             {toolsLoading ? '同步中…' : '刷新工具状态'}
@@ -420,12 +399,12 @@ export default function TaskConsolePage({
         </div>
 
         <div className="demo-path" aria-label="演示路径">
-          <span className="eyebrow">演示路径</span>
+          <span className="eyebrow">试一个例子</span>
           {demoActions.map((action, index) => (
             <button
               key={action.id}
               className="demo-step"
-              onClick={() => trigger(action)}
+              onClick={() => prepare(action)}
               disabled={busy || taskBlocked}
               title={action.hint}
             >
@@ -433,16 +412,12 @@ export default function TaskConsolePage({
               {action.id === 'transfer-small' ? '小额转账 ¥880' : action.title}
             </button>
           ))}
-          <button className="demo-step" onClick={onNavigateAudit} disabled={busy}>
-            <span>4</span>
-            查看审计与哈希链
-          </button>
         </div>
 
         {taskBlocked && (
           <div className="alert alert-warn command-blocked" role="alert">
             {taskBlockText}
-            {writesBlocked ? ' 系统恢复 ready 后才能提交任务或执行确认。' : ' 请切换到 user 角色后重试。'}
+            {writesBlocked ? ' 服务就绪后才能提交任务或执行确认。' : ' 请切换到普通用户演示角色后重试。'}
           </div>
         )}
 
@@ -458,14 +433,14 @@ export default function TaskConsolePage({
               setQuickNotice('');
             }}
             rows={3}
-            placeholder="例如：分析我的账单并取消异常订阅"
+            placeholder="例如：分析我的本月账单"
           />
           <button
             className="primary-button"
             type="submit"
             disabled={busy || taskBlocked || !instruction.trim()}
           >
-            {busy ? '处理中…' : '交给 Agent'}
+            {busy ? '处理中…' : '提交任务'}
             <span aria-hidden="true">↗</span>
           </button>
         </form>
@@ -492,80 +467,17 @@ export default function TaskConsolePage({
           </div>
         )}
 
-        <div className="scenario-heading">
-          <div>
-            <span className="eyebrow">SCENARIO LAUNCHPAD</span>
-            <h3>快捷操作（携带演示参数）</h3>
-          </div>
-          <span className="muted">快捷入口会携带演示参数，仍全部经过权限网关与风险引擎</span>
-        </div>
-
-        <div className="scenario-grid">
-          {scenarioGroups.map((group) => (
-            <article className="scenario-card" key={group.id}>
-              <div className="scenario-title">
-                <span>{group.index}</span>
-                <div>
-                  <strong>{group.title}</strong>
-                  <small>{group.caption}</small>
-                </div>
-              </div>
-              <div className="scenario-actions">
-                {group.actions.map((action) => {
-                  const available = action.requiredTools.every((name) => toolNames.has(name));
-                  const actionRisk: RiskLevel = actionRiskMap[action.id] ?? 'green';
-                  return (
-                    <button
-                      className="scenario-action"
-                      key={action.id}
-                      onClick={() => trigger(action)}
-                      disabled={busy || taskBlocked || !available}
-                      title={
-                        taskBlocked
-                          ? taskBlockText
-                          : available
-                            ? action.hint
-                            : `缺少工具：${action.requiredTools.join(', ')}`
-                      }
-                    >
-                      <span className="scenario-action-head">
-                        <strong>{action.title}</strong>
-                        <RiskBadge risk={actionRisk} />
-                      </span>
-                      <small>
-                        {taskBlocked
-                          ? !canExecute
-                            ? roleBlockReason
-                            : '系统未就绪，写操作已禁用'
-                          : available
-                            ? action.description
-                            : '后端尚未注册该工具'}
-                      </small>
-                      <span className="scenario-hint">{action.hint}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <div className="rule-strip">
-          <span><i className="rule-dot dot-green" />查询：GREEN</span>
-          <span><i className="rule-dot dot-yellow" />转账 ≤ ¥5,000 且今日累计 ≤ ¥1,000：YELLOW</span>
-          <span><i className="rule-dot dot-red" />转账 &gt; ¥5,000 或今日累计 &gt; ¥1,000：RED</span>
-          <span><i className="rule-dot dot-red" />额度 &gt; ¥5,000 / 挂失 / 解挂：RED</span>
-        </div>
       </div>
 
       <PageAlerts error={error} notice={notice} />
 
       {lastRun && (
         <div className="card result-card" ref={resultRef}>
+          {lastInstruction && <div className="submitted-request"><span>你的请求</span><p>{lastInstruction}</p></div>}
           <div className="section-head">
             <div>
-              <span className="eyebrow">RUN RESULT</span>
-              <h2>执行回执</h2>
+              <span className="eyebrow">本次处理</span>
+              <h2>处理结果</h2>
             </div>
             <div className="result-tags">
               <RiskBadge risk={overallRisk} verbose />
@@ -908,6 +820,87 @@ export default function TaskConsolePage({
         </div>
       )}
 
+      <details className="card scenario-library">
+        <summary>更多业务示例 <span>六类场景，展开选择</span></summary>
+        <p className="muted">这些入口使用固定演示参数。修改类操作仍由服务端评估并要求确认。</p>
+        <div className="scenario-grid">
+          {scenarioGroups.map((group) => (
+            <article className="scenario-card" key={group.id}>
+              <div className="scenario-title">
+                <span>{group.index}</span>
+                <div>
+                  <strong>{group.title}</strong>
+                  <small>{group.caption}</small>
+                </div>
+              </div>
+              <div className="scenario-actions">
+                {group.actions.map((action) => {
+                  const available = action.requiredTools.every((name) => toolNames.has(name));
+                  const actionRisk: RiskLevel = actionRiskMap[action.id] ?? 'green';
+                  return (
+                    <button
+                      className="scenario-action"
+                      key={action.id}
+                      onClick={() => trigger(action)}
+                      disabled={busy || taskBlocked || !available}
+                      title={
+                        taskBlocked
+                          ? taskBlockText
+                          : available
+                            ? action.hint
+                            : `缺少工具：${action.requiredTools.join(', ')}`
+                      }
+                    >
+                      <span className="scenario-action-head">
+                        <strong>{action.title}</strong>
+                        <RiskBadge risk={actionRisk} />
+                      </span>
+                      <small>
+                        {taskBlocked
+                          ? !canExecute
+                            ? roleBlockReason
+                            : '系统未就绪，写操作已禁用'
+                          : available
+                            ? action.description
+                            : '后端尚未注册该工具'}
+                      </small>
+                      <span className="scenario-hint">{action.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="rule-strip">
+          <span><i className="rule-dot dot-green" />查询：GREEN</span>
+          <span><i className="rule-dot dot-yellow" />转账 ≤ ¥5,000 且今日累计 ≤ ¥1,000：YELLOW</span>
+          <span><i className="rule-dot dot-red" />转账 &gt; ¥5,000 或今日累计 &gt; ¥1,000：RED</span>
+          <span><i className="rule-dot dot-red" />额度 &gt; ¥5,000 / 挂失 / 解挂：RED</span>
+        </div>
+      </details>
+
+      <details className="card system-details">
+        <summary>处理方式与技术信息</summary>
+      <div className="metrics-row">
+        <div className="metric card">
+          <span>动态风险策略</span>
+          <strong>3 级</strong>
+          <small>GREEN / YELLOW / RED</small>
+        </div>
+        <div className="metric card">
+          <span>已注册工具</span>
+          <strong>{tools.length}</strong>
+          <small>{toolsLoading ? '正在同步权限' : `${tools.filter((tool) => tool.granted).length} 项已授权`}</small>
+        </div>
+        <div className="metric card">
+          <span>跨场景编排</span>
+          <strong>DAG</strong>
+          <small>依赖 / 风险 / 审计统一编排</small>
+        </div>
+      </div>
+
       <div className="card flow-card">
         <div className="section-head">
           <div>
@@ -922,6 +915,7 @@ export default function TaskConsolePage({
           <li><span>04</span><strong>哈希审计</strong><small>SHA-256 哈希链留痕</small></li>
         </ol>
       </div>
+      </details>
     </section>
   );
 }

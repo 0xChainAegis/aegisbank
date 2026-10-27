@@ -28,7 +28,6 @@ import PermissionsPage from './components/PermissionsPage';
 import ReadinessBanner from './components/ReadinessBanner';
 import ScenariosPage from './components/ScenariosPage';
 import TaskConsolePage from './components/TaskConsolePage';
-import TrialGuide from './components/TrialGuide';
 import type { AegisRole } from './roles';
 import {
   AEGIS_ROLES,
@@ -73,13 +72,13 @@ import { useHashRoute, type Page } from './useHashRoute';
 import { readinessBlockers } from './viewModel';
 
 const navigation: Array<{ id: Page; index: string; label: string; hint: string }> = [
-  { id: 'overview', index: '01', label: '银行概览', hint: '账户与订阅' },
-  { id: 'scenarios', index: '02', label: '场景数据', hint: '只读 · 六场景' },
-  { id: 'console', index: '03', label: '任务控制台', hint: '发起任务' },
-  { id: 'permissions', index: '04', label: '权限控制台', hint: '工具授权' },
-  { id: 'capabilities', index: '05', label: '2A 能力', hint: 'MFA / 沙箱 / IM' },
-  { id: 'ops', index: '06', label: '运维面板', hint: '熔断与恢复' },
-  { id: 'audit', index: '07', label: '操作审计', hint: '哈希链证据' },
+  { id: 'console', index: '01', label: '银行助手', hint: '描述需求并核对操作' },
+  { id: 'overview', index: '02', label: '我的账户', hint: '余额、卡片与订阅' },
+  { id: 'audit', index: '03', label: '操作记录', hint: '结果与执行凭据' },
+  { id: 'scenarios', index: '04', label: '业务数据', hint: '六类模拟场景' },
+  { id: 'permissions', index: '05', label: '权限控制台', hint: '工具授权' },
+  { id: 'capabilities', index: '06', label: '安全与渠道', hint: '验证与渠道适配' },
+  { id: 'ops', index: '07', label: '运维面板', hint: '熔断与恢复' },
 ];
 
 const CROSS_SCENARIO_INSTRUCTION = '分析我的账单并取消异常订阅';
@@ -109,7 +108,7 @@ function combineErrors(...errors: string[]): string {
 }
 
 export default function App() {
-  const { page, navigate: setRoute } = useHashRoute('overview');
+  const { page, navigate: setRoute } = useHashRoute('console');
   const [role, setRole] = useState<AegisRole>(INITIAL_ROLE);
   const [tools, setTools] = useState<ToolMetadata[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
@@ -132,6 +131,7 @@ export default function App() {
   const [mfaProvidersLoading, setMfaProvidersLoading] = useState(true);
   const [mfaProvidersError, setMfaProvidersError] = useState('');
   const [instruction, setInstruction] = useState('');
+  const [lastInstruction, setLastInstruction] = useState('');
   const [lastRun, setLastRun] = useState<RunResponse | null>(null);
   const [pending, setPending] = useState<RunResponse | null>(null);
   const [lastActionId, setLastActionId] = useState<string | null>(null);
@@ -406,6 +406,7 @@ export default function App() {
         setTrustAction(canonical);
         setTrustActionError('');
         setInstruction(canonical.instruction);
+        setLastInstruction(canonical.instruction);
         setRoute('console');
         setNotice(`该动作当前状态：${canonical.state}，未再次执行。`);
         await refreshAll();
@@ -423,6 +424,7 @@ export default function App() {
       setLastActionId(actionId);
       setTrustActionId(actionId);
       setInstruction(canonical.instruction);
+      setLastInstruction(canonical.instruction);
       setRestoredPending(null);
       setMfaToken('');
       navigate('console');
@@ -494,6 +496,7 @@ export default function App() {
     setTrustActionError('');
     // 新一轮提交不再展示上一轮回执（UX-09）；失败也不会伪装成上一次的结果。
     setLastRun(null);
+    setLastInstruction(input.instruction);
     setLastActionId(null);
     setTrustActionId(null);
     const idempotencyKey = submission.key;
@@ -633,16 +636,18 @@ export default function App() {
   const overlayError = actionError;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell product-shell">
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">A</div>
           <div>
             <strong>AegisBank</strong>
-            <span>Trusted Agent Console</span>
+            <span>银行业务助手</span>
           </div>
         </div>
         <div className="topbar-tools">
+          <details className="role-menu">
+          <summary>演示角色 · {ROLE_LABELS[role]}</summary>
           <div className="role-switch" role="group" aria-label="角色切换">
             {AEGIS_ROLES.map((item) => (
               <button
@@ -657,6 +662,7 @@ export default function App() {
               </button>
             ))}
           </div>
+          </details>
           <button
             className={`breaker-pill ${breakerStatus?.open ? 'is-open' : breakerError ? 'is-unknown' : ''}`}
             onClick={() => navigate('ops')}
@@ -681,8 +687,7 @@ export default function App() {
                 ? '审计链异常'
                 : auditValid === null
                   ? '审计链待校验'
-                  : '本地 MVP · 审计链在线'}
-            <span className="env-pill">DEV</span>
+                  : '操作记录校验正常'}
           </div>
         </div>
       </header>
@@ -747,7 +752,7 @@ export default function App() {
       <div className="layout">
         <aside className="sidebar">
           <nav aria-label="主导航">
-            {navigation.map((item) => (
+            {navigation.filter((item) => ['console', 'overview', 'audit'].includes(item.id)).map((item) => (
               <button
                 key={item.id}
                 className={page === item.id ? 'active' : ''}
@@ -763,6 +768,17 @@ export default function App() {
             ))}
           </nav>
 
+          <details className="sidebar-advanced" open={['scenarios', 'permissions', 'capabilities', 'ops'].includes(page)}>
+            <summary>安全与开发工作台</summary>
+            <nav aria-label="工作台导航">
+              {navigation.filter((item) => !['console', 'overview', 'audit'].includes(item.id)).map((item) => (
+                <button key={item.id} className={page === item.id ? 'active' : ''}
+                  onClick={() => navigate(item.id)} aria-current={page === item.id ? 'page' : undefined}>
+                  <span className="nav-copy"><strong>{item.label}</strong><small>{item.hint}</small></span>
+                </button>
+              ))}
+            </nav>
+
           <div className="sidebar-note">
             <span className="eyebrow">TRUST POSTURE</span>
             <strong>{grantedCount} / {tools.length || '—'}</strong>
@@ -771,6 +787,7 @@ export default function App() {
               <span style={{ width: `${tools.length ? (grantedCount / tools.length) * 100 : 0}%` }} />
             </div>
           </div>
+          </details>
 
           <div className="sidebar-footer">
             <span>角色 · {ROLE_LABELS[role]}</span>
@@ -780,14 +797,6 @@ export default function App() {
         </aside>
 
         <main>
-          {page === 'overview' && (
-            <TrialGuide disabled={busy || Boolean(pending) || Boolean(unresolvedSubmission)}
-              onPrepare={(value) => {
-                navigate('console');
-                setInstruction(value);
-                setNotice('指令已填入，请检查内容后点击“交给 Agent”。');
-              }} />
-          )}
           {page === 'overview' && (
             <BankOverviewPage
               overview={overview}
@@ -813,6 +822,7 @@ export default function App() {
               tools={tools}
               toolsLoading={toolsLoading}
               instruction={instruction}
+              lastInstruction={lastInstruction}
               setInstruction={setInstruction}
               lastRun={lastRun}
               busy={busy}
@@ -899,6 +909,7 @@ export default function App() {
       {pending?.confirmation && (
         <ConfirmationModal
           pending={pending}
+          accountLabels={Object.fromEntries((overview?.accounts ?? []).map((account) => [account.id, account.name]))}
           busy={busy}
           mfaToken={mfaToken}
           setMfaToken={setMfaToken}

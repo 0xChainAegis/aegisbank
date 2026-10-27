@@ -103,6 +103,47 @@ describe('business page interactions', () => {
     if (!cardStatus || cardStatus === 'unknown') expect(status.textContent).toBe('状态未知');
   });
 
+  it.each([
+    ['active', 'monthly', '生效中', '每月', 'grant-on'],
+    ['cancelled', 'yearly', '已取消', '每年', 'subscription-status'],
+    ['canceled', 'annual', '已取消', '每年', 'subscription-status'],
+    ['expired', 'weekly', '已过期', '每周', 'subscription-status'],
+    ['paused', 'quarterly', '已暂停', '每季度', 'subscription-status'],
+    ['unknown', '', '状态未知', '周期未知', 'subscription-status'],
+    ['future_state', 'custom_cycle', 'future_state', 'custom_cycle', 'subscription-status'],
+  ])('localizes subscription %s / %s without treating unknown states as active',
+    async (status, cycle, statusLabel, cycleLabel, statusClass) => {
+      const overview: BankingOverview = {
+        accounts: [], cards: [], abnormalSubscriptions: [],
+        monthSpendingCny: 0, todayTransferTotalCny: 0, asOf: '',
+        subscriptions: [{ id: 'SUB-test', merchant: '测试订阅', amountCny: 30,
+          cycle, status, nextBillingDate: '2026-11-01', abnormal: false, reason: '' }],
+      };
+      await act(async () => root.render(<BankOverviewPage overview={overview}
+        loading={false} error="" notice="" onRefresh={vi.fn()} onNavigateConsole={vi.fn()} />));
+      const cells = container.querySelectorAll('tbody tr td');
+      expect(cells[2]?.textContent).toBe(cycleLabel);
+      expect(cells[4]?.textContent).toBe(statusLabel);
+      expect(cells[4]?.querySelector('span')?.className).toBe(statusClass);
+    });
+
+  it('shows a cancelled subscription risk as history instead of an upcoming debit to resolve', async () => {
+    const overview: BankingOverview = {
+      accounts: [], cards: [], abnormalSubscriptions: [],
+      monthSpendingCny: 0, todayTransferTotalCny: 0, asOf: '',
+      subscriptions: [{ id: 'SUB-cancelled', merchant: '已取消项目', amountCny: 199,
+        cycle: 'monthly', status: 'cancelled', nextBillingDate: '2026-11-01',
+        abnormal: true, reason: '价格上涨' }],
+    };
+    await act(async () => root.render(<BankOverviewPage overview={overview}
+      loading={false} error="" notice="" onRefresh={vi.fn()} onNavigateConsole={vi.fn()} />));
+    const row = container.querySelector('tbody tr')!;
+    expect(row.className).not.toContain('row-abnormal');
+    expect(row.querySelectorAll('td')[3]?.textContent).toBe('—');
+    expect(row.textContent).not.toContain('需处理');
+    expect(row.textContent).toContain('历史提示：价格上涨');
+  });
+
   it('shows the birthday execution date and formats only currency fields as money', async () => {
     const props = taskProps();
     props.lastRun = {

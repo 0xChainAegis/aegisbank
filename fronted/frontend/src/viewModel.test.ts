@@ -285,7 +285,8 @@ describe('confirmation summary (UX-10)', () => {
       depends_on: [],
       irreversible: true,
     });
-    expect(summary.details.join(' ')).toContain('不可撤销');
+    expect(summary.details.join(' ')).toContain('不支持自动回滚');
+    expect(summary.details.join(' ')).toContain('恢复需另发起解挂并验证');
   });
 });
 

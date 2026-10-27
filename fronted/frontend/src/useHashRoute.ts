@@ -28,13 +28,13 @@ export const PAGES: readonly Page[] = [
 ];
 
 export const PAGE_TITLES: Record<Page, string> = {
-  overview: '银行概览',
+  overview: '我的账户',
   scenarios: '场景数据（只读）',
-  console: '任务控制台',
+  console: '银行助手',
   permissions: '权限控制台',
-  capabilities: '2A 能力',
+  capabilities: '安全与渠道',
   ops: '运维面板',
-  audit: '操作审计',
+  audit: '操作记录',
 };
 
 export function isPage(value: unknown): value is Page {
