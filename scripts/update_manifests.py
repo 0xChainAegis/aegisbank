@@ -24,7 +24,7 @@ DESCRIPTIONS = {
     "fronted": "React 控制台、API 类型与请求、确认和恢复交互、样式与前端回归测试。",
     "backend": "FastAPI 入口、配置、SQLite 与 Mock Bank Core、依赖、运行脚本和后端测试。",
     "agent": "权限网关、动态风险、调度、执行守卫、MFA、补偿、熔断和审计。",
-    "NLP": "金额规范化、规则与可选 LLM Planner、P0 语义防线和受限澄清。",
+    "NLP": "金额规范化、SemanticFrame/v1、本地语义校验、规则/可选模型候选和受限澄清。",
     "plans": "ExecutionPlan 契约、确定性 Plan Compiler 和历史架构规划文档。",
     "skills": "工具注册、银行业务工具、场景发现及六场景业务模块。",
 }

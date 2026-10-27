@@ -17,8 +17,8 @@
       "group": "backend",
       "path": ".env.example",
       "runtime_path": "backend/.env.example",
-      "bytes": 499,
-      "sha256": "5ea88c07bc5c76bcad9c280402d86dd344bbb99b6f3817efe1bab5b06c780664"
+      "bytes": 613,
+      "sha256": "823e950a6a70250c6bcf8c86f434c513a3934af1b295f79858bad4faf02eea74"
     },
     {
       "group": "backend",
@@ -59,8 +59,8 @@
       "group": "backend",
       "path": "backend/aegisbank_api/config.py",
       "runtime_path": "backend/aegisbank_api/config.py",
-      "bytes": 1589,
-      "sha256": "21443a9bcf0239e0a8e4814d85684b44cc17c5d6b453aece2d6e5670fb5cfef7"
+      "bytes": 1623,
+      "sha256": "174ae1d7342256f356086594cc9d5fca0d812a595fa6b17f9c8377e87107b783"
     },
     {
       "group": "backend",
@@ -208,6 +208,13 @@
       "runtime_path": "backend/tests/test_security_regressions.py",
       "bytes": 36652,
       "sha256": "d786fe9f50962be97f9fc9b355a26dd7813f2ab8b60a8258687a981e2aa4d6d7"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_semantics.py",
+      "runtime_path": "backend/tests/test_semantics.py",
+      "bytes": 16667,
+      "sha256": "4c0b1eb781cc761a7cae240618893938cff5f80b99e798dc707763d241825956"
     },
     {
       "group": "backend",

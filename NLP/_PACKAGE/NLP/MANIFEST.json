@@ -24,8 +24,8 @@
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/factory.py",
       "runtime_path": "backend/aegisbank_api/planning/factory.py",
-      "bytes": 2179,
-      "sha256": "c9a179f6cd246504bbe5e9bbd2b0e226bfcfd144b4e80f9672e6b0b68098929e"
+      "bytes": 2929,
+      "sha256": "4494fa4c57f5100eb5f03d2e69bf9ec186d00002064af3da0da0178cc2a48461"
     },
     {
       "group": "NLP",
@@ -38,8 +38,8 @@
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/llm.py",
       "runtime_path": "backend/aegisbank_api/planning/llm.py",
-      "bytes": 14078,
-      "sha256": "b9ed2c4c1095762c887be5d27b225b0194b15c381d877859d3c5ba5f24e234d9"
+      "bytes": 14189,
+      "sha256": "5bbfa037c773171dc1264eb83cb2ebca73adfa6b4f6ee23ac6b808cbd87a9bc4"
     },
     {
       "group": "NLP",
@@ -57,10 +57,66 @@
     },
     {
       "group": "NLP",
+      "path": "backend/aegisbank_api/planning/semantic.py",
+      "runtime_path": "backend/aegisbank_api/planning/semantic.py",
+      "bytes": 16471,
+      "sha256": "4de1cd37c2f8979b629ab2d08c70547b5218b5cca4b5b150ed3209d42e85a8cd"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/semantic_catalog.py",
+      "runtime_path": "backend/aegisbank_api/planning/semantic_catalog.py",
+      "bytes": 3873,
+      "sha256": "2505d26ccf67752487783174e3a9d23d0ed5967782a3fb50c1d98b8d18ed1e9b"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/semantic_contracts.py",
+      "runtime_path": "backend/aegisbank_api/planning/semantic_contracts.py",
+      "bytes": 2735,
+      "sha256": "d4b8638eba6649063a93dfbbb002370f9da9ba28e9c27ab080497cb98406b58a"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/semantic_model.py",
+      "runtime_path": "backend/aegisbank_api/planning/semantic_model.py",
+      "bytes": 2704,
+      "sha256": "d04a7db0a6f7e9d0113a88496fbdab87d96768acd515304721a508b5272b69af"
+    },
+    {
+      "group": "NLP",
       "path": "backend/aegisbank_api/trust/clarification.py",
       "runtime_path": "backend/aegisbank_api/trust/clarification.py",
       "bytes": 2132,
       "sha256": "1124c4bb75c4f8a122649306cfe2be55db2dcb539b5e8e473d392dfd600e2611"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-probe-report.json",
+      "runtime_path": "backend/evals/nlp/p1-probe-report.json",
+      "bytes": 6316,
+      "sha256": "966059d5c66b3238c0cc7ce92d8ec1ff92206c45057a2d545b3256f98b182234"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-regression.json",
+      "runtime_path": "backend/evals/nlp/p1-regression.json",
+      "bytes": 7335,
+      "sha256": "8461be0fae9412a9e387ced73b889eeeaaf28668a32c1cbfef67c1995f09dba6"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-report.json",
+      "runtime_path": "backend/evals/nlp/p1-report.json",
+      "bytes": 19429,
+      "sha256": "b96ce9208e572c2292afd05d282651bbf95c0a633d6bfefd0da35f2c366bcdc8"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-review-probes.json",
+      "runtime_path": "backend/evals/nlp/p1-review-probes.json",
+      "bytes": 2624,
+      "sha256": "847ff101137fc7aade8ef63264b0c2f9f7812495666dc31a5ea4f0345b0ed079"
     },
     {
       "group": "NLP",

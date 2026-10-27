@@ -2266,3 +2266,33 @@ def stop_background() -> None:
     _background_thread = None
     if thread is not None and thread.is_alive():
         thread.join(timeout=5)
+
+
+def semantic_intents():
+    from ..planning.semantic_catalog import CURRENCY, DATE, ENTITY, MONEY, SemanticSpec
+
+    return [
+        SemanticSpec(
+            "scheduled_transfer",
+            (
+                rf"(?P<date>{DATE})(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:汇|打|转)(?P<amount>{MONEY}){CURRENCY}",
+            ),
+            "定时{date}给{contact}转{amount}元",
+            {"date": "date", "contact": "contact", "amount": "money"},
+            tools=("schedule_transfer",),
+        ),
+        SemanticSpec(
+            "birthday",
+            (
+                rf"(?:给|为)(?P<contact>(?!\s*ACC-){ENTITY})(?:筹备|安排)生日(?:礼物)?[，,]?预算\s*(?P<amount>{MONEY}){CURRENCY}",
+            ),
+            "帮我准备{contact}的生日，预算{amount}元",
+            {"contact": "contact_name", "amount": "money"},
+            tools=(
+                "query_contact_birthday",
+                "lock_budget_funds",
+                "schedule_flower_order",
+                "schedule_cake_order",
+            ),
+        ),
+    ]

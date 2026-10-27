@@ -1311,3 +1311,29 @@ def router(services: CoreServices) -> APIRouter:
         return result
 
     return api
+
+
+def semantic_intents():
+    from ..planning.semantic_catalog import SemanticSpec
+
+    return [
+        SemanticSpec(
+            "bill_analysis",
+            (
+                r"(?:看看|帮我看看|看下)?(?P<period>本月|这个月|上个月|上月|最近)?钱(?:都)?花(?:到)?哪(?:儿|里)(?:去)?了",
+                r"(?P<period>本月|这个月|上个月|上月)(?:的)?(?:花销|消费|支出)(?:明细|情况|总结)",
+            ),
+            "生成{period}账单报告",
+            {"period": "month"},
+            r"花销|消费|支出|钱.*花",
+            tools=("bill_report",),
+        ),
+        SemanticSpec(
+            "bill_cleanup",
+            (
+                r"(?:帮我)?(?:梳理|核对)(?:一下)?(?:本月|我的)?账单[，,]?并(?:停掉|关掉)(?:异常|可疑)订阅",
+            ),
+            "分析我的本月账单并取消异常订阅",
+            tools=("query_bill", "cancel_subscription"),
+        ),
+    ]

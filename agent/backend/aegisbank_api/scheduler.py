@@ -517,7 +517,9 @@ class DagScheduler:
                 dag_path="planner",
                 tool_name="planner",
                 arguments={"tool_name": tool_name, "arguments": arguments, "role": role},
-                result={"clarification": plan.clarification},
+                result={"clarification": plan.clarification, "semantic": (
+                    plan.semantic.model_dump(mode="json") if plan.semantic else None
+                )},
                 confirmation_state="clarification",
                 risk_level=RiskLevel.GREEN.value,
                 evidence=evidence,
@@ -842,6 +844,7 @@ class DagScheduler:
             plan = ExecutionPlan(
                 intent=str(stored.get("intent") or "confirmed_action"),
                 planner=str(stored.get("planner") or "stored"),
+                semantic=stored.get("semantic"),
                 steps=[
                     PlanStep(
                         id=str(step["id"]),
@@ -979,7 +982,10 @@ class DagScheduler:
         requires_reauth = any(item.requires_reauth for item in assessments.values())
 
         try:
-            compiled = self._recompute_plan(pending, nodes)
+            try:
+                compiled = self._recompute_plan(pending, nodes)
+            except (ValueError, TypeError, KeyError) as exc:
+                raise EnvelopeMismatch("存储计划不符合契约，请重新发起操作。") from exc
             envelopes = self._verify_envelopes(
                 pending=pending,
                 nodes=nodes,

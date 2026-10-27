@@ -1,0 +1,12 @@
+{
+  "name": "chainaegis",
+  "kind": "fullstack",
+  "runner": "wsl",
+  "workflow": "dsh-v1",
+  "stages": {
+    "lint": "bash scripts/check.sh lint",
+    "build": "bash scripts/check.sh build",
+    "test": "bash scripts/check.sh test"
+  },
+  "skipTestFor": ["docs", "text"]
+}

@@ -1,6 +1,6 @@
 # NLP 源码包说明
 
-金额规范化、规则与可选 LLM Planner、P0 语义防线和受限澄清。
+金额规范化、SemanticFrame/v1、本地语义校验、规则/可选模型候选和受限澄清。
 
 六个分类目录保留为团队源码修改入口。它们相互依赖，不能作为六个独立应用分别启动；在仓库根目录运行 `python3 scripts/assemble.py`，即可组装到 `.runtime/` 后按[根 README](../../../README.md)启动和验证。生成目录不是第二份维护源码，不应手工修改或提交。
 
@@ -10,7 +10,7 @@
 
 本次整合恢复或更新必要的验证与说明材料；业务执行链没有新增旁路。
 
-当前运行白名单包含 **8 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
+当前运行白名单包含 **16 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
 
 根 `docs/` 和 `deliverables/` 是团队阅读、验收及比赛材料入口；包内旧文档保留背景，不单独维护新主线。旧 `plans/README.md` 和 `plans/AGENTS.md` 属历史来源说明，不进入运行组装白名单。`_PACKAGE` 为来源、许可与校验元数据，不复制进 `.runtime/`。
 
@@ -30,5 +30,13 @@ Git checkout 中扫描已跟踪或未被忽略的新文件；没有 `.git` 的�
 - `backend/aegisbank_api/planning/llm.py`
 - `backend/aegisbank_api/planning/rule.py`
 - `backend/aegisbank_api/planning/safety.py`
+- `backend/aegisbank_api/planning/semantic.py`
+- `backend/aegisbank_api/planning/semantic_catalog.py`
+- `backend/aegisbank_api/planning/semantic_contracts.py`
+- `backend/aegisbank_api/planning/semantic_model.py`
 - `backend/aegisbank_api/trust/clarification.py`
+- `backend/evals/nlp/p1-probe-report.json`
+- `backend/evals/nlp/p1-regression.json`
+- `backend/evals/nlp/p1-report.json`
+- `backend/evals/nlp/p1-review-probes.json`
 - `docs/NLP-ASSESSMENT-AND-PLAN-2026-10-25.md`

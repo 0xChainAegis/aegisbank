@@ -24,15 +24,15 @@
       "group": "plans",
       "path": "backend/aegisbank_api/planning/compiler.py",
       "runtime_path": "backend/aegisbank_api/planning/compiler.py",
-      "bytes": 5462,
-      "sha256": "024388648bb8310c86d8e3df83928544bb6d9110149599894759f9ea2d991a32"
+      "bytes": 5758,
+      "sha256": "8ca0debf5d407eabe4c25473e3018248572cf0272a4a4d6f7bae0446eb59c802"
     },
     {
       "group": "plans",
       "path": "backend/aegisbank_api/planning/contracts.py",
       "runtime_path": "backend/aegisbank_api/planning/contracts.py",
-      "bytes": 2371,
-      "sha256": "2b25edd970691c59cb1d208e7a9f576ae47368fa0ede1c99dec5fed6b47066b2"
+      "bytes": 2466,
+      "sha256": "03965d160188251ddfd5cf474c4ef58ac6e45cfda3ada249a54033e0a9ed1616"
     },
     {
       "group": "plans",

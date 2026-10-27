@@ -1,0 +1,250 @@
+{
+  "dataset": "development regression; not held-out or real-model evaluation",
+  "corpus_sha256": "847ff101137fc7aade8ef63264b0c2f9f7812495666dc31a5ea4f0345b0ed079",
+  "metric": "tool sequence and annotated first-step arguments; rejection for negative cases",
+  "cases": 12,
+  "positive_cases": 12,
+  "negative_cases": 0,
+  "modes": {
+    "p0_rules": {
+      "matched": 7,
+      "positive_matched": 7,
+      "negative_matched": 0,
+      "results": [
+        {
+          "id": "probe-01",
+          "family": "transfer",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-02",
+          "family": "transfer",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-03",
+          "family": "bill",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-04",
+          "family": "bill",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-05",
+          "family": "wealth",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-06",
+          "family": "wealth",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-07",
+          "family": "card",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-08",
+          "family": "card",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-09",
+          "family": "subscription",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-10",
+          "family": "subscription",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-11",
+          "family": "cross",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "semantic_status": null
+        },
+        {
+          "id": "probe-12",
+          "family": "cross",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": null
+        }
+      ]
+    },
+    "p1_semantics": {
+      "matched": 7,
+      "positive_matched": 7,
+      "negative_matched": 0,
+      "results": [
+        {
+          "id": "probe-01",
+          "family": "transfer",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "probe-02",
+          "family": "transfer",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "semantic_status": "legacy"
+        },
+        {
+          "id": "probe-03",
+          "family": "bill",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "probe-04",
+          "family": "bill",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "probe-05",
+          "family": "wealth",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "semantic_status": "legacy"
+        },
+        {
+          "id": "probe-06",
+          "family": "wealth",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "semantic_status": "verified"
+        },
+        {
+          "id": "probe-07",
+          "family": "card",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "semantic_status": "legacy"
+        },
+        {
+          "id": "probe-08",
+          "family": "card",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "semantic_status": "legacy"
+        },
+        {
+          "id": "probe-09",
+          "family": "subscription",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        },
+        {
+          "id": "probe-10",
+          "family": "subscription",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "semantic_status": "legacy"
+        },
+        {
+          "id": "probe-11",
+          "family": "cross",
+          "matched": true,
+          "status": "planned",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "semantic_status": "legacy"
+        },
+        {
+          "id": "probe-12",
+          "family": "cross",
+          "matched": false,
+          "status": "needs_clarification",
+          "tools": [],
+          "semantic_status": "clarification"
+        }
+      ]
+    }
+  }
+}

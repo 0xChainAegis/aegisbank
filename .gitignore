@@ -29,3 +29,6 @@ Thumbs.db
 .idea/
 .vscode/
 .dsh-local/
+
+# Prior local assembly cache (not a source tree)
+.build/

@@ -21,7 +21,7 @@ from .amounts import AmountError, money_mentions
 from .contracts import ExecutionPlan, Planner, PlanningRequest, PlanStep
 from .safety import planning_clarification
 
-_ALLOWED_PLAN_FIELDS = frozenset(ExecutionPlan.model_fields)
+_ALLOWED_PLAN_FIELDS = frozenset(ExecutionPlan.model_fields) - {"semantic"}
 _ALLOWED_STEP_FIELDS = frozenset(PlanStep.model_fields)
 _HIGH_RISK_ARGUMENTS = frozenset(
     {
@@ -271,13 +271,15 @@ class OpenAICompatiblePlanner:
             "每个 step 必须有唯一 id、tool_name、arguments，depends_on 用来表达 DAG 依赖。"
             "字段必须符合提供的 ExecutionPlan JSON Schema。"
         )
+        output_schema = ExecutionPlan.model_json_schema()
+        output_schema["properties"].pop("semantic", None)
         user_prompt = json.dumps(
             {
                 "user_instruction": request.instruction,
                 "explicit_tool": request.tool_name,
                 "explicit_arguments": request.arguments,
                 "tool_catalog": catalog,
-                "output_schema": ExecutionPlan.model_json_schema(),
+                "output_schema": output_schema,
             },
             ensure_ascii=False,
         )

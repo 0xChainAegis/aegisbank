@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     confirmation_ttl_seconds: int = 300
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     planner_mode: Literal["rule", "llm", "auto"] = "rule"
+    semantic_enabled: bool = True
     llm_base_url: str = ""
     llm_api_key: str = ""
     llm_model: str = ""

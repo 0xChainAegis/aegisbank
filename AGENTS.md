@@ -20,7 +20,7 @@
 
 黄色/红色确认绑定计划、参数、风险、权限、nonce 与有效期。执行前必须重新核验；幂等重试保留原键；结果未知不得自动重试或假定资金未变。服务未 ready 时写入 fail closed。角色能力由服务端 AuthzService 给出，前端不维护另一套授权矩阵。
 
-NLP 当前只有 P0 落地，后续见 `docs/NLP-BACKLOG.md`。不把通用上下文、任意组合、真实 MFA、OS 隔离或模型效果目标准确率写成已实现。
+NLP P0 与 P1 有界语义模块已落地；原定开放表达泛化验收仍待完成，具体状态见 `docs/NLP-P1-2026-10-27.md` 与 `docs/NLP-BACKLOG.md`。不把通用上下文、任意组合、真实 MFA、OS 隔离或模型效果目标准确率写成已实现。
 
 ## 协作与验证
 
@@ -29,3 +29,7 @@ NLP 当前只有 P0 落地，后续见 `docs/NLP-BACKLOG.md`。不把通用上�
 组装后在 `.runtime/backend` 使用冻结 uv 锁依赖、ruff、pytest 和场景脚本，在 `.runtime/frontend` 使用冻结 pnpm 锁依赖、Vitest 与生产构建。组装器自身使用根 `tests/` 的独立测试。具体命令由根 README 与 `.github/workflows/ci.yml` 定义。
 
 不提交真实 `.env`、凭证、客户数据、运行数据库或依赖目录。保留 MIT 原作者声明。行为改变同步文档，测试数字必须来自实际输出；历史快照明确标记，未运行的作者机器专用 DSH 门禁不得宣称通过。
+
+## 作者 Linux 检出的 DSH 门禁
+
+本机检出为 `/home/lqz5885/aegisbank/dev/chainaegis`，Windows 历史副本冻结。`bash scripts/check.sh lint|build|test|scenarios` 在统一 `.runtime` 流程中安装冻结依赖并检查；test 同时覆盖根组装器测试，lint 包含 API 契约核验。本机提交继续使用 `/mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1` 和 `checkpoint.ps1`，`-Repo` 指向该检出。不得在门禁通过后修改源文件而沿用旧结论；Lead 综合自审的提交尾注保留 `Verifier: self`。

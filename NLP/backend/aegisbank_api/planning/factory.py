@@ -8,6 +8,8 @@ from ..registry import ToolRegistry
 from .contracts import ExecutionPlan, Planner, PlanningRequest
 from .llm import OpenAICompatiblePlanner, PlannerError
 from .rule import RuleBasedPlanner
+from .semantic import SemanticPlanner
+from .semantic_model import SemanticModel
 
 
 class PlannerConfigurationError(ValueError):
@@ -41,7 +43,8 @@ def build_planner(
     repository: BankingRepository | None = None,
 ) -> Planner:
     mode = settings.planner_mode
-    rule = RuleBasedPlanner(registry, repository)
+    baseline = RuleBasedPlanner(registry, repository)
+    rule = SemanticPlanner(baseline) if settings.semantic_enabled else baseline
     if mode == "rule":
         return rule
     if mode not in {"llm", "auto"}:
@@ -53,6 +56,18 @@ def build_planner(
         raise PlannerConfigurationError(
             "planner_mode=llm 时必须配置 AEGIS_LLM_BASE_URL 和 AEGIS_LLM_MODEL。"
         )
+
+    if settings.semantic_enabled:
+        llm = SemanticPlanner(
+            baseline,
+            SemanticModel(
+                base_url=settings.llm_base_url,
+                model=settings.llm_model,
+                credential=settings.llm_api_key,
+                timeout=settings.llm_timeout_seconds,
+            ),
+        )
+        return FallbackPlanner(llm, rule) if mode == "auto" else llm
 
     llm = OpenAICompatiblePlanner(
         registry=registry,
@@ -66,4 +81,9 @@ def build_planner(
 
 
 def describe_planner(planner: Planner) -> dict[str, str]:
-    return {"mode": planner.name, "contract": "ExecutionPlan/v1"}
+    active = planner.primary if isinstance(planner, FallbackPlanner) else planner
+    return {
+        "mode": planner.name,
+        "contract": "ExecutionPlan/v1",
+        "semantic_contract": getattr(active, "semantic_contract", "disabled"),
+    }
