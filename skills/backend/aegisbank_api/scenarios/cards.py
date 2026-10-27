@@ -21,7 +21,7 @@ from ..banking.repository import to_cents, to_cny
 from ..db import Database
 from ..domain import ExecutionContext, RiskLevel, ToolMetadata, ToolResult
 from ..planning.contracts import ExecutionPlan, PlanStep
-from ..planning.intents import IntentContext, IntentRule
+from ..planning.intents import IntentContext, IntentRule, resolve_card_for_write
 from ..registry import BaseTool
 from ..risk_rules import RiskContext, RiskGuess, RiskRule
 from ..services import CoreServices
@@ -191,7 +191,7 @@ class IssueVirtualCardOutput(BaseModel):
 
 
 class ResetCardPasswordArgs(BaseModel):
-    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    card_id: str = Field(min_length=3, max_length=32)
 
 
 class ResetCardPasswordOutput(BaseModel):
@@ -202,7 +202,7 @@ class ResetCardPasswordOutput(BaseModel):
 
 
 class UnlockTransactionLimitArgs(BaseModel):
-    card_id: str = Field(default="CARD-8821", min_length=3, max_length=32)
+    card_id: str = Field(min_length=3, max_length=32)
     daily_limit_cny: float | None = Field(
         default=None,
         gt=0,
@@ -604,16 +604,26 @@ class ResetCardPasswordIntent:
             return None
         if not ctx.has_tool("reset_card_password"):
             return None
+        card_id, clarification, assumptions = resolve_card_for_write(
+            ctx.instruction,
+            ctx.repository,
+            ctx.request.user_id,
+            intent="reset_card_password",
+            action="重置卡片密码",
+        )
+        if clarification is not None:
+            return clarification
         return ExecutionPlan(
             intent="reset_card_password",
             planner="rule",
             confidence=0.9,
-            assumptions=["密码重置不接收、不保存明文密码，只记录安全事件时间。"],
+            assumptions=assumptions
+            + ["密码重置不接收、不保存明文密码，只记录安全事件时间。"],
             steps=[
                 PlanStep(
                     id="step-1",
                     tool_name="reset_card_password",
-                    arguments={"card_id": ctx.card_id()},
+                    arguments={"card_id": card_id},
                     description="受理卡片密码重置，仅记录已修改事件。",
                 )
             ],
@@ -630,15 +640,23 @@ class UnlockTransactionLimitIntent:
             return None
         if not ctx.has_tool("unlock_transaction_limit"):
             return None
-        arguments: dict[str, Any] = {"card_id": ctx.card_id()}
+        card_id, clarification, assumptions = resolve_card_for_write(
+            ctx.instruction,
+            ctx.repository,
+            ctx.request.user_id,
+            intent="unlock_transaction_limit",
+            action="解锁交易限额",
+        )
+        if clarification is not None:
+            return clarification
+        arguments: dict[str, Any] = {"card_id": card_id}
         amounts = ctx.amounts()
         if amounts:
             arguments["daily_limit_cny"] = amounts[0]
-        assumptions = (
-            []
-            if amounts
-            else [f"未指定目标限额，恢复默认 {DEFAULT_TRANSACTION_LIMIT_CNY:.0f} 元。"]
-        )
+        else:
+            assumptions.append(
+                f"未指定目标限额，恢复默认 {DEFAULT_TRANSACTION_LIMIT_CNY:.0f} 元。"
+            )
         return ExecutionPlan(
             intent="unlock_transaction_limit",
             planner="rule",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchBankingOverview, previewPlan, runAgent } from './api';
+import { fetchBankingOverview, previewPlan, runAgent, runAutomationDue } from './api';
 import type { PlanPreviewResponse } from './types';
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -32,6 +32,47 @@ describe('API response boundaries', () => {
   it('rejects missing financial facts instead of displaying a made-up zero balance', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ accounts: [{}] }) })));
     await expect(fetchBankingOverview()).rejects.toThrow('账户标识缺失');
+  });
+
+  it('preserves pending re-authentication fields from the run-due response', async () => {
+    const payload = {
+      status: 'completed',
+      reason: '到期任务已处理',
+      now: '2027-01-01T12:00:00+00:00',
+      executed: [],
+      failed: [],
+      executed_count: 0,
+      failed_count: 0,
+      pending_reauth: [{
+        task_id: 'TASK-REAUTH-1',
+        kind: 'transfer',
+        status: 'pending',
+        execution_status: 'needs_reauth',
+        reason: '风险升为 red',
+        action_required: '取消该定时任务后重新创建，并完成 OTP 强验证。',
+        amount_cny: 3000,
+      }],
+      pending_reauth_count: 1,
+      action_required: true,
+      simulated: true,
+    };
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true, json: async () => payload,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runAutomationDue('2027-01-01T12:00:00.000Z');
+    expect(result.pending_reauth_count).toBe(1);
+    expect(result.action_required).toBe(true);
+    expect(result.pending_reauth?.[0]).toMatchObject({
+      task_id: 'TASK-REAUTH-1',
+      execution_status: 'needs_reauth',
+      action_required: '取消该定时任务后重新创建，并完成 OTP 强验证。',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/automation/run-due?now=2027-01-01T12%3A00%3A00.000Z',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('preserves structured 409 idempotency errors', async () => {

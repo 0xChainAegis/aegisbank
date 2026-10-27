@@ -394,16 +394,17 @@ def test_missing_or_corrupt_envelopes_fail_closed(system, envelopes):
     assert balance(services) == before
 
 
-def test_mfa_failures_open_breaker(system):
+def test_mfa_failures_do_not_open_breaker(system):
     client, services = system
     pending = start(client, arguments={"to_account": "ACC-2002", "amount_cny": 1500})
     for _ in range(3):
-        approve(client, pending, reauth_token="000000")
-    assert services.scheduler.breaker.is_open()
+        assert approve(client, pending, reauth_token="000000").status_code == 403
+    assert not services.scheduler.breaker.is_open(user_id="demo-user")
     before = balance(services)
     result = approve(client, pending, reauth_token="246810")
-    assert result.status_code != 200 or result.json()["status"] == "blocked"
-    assert balance(services) == before
+    assert result.status_code == 200, result.text
+    assert result.json()["status"] == "completed"
+    assert balance(services) == before - 1500
 
 
 @pytest.mark.parametrize(
@@ -762,7 +763,20 @@ def test_scheduled_risk_escalation_without_original_mfa_is_blocked(system):
         "/api/automation/run-due", json={"now": (moment + timedelta(hours=1)).isoformat()}
     )
     assert response.status_code == 200, response.text
-    assert response.json()["failed_count"] == 1
+    payload = response.json()
+    assert payload["failed_count"] == 0
+    assert payload["executed_count"] == 0
+    assert payload["pending_reauth_count"] == 1
+    assert payload["action_required"] is True
+    assert "OTP" in payload["pending_reauth"][0]["action_required"]
+    assert balance(services) == before
+
+    replay = client.post(
+        "/api/automation/run-due", json={"now": (moment + timedelta(hours=2)).isoformat()}
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["pending_reauth_count"] == 1
+    assert replay.json()["executed_count"] == 0
     assert balance(services) == before
 
 

@@ -52,15 +52,15 @@
       "group": "fronted",
       "path": "frontend/src/api.test.ts",
       "runtime_path": "frontend/src/api.test.ts",
-      "bytes": 5736,
-      "sha256": "e2ede6d9a15a6a9a56d56eda1b19832ca608ddcd1e44b97460de55424e2ffa47"
+      "bytes": 7217,
+      "sha256": "53e9170c66c3e59ef16e8291669408d5b165cf68f69f9515b0c05c21f33a728c"
     },
     {
       "group": "fronted",
       "path": "frontend/src/api.ts",
       "runtime_path": "frontend/src/api.ts",
-      "bytes": 20089,
-      "sha256": "6ec9bb3102a9324e673d5a39d3b2da34a4d05e45b0cb67e99c21de49fc6daaf4"
+      "bytes": 20289,
+      "sha256": "e8c87fd6c9c43ca58031ca8cabdcb8475a444d350e67c56bc0db5bdd70c7a2f5"
     },
     {
       "group": "fronted",
@@ -143,8 +143,8 @@
       "group": "fronted",
       "path": "frontend/src/components/ScenariosPage.tsx",
       "runtime_path": "frontend/src/components/ScenariosPage.tsx",
-      "bytes": 40038,
-      "sha256": "e0a3ef0de4706dc1ef167756afab495153d8abbb1425d804b19f14231dad60ec"
+      "bytes": 42093,
+      "sha256": "eabfb54e139563ee4144f66a4577a62f376866362df1dbdb3d9a176036dfd439"
     },
     {
       "group": "fronted",
@@ -171,8 +171,8 @@
       "group": "fronted",
       "path": "frontend/src/components/businessPages.test.tsx",
       "runtime_path": "frontend/src/components/businessPages.test.tsx",
-      "bytes": 14626,
-      "sha256": "8a53f09c1dd968569f028abba398c4a36eb602294e7c5c26195c7562515bda00"
+      "bytes": 16527,
+      "sha256": "53397372b27324f574f395fa87f3324175f8f30f1a4fa0e5c755583ed9779bff"
     },
     {
       "group": "fronted",
@@ -297,8 +297,8 @@
       "group": "fronted",
       "path": "frontend/src/types.ts",
       "runtime_path": "frontend/src/types.ts",
-      "bytes": 19076,
-      "sha256": "e7fe4c7ec23c302fe272c65f08425c5404c58693012f8951e6f9c2e568ff6324"
+      "bytes": 19446,
+      "sha256": "44d314186f297a3675f181d78315c873f0db8530bd2279cbbae3f8fea77ae47a"
     },
     {
       "group": "fronted",

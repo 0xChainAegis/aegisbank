@@ -180,3 +180,41 @@ def test_planner_preview_returns_clarification_for_vague_intent(tmp_path):
         assert body["status"] == "needs_clarification"
         assert body["plan"]["needs_clarification"] is True
         assert body["reason"]
+
+def test_rule_planner_parses_wan_for_account_transfer():
+    registry = build_registry()
+    planner = RuleBasedPlanner(registry)
+
+    plan = planner.plan(PlanningRequest(instruction="转1万给ACC-2002"))
+
+    assert plan.needs_clarification is False
+    assert plan.intent == "transfer"
+    step = plan.steps[0]
+    assert step.tool_name == "transfer"
+    assert step.arguments["to_account"] == "ACC-2002"
+    assert step.arguments["amount_cny"] == 10_000.0
+    assert any("1万" in item for item in plan.assumptions)
+
+
+def test_repayment_day_without_card_is_clarification_not_amount_error():
+    from aegisbank_api.planning.amounts import money_mentions
+
+    assert money_mentions("把还款日改到18号") == []
+    registry = build_registry()
+    planner = RuleBasedPlanner(registry)
+
+    plan = planner.plan(PlanningRequest(instruction="把还款日改到18号"))
+
+    assert plan.needs_clarification is True
+    assert plan.intent == "adjust_repayment_date"
+    assert plan.steps == []
+    assert "卡片" in (plan.clarification or "")
+
+    explicit = planner.plan(
+        PlanningRequest(instruction="把 CARD-9902 的还款日改到18号")
+    )
+    assert explicit.needs_clarification is False
+    step = explicit.steps[0]
+    assert step.tool_name == "adjust_repayment_date"
+    assert step.arguments["card_id"] == "CARD-9902"
+    assert step.arguments["new_day"] == 18

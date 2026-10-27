@@ -88,6 +88,28 @@ _SEED_CONTACTS: tuple[dict[str, str], ...] = (
     },
 )
 
+# Common spoken address terms for seeded relations. The mapping is only a
+# normalisation hint: the resolved contact still has to exist in SQLite and an
+# ambiguous match is always clarified, never guessed.
+_CONTACT_RELATION_ALIASES = {
+    "我妈": "妈妈",
+    "我妈妈": "妈妈",
+    "我老妈": "妈妈",
+    "我母亲": "妈妈",
+    "老妈": "妈妈",
+    "母亲": "妈妈",
+    "妈咪": "妈妈",
+    "我的妈妈": "妈妈",
+    "我爸": "老爸",
+    "我爸爸": "老爸",
+    "我老爸": "老爸",
+    "我父亲": "老爸",
+    "老爹": "老爸",
+    "父亲": "老爸",
+    "爸爸": "老爸",
+    "我的爸爸": "老爸",
+}
+
 _PHONE_RE = re.compile(r"1[3-9]\d{9}")
 _ACCOUNT_RE = re.compile(r"ACC-\d{3,}")
 _PHONE_IN_TEXT = re.compile(r"(?<!\d)(1[3-9]\d{9})(?!\d)")
@@ -209,7 +231,13 @@ def contact_rows(db: Database, user_id: str, *, include_inactive: bool = False) 
 
 def _name_matches(contact: Contact, token: str) -> bool:
     key = token.strip().casefold()
-    return contact.name.casefold() == key or (contact.alias or "").casefold() == key
+    names = {contact.name.casefold()}
+    if contact.alias:
+        names.add(contact.alias.casefold())
+    if key in names:
+        return True
+    canonical = _CONTACT_RELATION_ALIASES.get(key)
+    return canonical is not None and canonical.casefold() in names
 
 
 def _resolve_contacts(
@@ -219,7 +247,7 @@ def _resolve_contacts(
     to_name: str | None = None,
     to_phone: str | None = None,
 ) -> list[Contact]:
-    """Resolve a receiver by phone first, then by exact name/alias."""
+    """Resolve a receiver by phone first, then by name/alias (including spoken kin terms)."""
     contacts = contact_rows(db, user_id)
     if to_phone:
         phone = to_phone.strip()
@@ -883,7 +911,27 @@ def semantic_entities(repository, user_id, kind):
     if kind != "contact":
         return []
     # Use phone as the canonical lookup key to disambiguate duplicate names.
-    return [
-        (c.phone or c.name, [c.name, c.alias or c.name, c.phone or c.name])
-        for c in contact_rows(repository.db, user_id)
-    ]
+    # Spoken kin terms are facts derived from the contact's actual name/alias;
+    # they are not a model guess and still require a unique SQLite match.
+    rows = []
+    for contact in contact_rows(repository.db, user_id):
+        canonical = {
+            contact.name.casefold(),
+            (contact.alias or "").casefold(),
+        }
+        spoken = [
+            term
+            for term, target in _CONTACT_RELATION_ALIASES.items()
+            if target.casefold() in canonical
+        ]
+        names: list[str] = []
+        for name in [
+            contact.name,
+            contact.alias or contact.name,
+            contact.phone or contact.name,
+            *spoken,
+        ]:
+            if name and name not in names:
+                names.append(name)
+        rows.append((contact.phone or contact.name, names))
+    return rows

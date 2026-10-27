@@ -549,7 +549,13 @@ export interface AutomationRunDueItem {
   task_id?: string;
   kind?: string;
   status?: string;
+  execution_status?: string;
   reason?: string;
+  action_required?: string;
+  reauth_required?: boolean;
+  required_risk?: string | null;
+  previous_risk?: string | null;
+  trigger_source?: string;
   amount_cny?: number | null;
   [key: string]: unknown;
 }
@@ -561,8 +567,12 @@ export interface AutomationRunDueResult {
   now?: string | null;
   executed: AutomationRunDueItem[];
   failed: AutomationRunDueItem[];
+  /** Tasks left pending because the scheduled execution needs fresh step-up auth. */
+  pending_reauth?: AutomationRunDueItem[];
   executed_count: number;
   failed_count: number;
+  pending_reauth_count?: number;
+  action_required?: boolean;
   simulated?: boolean;
 }
 /* ------------------------------------------------------------------ */

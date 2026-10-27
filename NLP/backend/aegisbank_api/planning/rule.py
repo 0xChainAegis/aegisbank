@@ -8,10 +8,25 @@ from ..banking.repository import BankingRepository
 from ..registry import ToolRegistry
 from .amounts import money_mentions
 from .contracts import ExecutionPlan, PlanningRequest, PlanStep
-from .intents import IntentContext, collect_intent_rules, extract_amounts
+from .intents import (
+    IntentContext,
+    collect_intent_rules,
+    extract_amounts,
+    resolve_card_for_write,
+)
 from .safety import planning_clarification
 
-_CANCEL_WORDS = ("取消", "关闭", "关掉", "退订", "停掉", "cancel", "unsubscribe")
+_CANCEL_WORDS = (
+    "取消",
+    "关闭",
+    "关掉",
+    "退订",
+    "退掉",
+    "终止",
+    "停掉",
+    "cancel",
+    "unsubscribe",
+)
 _SUBSCRIPTION_WORDS = (
     "订阅",
     "代扣",
@@ -21,7 +36,35 @@ _SUBSCRIPTION_WORDS = (
     "续费",
     "subscription",
 )
-
+_ABNORMAL_SUBSCRIPTION_HINTS = (
+    "异常",
+    "可疑",
+    "涨价",
+    "上涨",
+    "变贵",
+    "价格",
+    "扣费异常",
+)
+_CARD_LOST_RE = re.compile(
+    r"挂失|丢失|遗失|report\s+lost|(?:卡|卡片).{0,6}(?:丢|不见|遗失|被盗)"
+    r"|(?:丢|遗失|不见).{0,6}卡",
+    re.I,
+)
+_CARD_UNLOCK_RE = re.compile(
+    r"解挂|解除(?:卡片)?挂失|解锁(?:卡片)?挂失|取消(?:卡片)?挂失|撤销(?:卡片)?挂失|\bunlock\b",
+    re.I,
+)
+# Explicit tool names that mutate one existing card. Arguments for these tools
+# must never be completed with a demo CARD-8821 fallback.
+_CARD_WRITE_TOOLS = {
+    "report_card_lost": "挂失或冻结卡片",
+    "unlock_card": "解除挂失",
+    "reset_card_password": "重置卡片密码",
+    "unlock_transaction_limit": "解锁交易限额",
+    "adjust_repayment_date": "调整还款日",
+    "adjust_card_limit": "调整卡片额度",
+    "set_transaction_limit": "调整交易限额",
+}
 
 class RuleBasedPlanner:
     """A safe, deterministic planner that never calls a tool by itself."""
@@ -65,8 +108,8 @@ class RuleBasedPlanner:
                 "识别到多笔转账，请分别明确每笔收款人和金额后发起。", "multiple_transfers"
             )
         write_kinds = [
-            r"转账|汇款|给.{1,12}?转",
-            r"挂失|解挂",
+            r"转账|汇款|transfer|转(?=\s*[0-9０-９零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟萬億¥￥])",
+            r"挂失|解挂|冻结|卡.{0,6}(?:丢|不见|遗失|被盗)",
             r"额度|限额",
             r"申购|购买理财|赎回",
             r"重置密码|修改密码",
@@ -81,17 +124,32 @@ class RuleBasedPlanner:
         return self._infer_plan(request)
 
     def _explicit_tool_plan(self, request: PlanningRequest) -> ExecutionPlan:
+        tool_name = request.tool_name or ""
+        arguments = dict(request.arguments)
+        assumptions = ["用户显式指定了工具节点，参数由请求提供。"]
+        if tool_name in _CARD_WRITE_TOOLS and not str(arguments.get("card_id") or "").strip():
+            card_id, clarification, card_assumptions = resolve_card_for_write(
+                request.instruction,
+                self.repository,
+                request.user_id,
+                intent=tool_name,
+                action=_CARD_WRITE_TOOLS[tool_name],
+            )
+            if clarification is not None:
+                return clarification
+            arguments["card_id"] = card_id
+            assumptions.extend(card_assumptions)
         return ExecutionPlan(
-            intent=request.tool_name or "unknown",
+            intent=tool_name or "unknown",
             planner=self.name,
             confidence=1.0,
-            assumptions=["用户显式指定了工具节点，参数由请求提供。"],
+            assumptions=assumptions,
             steps=[
                 PlanStep(
                     id="step-1",
-                    tool_name=request.tool_name or "",
-                    arguments=dict(request.arguments),
-                    description=f"执行用户显式选择的工具：{request.tool_name}",
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    description=f"执行用户显式选择的工具：{tool_name}",
                 )
             ],
         )
@@ -117,35 +175,83 @@ class RuleBasedPlanner:
 
         text = request.instruction.lower()
         accounts = re.findall(r"ACC-\d{3,}", request.instruction, re.IGNORECASE)
-        card_match = re.search(r"CARD-\d{3,}", request.instruction, re.IGNORECASE)
-        card_id = card_match.group(0) if card_match else "CARD-8821"
         amounts = self._amounts(request.instruction)
 
         if self._is_cross_scenario_subscription_flow(text):
             return self._bill_and_cancel_subscription_plan(request, accounts)
-        if any(word in text for word in ("转账", "汇款", "transfer")):
+        if self._is_transfer_request(text):
             return self._transfer_plan(request, accounts, amounts)
-        if any(word in text for word in ("挂失", "丢失", "report lost")):
-            return self._single_plan("report_card_lost", "report_card_lost", {"card_id": card_id})
-        if any(word in text for word in ("解挂", "解除挂失", "unlock")):
-            return self._single_plan("unlock_card", "unlock_card", {"card_id": card_id})
+        if _CARD_UNLOCK_RE.search(request.instruction):
+            card_id, clarification, assumptions = resolve_card_for_write(
+                request.instruction,
+                self.repository,
+                request.user_id,
+                intent="unlock_card",
+                action="解除挂失",
+            )
+            if clarification is not None:
+                return clarification
+            return self._single_plan(
+                "unlock_card",
+                "unlock_card",
+                {"card_id": card_id},
+                assumptions=assumptions,
+            )
+        if self._is_card_lost_request(text):
+            card_id, clarification, assumptions = resolve_card_for_write(
+                request.instruction,
+                self.repository,
+                request.user_id,
+                intent="report_card_lost",
+                action="挂失或冻结卡片",
+            )
+            if clarification is not None:
+                return clarification
+            if "冻结" in request.instruction and "挂失" not in request.instruction:
+                assumptions.append("将「冻结」按卡片挂失处理；如需其他处理请补充说明。")
+            return self._single_plan(
+                "report_card_lost",
+                "report_card_lost",
+                {"card_id": card_id},
+                assumptions=assumptions,
+            )
         if any(word in text for word in ("交易限额", "单日限额", "transaction limit")):
             if not amounts:
                 return self._clarification(
                     "请明确目标单日交易限额，不会代填金额。", "set_transaction_limit"
                 )
+            card_id, clarification, assumptions = resolve_card_for_write(
+                request.instruction,
+                self.repository,
+                request.user_id,
+                intent="set_transaction_limit",
+                action="调整交易限额",
+            )
+            if clarification is not None:
+                return clarification
             return self._single_plan(
                 "set_transaction_limit",
                 "set_transaction_limit",
-                {"card_id": card_id, "daily_limit_cny": amounts[0] if amounts else 2000.0},
+                {"card_id": card_id, "daily_limit_cny": amounts[0]},
+                assumptions=assumptions,
             )
         if any(word in text for word in ("额度", "limit")):
             if not amounts:
                 return self._clarification("请明确目标额度，不会代填金额。", "adjust_card_limit")
+            card_id, clarification, assumptions = resolve_card_for_write(
+                request.instruction,
+                self.repository,
+                request.user_id,
+                intent="adjust_card_limit",
+                action="调整卡片额度",
+            )
+            if clarification is not None:
+                return clarification
             return self._single_plan(
                 "adjust_card_limit",
                 "adjust_card_limit",
-                {"card_id": card_id, "new_limit_cny": amounts[0] if amounts else 5000.0},
+                {"card_id": card_id, "new_limit_cny": amounts[0]},
+                assumptions=assumptions,
             )
         if any(word in text for word in ("还款日", "repayment")):
             day_match = re.search(r"(\d{1,2})\s*(?:日|号)", request.instruction)
@@ -153,10 +259,20 @@ class RuleBasedPlanner:
                 return self._clarification(
                     "请补充目标还款日，例如把还款日调整到每月 18 日。", "adjust_repayment_date"
                 )
+            card_id, clarification, assumptions = resolve_card_for_write(
+                request.instruction,
+                self.repository,
+                request.user_id,
+                intent="adjust_repayment_date",
+                action="调整还款日",
+            )
+            if clarification is not None:
+                return clarification
             return self._single_plan(
                 "adjust_repayment_date",
                 "adjust_repayment_date",
                 {"card_id": card_id, "new_day": int(day_match.group(1))},
+                assumptions=assumptions,
             )
         if self._is_subscription_cancel_request(request, text):
             return self._cancel_subscription_plan(request, text)
@@ -174,6 +290,24 @@ class RuleBasedPlanner:
             "暂时无法识别该指令。可尝试：分析账单、转账、调整卡片额度/限额/还款日、挂失/解挂或取消订阅。",
             intent="unknown",
         )
+
+    @staticmethod
+    def _is_transfer_request(text: str) -> bool:
+        return bool(
+            re.search(
+                r"转账|汇款|transfer"
+                r"|(?:^|[\s，,。；;！!])(?:请|帮我|给我|给|向|从|帮|替)?\s*转"
+                r"|(?:给|向|帮|替|从|请|帮我|给我).{0,16}?转",
+                text,
+                re.I,
+            )
+        )
+
+    @staticmethod
+    def _is_card_lost_request(text: str) -> bool:
+        if _CARD_UNLOCK_RE.search(text):
+            return False
+        return bool(_CARD_LOST_RE.search(text)) or ("冻结" in text and "卡" in text)
 
     @staticmethod
     def _amounts(instruction: str) -> list[float]:
@@ -306,17 +440,31 @@ class RuleBasedPlanner:
                 "cancel_subscription",
             )
 
-        suspicious = next((sub for sub in subscriptions if sub.risk_flag), None)
-        abnormal_hint = "异常" in request.instruction or "可疑" in request.instruction
-        if suspicious is not None and abnormal_hint:
-            return self._single_plan(
+        suspicious = [sub for sub in subscriptions if sub.risk_flag]
+        abnormal_hint = any(
+            word in request.instruction for word in _ABNORMAL_SUBSCRIPTION_HINTS
+        )
+        if abnormal_hint and suspicious:
+            if len(suspicious) == 1:
+                sub = suspicious[0]
+                return self._single_plan(
+                    "cancel_subscription",
+                    "cancel_subscription",
+                    {"subscription_id": sub.subscription_id},
+                    assumptions=[
+                        f"按风险标记定位到 {sub.merchant}（{sub.subscription_id}）："
+                        f"{sub.risk_flag}。"
+                    ],
+                    description=(
+                        f"取消风险订阅：{sub.merchant}（{sub.subscription_id}）。"
+                    ),
+                )
+            names = "、".join(
+                f"{sub.merchant}（{sub.subscription_id}）" for sub in suspicious
+            )
+            return self._clarification(
+                f"匹配到多个风险订阅：{names}，请补充要取消哪一个的订阅编号。",
                 "cancel_subscription",
-                "cancel_subscription",
-                {"subscription_id": suspicious.subscription_id},
-                assumptions=[
-                    f"按异常标记定位到 {suspicious.merchant}（{suspicious.subscription_id}）。"
-                ],
-                description=f"取消异常订阅：{suspicious.merchant}（{suspicious.subscription_id}）",
             )
 
         if subscriptions:

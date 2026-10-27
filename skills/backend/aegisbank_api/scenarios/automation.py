@@ -51,6 +51,23 @@ MAX_TRANSFER_CNY = 50_000.0
 HIGH_TRANSFER_THRESHOLD_CNY = 5_000.0
 DEFAULT_RUN_HOUR_UTC = 9
 
+
+class ScheduledTaskNeedsReauth(PermissionError):
+    """A due task is safe to keep pending but needs a stronger re-auth mandate."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        required_risk: str,
+        original_risk: str,
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.required_risk = required_risk
+        self.original_risk = original_risk
+
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
     task_id TEXT PRIMARY KEY,
@@ -1181,7 +1198,8 @@ class RunDueTasksTool(BaseTool):
             tool_name=self.metadata.name,
             message=(
                 f"时间快进到 {data['now']}：执行 {data['executed_count']} 条，"
-                f"失败 {data['failed_count']} 条（演示数据）。"
+                f"失败 {data['failed_count']} 条，"
+                f"待重新强验证 {data['pending_reauth_count']} 条（演示数据）。"
             ),
             data=data,
         )
@@ -1473,10 +1491,24 @@ def _execute_scheduled_tool(
         role="user",
         purpose="scheduled",
     )
-    if decision.denied or (decision.requires_reauth and not mandate["mfa_verified"]):
-        raise PermissionError("定时任务执行前的权限或强验证复检未通过。")
+    if decision.denied:
+        raise PermissionError("定时任务执行前的权限复检未通过。")
     if assessment.level is RiskLevel.RED and mandate["risk_level"] != "red":
-        raise PermissionError("到期风险高于最初确认，请重新确认后再执行。")
+        risk_reasons = "；".join(assessment.reasons) or "到期动态风险复检升级为红色"
+        raise ScheduledTaskNeedsReauth(
+            "到期风险由 "
+            f"{mandate['risk_level']} 升为 red（{risk_reasons}）。"
+            "为防止重复扣款，任务保持 pending 且本次未执行；请取消该任务后"
+            "按红色风险重新创建并完成 OTP 强验证，再执行时间快进。",
+            required_risk=RiskLevel.RED.value,
+            original_risk=str(mandate["risk_level"]),
+        )
+    if decision.requires_reauth and not mandate["mfa_verified"]:
+        raise ScheduledTaskNeedsReauth(
+            "到期执行需要强验证，但原任务没有可用的 MFA 授权；任务保持 pending，未执行。",
+            required_risk=assessment.level.value,
+            original_risk=str(mandate["risk_level"]),
+        )
     context = ExecutionContext(
         user_id=user_id,
         instruction=f"执行已确认定时任务 {task['task_id']}",
@@ -1556,6 +1588,42 @@ def _execute_one_task(
             )["data"]
         else:
             raise ValueError(f"未知的定时任务类型：{kind}")
+    except ScheduledTaskNeedsReauth as exc:
+        reason = str(exc) or "到期任务需要重新完成强验证。"
+        needs_reauth = {
+            "task_id": task_id,
+            "kind": kind,
+            "status": "pending",
+            "execution_status": "needs_reauth",
+            "reason": reason,
+            "action_required": (
+                "取消该定时任务后按红色风险重新创建并完成 OTP 强验证，"
+                "再执行时间快进；原任务不会扣款或自动重放。"
+            ),
+            "reauth_required": True,
+            "required_risk": exc.required_risk,
+            "previous_risk": exc.original_risk,
+            "trigger_source": "scheduled",
+            "amount_cny": payload.get("amount_cny"),
+            "simulated": SIMULATED,
+        }
+        _finish_task(
+            services.db,
+            task_id,
+            status="pending",
+            now_iso=now_iso,
+            result=needs_reauth,
+        )
+        _audit_task(
+            services,
+            event="scheduled_task_needs_reauth",
+            user_id=user_id,
+            task=task,
+            payload=payload,
+            result=needs_reauth,
+            risk_level=exc.required_risk,
+        )
+        return {"ok": True, "needs_reauth": True, **needs_reauth}
     except Exception as exc:  # noqa: BLE001 - failures are audited, never retried
         reason = str(exc) or type(exc).__name__
         failure = {
@@ -1630,21 +1698,28 @@ def _execute_due_tasks(services: CoreServices, user_id: str, now: datetime) -> d
     due = [dict(row) for row in rows if _parse_iso_datetime(str(row["run_at"])) <= now][:20]
     executed: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
+    pending_reauth: list[dict[str, Any]] = []
     now_iso = now.isoformat(timespec="seconds")
     for task in due:
         if not _claim_task(services.db, str(task["task_id"]), now_iso):
             continue
         outcome = _execute_one_task(services, user_id=user_id, task=task, now=now)
         if outcome.pop("ok"):
-            executed.append(outcome)
+            if outcome.pop("needs_reauth", False):
+                pending_reauth.append(outcome)
+            else:
+                executed.append(outcome)
         else:
             failed.append(outcome)
     return {
         "now": now_iso,
         "executed": executed,
         "failed": failed,
+        "pending_reauth": pending_reauth,
         "executed_count": len(executed),
         "failed_count": len(failed),
+        "pending_reauth_count": len(pending_reauth),
+        "action_required": bool(pending_reauth),
         "simulated": SIMULATED,
     }
 
@@ -2221,8 +2296,11 @@ def router(services: CoreServices) -> APIRouter:
             "now": data.get("now"),
             "executed": data.get("executed", []),
             "failed": data.get("failed", []),
+            "pending_reauth": data.get("pending_reauth", []),
             "executed_count": data.get("executed_count", 0),
             "failed_count": data.get("failed_count", 0),
+            "pending_reauth_count": data.get("pending_reauth_count", 0),
+            "action_required": data.get("action_required", False),
             "simulated": SIMULATED,
         }
 

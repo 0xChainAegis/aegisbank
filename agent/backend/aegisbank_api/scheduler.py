@@ -408,6 +408,20 @@ class DagScheduler:
             key=lambda item: order[item],
         )
 
+    @staticmethod
+    def _tool_is_read_only(tool) -> bool:
+        """A read-only tool is green and uses a read capability, never *:manage."""
+        metadata = tool.metadata
+        return (
+            metadata.risk_level is RiskLevel.GREEN
+            and metadata.permission.endswith(":read")
+        )
+
+    def _plan_is_read_only(self, nodes: list[PlanNode]) -> bool:
+        return bool(nodes) and all(
+            self._tool_is_read_only(self.registry.get(node.tool_name)) for node in nodes
+        )
+
     def _restore_plan(self, nodes: list[PlanNode], pending: dict[str, Any]) -> dict[str, Any]:
         stored = json.loads(pending.get("plan_json") or "{}")
         if stored:
@@ -441,31 +455,6 @@ class DagScheduler:
         arguments = arguments or {}
         run_id = uuid4().hex
         audit_run_id.set(run_id)
-
-        breaker = self.breaker.status()
-        if breaker["open"]:
-            reason = CircuitBreaker.reason(breaker)
-            audit_entry = self.audit.record(
-                event="circuit_breaker_open",
-                user_id=user_id,
-                instruction=instruction,
-                dag_path="circuit-breaker",
-                tool_name=tool_name or "planner",
-                arguments=arguments,
-                result={"reason": reason, "breaker": breaker},
-                confirmation_state="blocked",
-                risk_level=RiskLevel.RED.value,
-                evidence=evidence_payload(
-                    policy_decision_evidence(True, "熔断器打开，写操作统一拒绝")
-                ),
-            )
-            return self._blocked_response(
-                run_id=run_id,
-                reason=reason,
-                audit_entry=audit_entry,
-                chain_evidence=self._chain_evidence(),
-                extra={"breaker": breaker},
-            )
 
         matched = scan_injection(instruction, arguments)
         if matched:
@@ -539,8 +528,41 @@ class DagScheduler:
         nodes = compiled.nodes
         assessments = self._assess_nodes(nodes, user_id, instruction)
         risk_level = self._max_assessed_risk(assessments)
-        self.breaker.record_risk_level(user_id=user_id, level=risk_level.value)
         plan_payload = self._decorate_plan(compiled.as_dict(), assessments)
+        read_only_plan = self._plan_is_read_only(nodes)
+        breaker = self.breaker.status(user_id=user_id)
+        if breaker["open"] and not read_only_plan:
+            reason = CircuitBreaker.reason(breaker)
+            audit_entry = self.audit.record(
+                event="circuit_breaker_open",
+                user_id=user_id,
+                instruction=instruction,
+                dag_path="circuit-breaker",
+                tool_name=tool_name or "planner",
+                arguments=arguments,
+                result={
+                    "reason": reason,
+                    "breaker": breaker,
+                    "blocked_scope": "write",
+                    "read_only_bypass": read_only_plan,
+                },
+                confirmation_state="blocked",
+                risk_level=risk_level.value,
+                evidence=evidence_payload(
+                    policy_decision_evidence(True, "熔断器打开，仅写操作被拒绝；只读查询放行")
+                ),
+            )
+            return self._blocked_response(
+                run_id=run_id,
+                reason=reason,
+                audit_entry=audit_entry,
+                chain_evidence=self._chain_evidence(),
+                risk_level=risk_level.value,
+                plan=plan_payload,
+                extra={"breaker": breaker, "blocked_scope": "write"},
+            )
+        if not read_only_plan:
+            self.breaker.record_risk_level(user_id=user_id, level=risk_level.value)
         dag_path = compiled.dag_path
         decisions: list[tuple[PlanNode, Any, RiskAssessment]] = []
         for node in nodes:
@@ -933,7 +955,7 @@ class DagScheduler:
         if pending["status"] != "pending":
             raise IntentError(f"确认请求已处理：{pending['status']}。")
 
-        breaker = self.breaker.status()
+        breaker = self.breaker.status(user_id=user_id)
         if breaker["open"]:
             reason = CircuitBreaker.reason(breaker)
             audit_entry = self.audit.record(
@@ -943,11 +965,15 @@ class DagScheduler:
                 dag_path="circuit-breaker",
                 tool_name="confirmation",
                 arguments={},
-                result={"reason": reason, "breaker": breaker},
+                result={
+                    "reason": reason,
+                    "breaker": breaker,
+                    "blocked_scope": "confirmation",
+                },
                 confirmation_state="blocked",
                 risk_level=RiskLevel.RED.value,
                 evidence=evidence_payload(
-                    policy_decision_evidence(True, "熔断器打开，确认操作统一拒绝")
+                    policy_decision_evidence(True, "熔断器打开，确认操作被拒绝；只读查询不受影响")
                 ),
             )
             response = self._blocked_response(
@@ -955,7 +981,7 @@ class DagScheduler:
                 reason=reason,
                 audit_entry=audit_entry,
                 chain_evidence=self._chain_evidence(),
-                extra={"breaker": breaker},
+                extra={"breaker": breaker, "blocked_scope": "confirmation"},
             )
             self._finish(action_id, "blocked", response)
             return response
@@ -1056,7 +1082,8 @@ class DagScheduler:
                     provider=mfa_provider,
                 )
             except MfaError as exc:
-                self.breaker.record_failure()
+                # MFA/OTP failures are identity-verification failures, not tool
+                # execution failures and must never advance the breaker.
                 self.audit.record(
                     event="mfa_failed",
                     user_id=user_id,
@@ -1070,7 +1097,8 @@ class DagScheduler:
                 )
                 raise ReauthError(f"二次身份校验失败：{exc}") from exc
             if not mfa_result.ok:
-                self.breaker.record_failure()
+                # Wrong OTP is an authentication failure; keep retry UX and the
+                # circuit breaker untouched.
                 self.audit.record(
                     event="mfa_failed",
                     user_id=user_id,
@@ -1357,6 +1385,7 @@ class DagScheduler:
         count_failures: bool = True,
     ) -> list[dict[str, Any]]:
         dag_path = self._dag_path(nodes)
+        read_only_plan = self._plan_is_read_only(nodes)
         results: list[dict[str, Any]] = []
         results_by_id: dict[str, dict[str, Any]] = {}
         for item in prior_results or []:
@@ -1465,8 +1494,8 @@ class DagScheduler:
                 )
                 if decision.denied:
                     raise PermissionError(decision.reason)
-                if self.breaker.is_open():
-                    raise PermissionError("熔断已打开，执行前复检拒绝后续节点。")
+                if not read_only_plan and self.breaker.is_open(user_id=user_id):
+                    raise PermissionError("熔断已打开，执行前复检拒绝写入节点。")
                 if decision.outcome == "confirm":
                     if authorized_risk is RiskLevel.GREEN or (
                         assessment.requires_reauth and not context.reauth_verified
@@ -1537,7 +1566,7 @@ class DagScheduler:
                 if isinstance(exc, SandboxViolation) and getattr(exc, "outcome_unknown", False):
                     raise ExecutionOutcomeUnknown(str(exc)) from exc
                 if count_failures:
-                    self.breaker.record_failure()
+                    self.breaker.record_failure(user_id=user_id)
                 self.audit.record(
                     event="tool_failed",
                     user_id=user_id,
@@ -1551,7 +1580,7 @@ class DagScheduler:
                     evidence=self._failure_evidence(exc),
                 )
                 raise
-            self.breaker.record_success()
+            self.breaker.record_success(user_id=user_id, read_only=read_only_plan)
             result["risk"] = assessment.as_dict()
             results_by_id[node.id] = result
             results.append(result)
@@ -2857,9 +2886,9 @@ class DagScheduler:
         )
         return self.action_view(action_id)
 
-    def circuit_breaker_status(self) -> dict[str, Any]:
-        return self.breaker.status()
+    def circuit_breaker_status(self, user_id: str = "demo-user") -> dict[str, Any]:
+        return self.breaker.status(user_id=user_id)
 
-    def reset_circuit_breaker(self) -> dict[str, Any]:
-        self.breaker.reset()
-        return self.breaker.status()
+    def reset_circuit_breaker(self, user_id: str = "demo-user") -> dict[str, Any]:
+        self.breaker.reset(user_id=user_id)
+        return self.breaker.status(user_id=user_id)

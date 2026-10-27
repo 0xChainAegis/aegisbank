@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from ..db import Database
 from .models import (
@@ -23,6 +24,7 @@ from .models import (
 )
 
 CENT = Decimal("0.01")
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 
 def to_cents(value: float | str | Decimal) -> int:
@@ -35,6 +37,29 @@ def to_cents(value: float | str | Decimal) -> int:
 
 def to_cny(cents: int) -> float:
     return float((Decimal(cents) / 100).quantize(CENT, rounding=ROUND_HALF_UP))
+
+
+def _shanghai_now(now: datetime | None = None) -> datetime:
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    return current.astimezone(SHANGHAI_TZ)
+
+
+def _banking_day_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
+    local = _shanghai_now(now)
+    start = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start.astimezone(UTC), (start + timedelta(days=1)).astimezone(UTC)
+
+
+def _banking_month_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
+    local = _shanghai_now(now)
+    start = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+    return start.astimezone(UTC), end.astimezone(UTC)
 
 
 class BankingRepository:
@@ -99,7 +124,7 @@ class BankingRepository:
             )
 
     def seed_demo(self) -> None:
-        today = datetime.now(UTC).date()
+        today = _shanghai_now().date()
         with self.db.transaction() as conn:
             exists = conn.execute(
                 "SELECT COUNT(*) AS n FROM bank_accounts WHERE user_id = ?",
@@ -297,24 +322,40 @@ class BankingRepository:
             ).fetchone()
         return None if row is None else self._subscription_row(row)
 
-    def monthly_spend_cny(self, user_id: str) -> float:
-        month = datetime.now(UTC).date().strftime("%Y-%m")
+    def monthly_spend_cny(
+        self, user_id: str, *, now: datetime | None = None
+    ) -> float:
+        """Sum debits in the current Asia/Shanghai banking month.
+
+        ``occurred_at`` values are stored as ISO-8601 timestamps (normally UTC).
+        SQLite's ``julianday`` comparison converts both the stored instant and
+        the Shanghai month boundaries to the same UTC instant, so a timestamp
+        at 00:30 Beijing time belongs to the new month even though its UTC date
+        is still the previous day.
+        """
+        start, end = _banking_month_bounds_utc(now)
         with self.db.transaction() as conn:
             row = conn.execute(
                 "SELECT COALESCE(SUM(-amount_cents), 0) AS cents FROM bank_transactions "
-                "WHERE user_id = ? AND amount_cents < 0 AND occurred_at LIKE ?",
-                (user_id, f"{month}%"),
+                "WHERE user_id = ? AND amount_cents < 0 "
+                "AND julianday(occurred_at) >= julianday(?) "
+                "AND julianday(occurred_at) < julianday(?)",
+                (user_id, start.isoformat(), end.isoformat()),
             ).fetchone()
         return to_cny(row["cents"])
 
-    def daily_transfer_total_cny(self, user_id: str) -> float:
-        today = datetime.now(UTC).date().isoformat()
+    def daily_transfer_total_cny(
+        self, user_id: str, *, now: datetime | None = None
+    ) -> float:
+        """Sum outgoing transfers in the current Asia/Shanghai banking day."""
+        start, end = _banking_day_bounds_utc(now)
         with self.db.transaction() as conn:
             row = conn.execute(
                 "SELECT COALESCE(SUM(-amount_cents), 0) AS cents FROM bank_transactions "
                 "WHERE user_id = ? AND category = 'transfer' AND amount_cents < 0 "
-                "AND occurred_at LIKE ?",
-                (user_id, f"{today}%"),
+                "AND julianday(occurred_at) >= julianday(?) "
+                "AND julianday(occurred_at) < julianday(?)",
+                (user_id, start.isoformat(), end.isoformat()),
             ).fetchone()
         return to_cny(row["cents"])
 
@@ -322,7 +363,7 @@ class BankingRepository:
         account = self.account(user_id, account_id)
         if account is None:
             raise ValueError(f"账户不存在：{account_id}")
-        month = datetime.now(UTC).date().strftime("%Y-%m")
+        month = _shanghai_now().date().strftime("%Y-%m")
         if period != "current_month" and len(period) == 7 and period[4] == "-":
             month = period
         with self.db.transaction() as conn:

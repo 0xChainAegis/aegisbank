@@ -569,8 +569,11 @@ export async function runAutomationDue(now?: string): Promise<AutomationRunDueRe
     now: payload.now ?? null,
     executed: payload.executed ?? [],
     failed: payload.failed ?? [],
+    pending_reauth: payload.pending_reauth ?? [],
     executed_count: payload.executed_count ?? payload.executed?.length ?? 0,
     failed_count: payload.failed_count ?? payload.failed?.length ?? 0,
+    pending_reauth_count: payload.pending_reauth_count ?? payload.pending_reauth?.length ?? 0,
+    action_required: payload.action_required ?? false,
     simulated: payload.simulated ?? true,
   };
 }
