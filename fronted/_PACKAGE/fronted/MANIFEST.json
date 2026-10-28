@@ -94,8 +94,8 @@
       "group": "fronted",
       "path": "frontend/src/components/BusinessReceipt.tsx",
       "runtime_path": "frontend/src/components/BusinessReceipt.tsx",
-      "bytes": 4706,
-      "sha256": "abb461ede4c839bb8992993e98d62a879c63ecb99173a4eed15a04863f43afd7"
+      "bytes": 5487,
+      "sha256": "763fd57db116c1bc9384a775a6cc75b1e93c9cc019db3d5e3d92fcdb946d8923"
     },
     {
       "group": "fronted",
@@ -143,8 +143,8 @@
       "group": "fronted",
       "path": "frontend/src/components/ScenariosPage.tsx",
       "runtime_path": "frontend/src/components/ScenariosPage.tsx",
-      "bytes": 42093,
-      "sha256": "eabfb54e139563ee4144f66a4577a62f376866362df1dbdb3d9a176036dfd439"
+      "bytes": 43114,
+      "sha256": "d0a2b80dc2fa490115b254d009908ecd9fa7f444dd9e87ce115a61df3e65a211"
     },
     {
       "group": "fronted",
@@ -157,8 +157,8 @@
       "group": "fronted",
       "path": "frontend/src/components/TaskConsolePage.tsx",
       "runtime_path": "frontend/src/components/TaskConsolePage.tsx",
-      "bytes": 35592,
-      "sha256": "2d6116f83d02a32fb77268e1299b12ea5b21398e86746e56071972f8604a5a96"
+      "bytes": 35773,
+      "sha256": "5745416bf4479f36b7cd536080488e342ec981327c7babbe910b443fd72f2c35"
     },
     {
       "group": "fronted",
@@ -173,6 +173,13 @@
       "runtime_path": "frontend/src/components/businessPages.test.tsx",
       "bytes": 16527,
       "sha256": "53397372b27324f574f395fa87f3324175f8f30f1a4fa0e5c755583ed9779bff"
+    },
+    {
+      "group": "fronted",
+      "path": "frontend/src/components/nlpScheduleReceipts.test.tsx",
+      "runtime_path": "frontend/src/components/nlpScheduleReceipts.test.tsx",
+      "bytes": 7036,
+      "sha256": "9dadf79bbea93f26ea17d69e6647df8436946a0409446979e7d56500f5b4ff15"
     },
     {
       "group": "fronted",
@@ -241,8 +248,8 @@
       "group": "fronted",
       "path": "frontend/src/security.test.tsx",
       "runtime_path": "frontend/src/security.test.tsx",
-      "bytes": 16536,
-      "sha256": "b63d51226f9071dee62c2a0db658a62fc52ae330ddb6544176fb1cad933d80e9"
+      "bytes": 17498,
+      "sha256": "247f28c0ba7d4c6dfa9e60088b9de85ac331ee2aaa3091fada912c692030bc1f"
     },
     {
       "group": "fronted",

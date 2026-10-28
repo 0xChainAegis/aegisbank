@@ -40,6 +40,9 @@ class ToolMetadata:
     compensation_tool: str | None = None
     internal_only: bool = False
     allowed_purposes: tuple[str, ...] = ("compensation",)
+    # Server-owned effect declaration; a read capability alone is not proof
+    # that execution leaves business state unchanged.
+    read_only: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {

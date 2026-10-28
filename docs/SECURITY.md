@@ -161,7 +161,9 @@ rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、�
 - 冷却到期自动清零；运维接口：`GET /api/trust/breaker/events|policy`（`trust:inspect`）、`POST /api/trust/breaker/unlock`（`operator` + `ops:manage`），解锁写 `circuit_breaker_unlock` 审计；阶段 1 的 `POST /api/trust/circuit-breaker/reset` 仍保留；
 - 配置：`AEGIS_CIRCUIT_BREAKER_THRESHOLD / WINDOW_SECONDS / LOCK_SECONDS`、`AEGIS_SUSPICIOUS_RED_EVENTS / INJECTION_EVENTS / WINDOW_SECONDS`。
 
-**边界**：计数是系统级（单库单实例），未按用户隔离；攻击者可能通过触发熔断造成拒绝服务。生产需按用户/租户分桶并接入告警与人工复核。
+熔断状态和计数按 `user_id` 隔离，到期任务也检查实际执行用户。打开期间，仅服务端工具注册表明确声明 `read_only=True`、绿色且使用 `*:read` 权限的纯查询可继续；新工具默认不豁免。会写入风险偏好的 `assess_wealth_risk` 即使使用读权限也会被拦截。
+
+**边界**：用户标识仍来自演示请求，尚无真实身份绑定或租户隔离。生产需接入身份认证、告警、速率限制与人工复核。
 
 ### 2.3 MFA Provider 与策略
 
@@ -174,10 +176,10 @@ rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、�
 
 - `MfaPolicy` 按风险等级/敏感工具给出允许 provider 与推荐默认值：红色允许 `otp + biometric`、默认 `otp`；`report_card_lost`、`reset_card_password` 允许 `biometric + otp` 且推荐 `biometric`；
 - 策略在执行时**强制校验**，整条计划取允许 provider 的交集，再调用 `MfaService.verify`；确认请求可传 `mfa_provider`，未知 provider 返回 403；
-- 成功/失败均记录 `mfa` 结果（provider、verification_kind、ok）；失败写 `mfa_failed` 审计、累计熔断并拒绝执行；
+- 成功/失败均记录 `mfa` 结果（provider、verification_kind、ok）；失败写 `mfa_failed` 审计并拒绝执行，不计作工具执行失败或新红色操作；
 - 端点：`GET /api/mfa/providers|policy`、`POST /api/mfa/demo/challenge`（不返回真实凭据）。
 
-**边界**：固定 token、无真实人脸/设备能力，失败次数纳入熔断，但没有按用户限流；生产必须接入银行真实 MFA 并由服务端策略强制 provider，并验证会话身份与动作绑定。
+**边界**：固定 token、无真实人脸/设备能力，没有按用户限流；生产必须接入银行真实 MFA 并由服务端策略强制 provider，并验证会话身份与动作绑定。
 
 ### 2.4 沙箱策略与真实局限
 
@@ -307,7 +309,7 @@ rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、�
 7. 前端尚未配置完整内容安全策略（CSP）与第三方资源白名单；当前 UI 使用本地系统字体，不依赖外部字体 CDN；
 8. **沙箱是进程内演示级**：不是 OS 容器，超时无法强杀 Python 线程，网络阻断只在 socket 层；无内存/CPU/文件系统隔离；
 9. IM 渠道未校验平台签名，`sender_id` 不与真实用户绑定；
-10. 熔断计数为系统级，未按用户隔离，存在被故意触发的拒绝服务风险。
+10. 熔断计数已按演示 `user_id` 隔离；缺少真实身份与限流，仍可能被滥用或造成拒绝服务。
 
 ## 5. 上线前必须完成
 
@@ -317,7 +319,7 @@ rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、�
 - 将确认、证据与审计写入独立、只追加、可校验的合规存储；
 - 引入密钥管理服务，移除代码默认 OTP 与生物识别 token；
 - 对工具输入输出做严格 schema 与金额/账户白名单校验，并用容器/微虚拟机 + seccomp/AppArmor + 网络策略隔离执行环境；
-- 熔断按用户/租户分桶，接入告警、速率限制与人工复核；
+- 将现有按用户熔断绑定真实身份，补充租户策略、告警、速率限制与人工复核；
 - IM 渠道校验平台签名并映射真实用户；
 - 通过威胁建模、渗透测试、依赖供应链扫描和数据合规评审。
 
@@ -325,7 +327,7 @@ rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、�
 
 | 边界 | 状态 | 归属 |
 |---|---|---|
-| 可疑行为熔断（红色/注入累计） | ✅ 已实现，系统级计数 | 生产化：按用户隔离 |
+| 可疑行为熔断（红色/注入累计） | ✅ 按用户隔离，纯查询显式豁免 | 生产化：真实身份、租户与限流 |
 | 步骤级暂停 / 回退 / 补偿 | ✅ 已实现（15 可补偿 / 13 不可逆） | 生产化：工具中途强停、TTL |
 | 演示 MFA Provider（OTP + 模拟人脸/设备） | ✅ 已实现，固定演示 token | 生产化：真实 MFA、按用户锁定和限流 |
 | IM 渠道适配器 | ✅ 已实现（im/cli/webhook） | 生产化：平台签名、用户映射 |
@@ -360,7 +362,7 @@ rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、�
 - 澄清续问使用 `clarification_run_id`：绑定用户和角色、10 分钟、只能消费一次。调用者明确选择补充，否定或修改意图要求重新给出完整指令。通用代词和重复扣款指令仍需明确核对。
 - `audit.result_json` 新增受哈希保护的 run_id / step_id，支持 `GET /api/audit?run_id=...`；历史链不重写。对账只记结论，实际资金补偿使用 rollback。
 
-仍需后续验证：kill -9 / 多 worker 故障恢复、长期 TTL 清理、按用户熔断、OS 隔离、真实身份与 MFA / IM、外部审计锚点与长时间压力测试。详见 [修复记录](REMEDIATION-PLAN-2026-10-23.md)。
+该次复审的历史待办见 [修复记录](REMEDIATION-PLAN-2026-10-23.md)。按用户熔断已于 2026-10-27/28 补齐；kill -9 / 多 worker 故障恢复、长期 TTL 清理、OS 隔离、真实身份与 MFA / IM、外部审计锚点与长时间压力测试仍需后续验证。
 
 ### 2026-10-24 权限审计事务
 

@@ -968,7 +968,14 @@ export default function ScenariosPage({ writesBlocked, blockReason, onDataChange
               onRetry={() => void schedules.reload()}
             >
               <ul className="list-stack">
-                {taskList.map((task) => (
+                {taskList.map((task) => {
+                  const needsReauth = task.status === 'pending' &&
+                    (task.last_result?.execution_status === 'needs_reauth' || task.last_result?.reauth_required === true);
+                  const reauthReason = typeof task.last_result?.reason === 'string'
+                    ? task.last_result.reason : '到期风险复检要求重新完成强验证。';
+                  const reauthAction = typeof task.last_result?.action_required === 'string'
+                    ? task.last_result.action_required : '';
+                  return (
                   <li className="list-item" key={task.task_id}>
                     <div className="item-main">
                       <strong>{task.label || taskKindLabel(task.kind)}</strong>
@@ -978,19 +985,27 @@ export default function ScenariosPage({ writesBlocked, blockReason, onDataChange
                         {formatDateTime(task.run_at)}
                       </small>
                       <small>
-                        最近执行 {task.last_run_at ? formatDateTime(task.last_run_at) : '未执行'}
+                        最近调度 {task.last_run_at ? formatDateTime(task.last_run_at) : '尚未调度'}
                       </small>
+                      {needsReauth && (
+                        <div className="scheduled-reauth-detail" role="status">
+                          <strong>待补验证 · 上次调度未执行、未扣款</strong>
+                          <p>{reauthReason}</p>
+                          {reauthAction && <p>{reauthAction}</p>}
+                        </div>
+                      )}
                     </div>
                     <div className="item-end">
                       {typeof task.amount_cny === 'number' && (
                         <strong>{formatCny(task.amount_cny)}</strong>
                       )}
-                      <span className={`chip ${taskStatusClass(task.status)}`}>
-                        {TASK_STATUS_LABELS[task.status] ?? task.status}
+                      <span className={`chip ${needsReauth ? 'chip-warn' : taskStatusClass(task.status)}`}>
+                        {needsReauth ? '待补验证' : TASK_STATUS_LABELS[task.status] ?? task.status}
                       </span>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </ResourceState>
 

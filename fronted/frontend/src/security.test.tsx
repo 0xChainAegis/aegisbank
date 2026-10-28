@@ -248,6 +248,20 @@ describe('submission and confirmation security', () => {
     await click('补充上一条任务信息'); await submit('100元');
     expect(vi.mocked(runAgent).mock.calls[1][0]).toEqual({ instruction: '100元', clarification_run_id: 'clarify-one' });
   });
+  it('shows an unevaluated risk for clarification instead of the default green execution badge', async () => {
+    vi.mocked(runAgent).mockResolvedValueOnce({
+      status: 'needs_clarification', run_id: 'clarify-card', reason: '请补充要挂失的卡号',
+      risk_reasons: ['缺少卡号，尚不能生成执行计划'],
+    });
+    await mount(); await submit('挂失我的卡');
+    const result = container.querySelector('.result-card')!;
+    expect(result.querySelector('.result-tags')?.textContent).toContain('风险待评估');
+    expect(result.querySelector('.receipt-facts')?.textContent).toContain('风险待评估');
+    expect(result.querySelector('.risk-reason-panel')).toBeNull();
+    expect(result.querySelector('.risk-green')).toBeNull();
+    expect(result.textContent).not.toContain('GREEN');
+    expect([...result.querySelectorAll('[title]')].some(item => /绿色|直接执行/.test(item.getAttribute('title') ?? ''))).toBe(false);
+  });
   it('ignores stale resource responses after a filter changes', async () => {
     let resolveOld!: (value: string) => void;
     let resolveNew!: (value: string) => void;

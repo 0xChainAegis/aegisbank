@@ -25,8 +25,10 @@ def check(scenario: str, case: str, ok: bool, detail: str = "") -> None:
     print(f"{'PASS' if ok else 'FAIL':4} | {scenario:6} | {case:28} | {detail}")
 
 
-def fast_forward_result(status_code: int, payload: dict) -> tuple[bool, str]:
-    """Fail closed unless run-due reports integer counts with zero failures."""
+def fast_forward_result(
+    status_code: int, payload: dict, *, target_task_id: str | None = None
+) -> tuple[bool, str]:
+    """A successful batch must execute its target, not leave it awaiting reauth."""
     if not isinstance(payload, dict):
         return False, "响应格式错误：run-due 响应不是 JSON 对象；处理建议：检查响应构造。"
 
@@ -46,12 +48,23 @@ def fast_forward_result(status_code: int, payload: dict) -> tuple[bool, str]:
     pending_reauth = (
         raw_pending if type(raw_pending) is int and raw_pending >= 0 else 0
     )
+    if raw_pending is not None and (type(raw_pending) is not int or raw_pending < 0):
+        invalid.append(f"pending_reauth_count={raw_pending!r}")
+    target_executed = target_task_id is None or any(
+        isinstance(item, dict)
+        and item.get("task_id") == target_task_id
+        and item.get("kind") == "transfer"
+        and item.get("status") == "executed"
+        for item in payload.get("executed") or []
+    )
     ok = (
         status_code == 200
         and not invalid
         and executed is not None
         and executed >= 1
         and failed == 0
+        and pending_reauth == 0
+        and target_executed
     )
 
     parts = [
@@ -61,6 +74,9 @@ def fast_forward_result(status_code: int, payload: dict) -> tuple[bool, str]:
     ]
     if pending_reauth:
         parts.append(f"pending_reauth={pending_reauth}")
+        parts.append("处理建议：补验证代表安全暂停，不能当作目标转账已执行。")
+    if not target_executed:
+        parts.append(f"目标任务 {target_task_id} 未在 executed 中完成。")
     if invalid:
         parts.append("响应格式错误：" + "；".join(invalid))
         parts.append(
@@ -109,10 +125,7 @@ class Agent:
 
     def run_and_complete(self, instruction: str, **extra) -> tuple[dict, dict]:
         body = self.run(instruction, **extra)
-        if body.get("status") == "awaiting_confirmation":
-            final = self.confirm(body)
-        else:
-            final = body
+        final = self.confirm(body) if body.get("status") == "awaiting_confirmation" else body
         return body, final
 
     def plan_steps(self, body: dict) -> list[str]:
@@ -301,26 +314,77 @@ def scenario_cross(agent: Agent) -> None:
     )
 
     body, final = agent.run_and_complete("下周三给张三转 500")
+    scheduled = next(
+        (
+            item.get("data") or {}
+            for item in final.get("results") or []
+            if item.get("tool_name") == "schedule_transfer"
+        ),
+        {},
+    )
+    target_task_id = scheduled.get("task_id")
     check(
         "定时/触发",
         "自然语言创建定时转账",
         "schedule_transfer" in agent.plan_steps(body)
-        and final.get("status") == "completed",
+        and final.get("status") == "completed"
+        and bool(target_task_id)
+        and scheduled.get("status") == "pending"
+        and scheduled.get("amount_cny") == 500.0,
+        str(target_task_id or "未创建目标任务"),
     )
 
+    accounts_before = {
+        item["account_id"]: item
+        for item in agent.client.get("/api/banking/overview").json()["accounts"]
+    }
     fast_forward = datetime.now(UTC) + timedelta(days=30)
     response = agent.client.post(
         "/api/automation/run-due", params={"now": fast_forward.isoformat()}
     )
     payload = response.json()
     fast_forward_ok, fast_forward_detail = fast_forward_result(
-        response.status_code, payload
+        response.status_code, payload, target_task_id=target_task_id or "missing-target"
+    )
+    tasks = agent.client.get("/api/automation/schedules").json()["tasks"]
+    target = next((item for item in tasks if item["task_id"] == target_task_id), {})
+    accounts_after = {
+        item["account_id"]: item
+        for item in agent.client.get("/api/banking/overview").json()["accounts"]
+    }
+    source_id = scheduled.get("from_account")
+    before, after = accounts_before.get(source_id, {}), accounts_after.get(source_id, {})
+    gift_spend = sum(
+        item.get("amount_cny", 0)
+        for item in payload.get("executed") or []
+        if item.get("kind") == "gift"
+    )
+    # Gift purchases consume previously locked funds from ACC-1001, so they
+    # reduce its balance but not its available balance. This target transfers
+    # exactly 500 CNY from that account to external contact account ACC-9003.
+    correct_balance = (
+        source_id == "ACC-1001"
+        and scheduled.get("to_account") == "ACC-9003"
+        and before
+        and after
+        and round(before["available_cny"] - after["available_cny"], 2) == 500.0
+        and round(before["balance_cny"] - after["balance_cny"], 2)
+        == round(500.0 + gift_spend, 2)
+    )
+    persisted = target.get("last_result") or {}
+    target_done = (
+        target.get("status") == "done"
+        and persisted.get("status") == "executed"
+        and persisted.get("task_id") == target_task_id
+        and persisted.get("amount_cny") == 500.0
+        and persisted.get("to_account") == scheduled.get("to_account")
+        and bool(persisted.get("transaction_id"))
     )
     check(
         "定时/触发",
         "时间快进执行到期任务",
-        fast_forward_ok,
-        fast_forward_detail,
+        fast_forward_ok and target_done and bool(correct_balance),
+        f"{fast_forward_detail} target_done={target_done} balance_ok={bool(correct_balance)}",
     )
 
     body = agent.run("取消异常订阅")
@@ -329,6 +393,46 @@ def scenario_cross(agent: Agent) -> None:
         "无可取消异常订阅时澄清",
         body.get("status") == "needs_clarification",
         str(body.get("reason"))[:40],
+    )
+
+
+def scenario_schedule_reauth(agent: Agent) -> None:
+    """A fresh bank isolates expected safety suspension from successful execution."""
+    body, final = agent.run_and_complete("明天给张三转 500")
+    scheduled = (final.get("results") or [{}])[0].get("data") or {}
+    task_id = scheduled.get("task_id")
+    _, immediate = agent.run_and_complete("向 ACC-2002 转账 600 元")
+    before = agent.client.get("/api/banking/overview").json()["accounts"]
+    run_at = datetime.fromisoformat(scheduled["run_at"]) + timedelta(hours=1)
+    response = agent.client.post("/api/automation/run-due", params={"now": run_at.isoformat()})
+    payload = response.json()
+    target = next(
+        (
+            item
+            for item in agent.client.get("/api/automation/schedules").json()["tasks"]
+            if item["task_id"] == task_id
+        ),
+        {},
+    )
+    pending = payload.get("pending_reauth") or []
+    check(
+        "定时/安全",
+        "风险升级暂停且不扣款（非执行成功）",
+        body.get("risk_level") == "yellow"
+        and final.get("status") == "completed"
+        and immediate.get("status") == "completed"
+        and response.status_code == 200
+        and payload.get("executed_count") == 0
+        and payload.get("failed_count") == 0
+        and payload.get("pending_reauth_count") == 1
+        and len(pending) == 1
+        and pending[0].get("task_id") == task_id
+        and pending[0].get("execution_status") == "needs_reauth"
+        and bool(pending[0].get("action_required"))
+        and target.get("status") == "pending"
+        and (target.get("last_result") or {}).get("execution_status") == "needs_reauth"
+        and agent.client.get("/api/banking/overview").json()["accounts"] == before,
+        f"target={task_id} pending_reauth={payload.get('pending_reauth_count')}",
     )
 
 
@@ -410,6 +514,10 @@ def main() -> int:
             global_checks,
         ):
             scenario(agent)
+
+    reauth_app = create_app(database_path=database.parent / "scheduled-reauth-regression.db")
+    with TestClient(reauth_app) as client:
+        scenario_schedule_reauth(Agent(client))
 
     failed = [item for item in RESULTS if not item[2]]
     print()

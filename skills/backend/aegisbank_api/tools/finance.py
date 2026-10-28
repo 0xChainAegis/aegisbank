@@ -36,6 +36,7 @@ class QueryBalanceOutput(AccountInfo):
 class QueryBalanceTool(BaseTool):
     metadata = ToolMetadata(
         name="query_balance",
+        read_only=True,
         title="查询余额",
         description="读取指定本人模拟账户的余额与可用余额。",
         risk_level=RiskLevel.GREEN,
@@ -71,6 +72,7 @@ class QueryBillOutput(BaseModel):
 class QueryBillTool(BaseTool):
     metadata = ToolMetadata(
         name="query_bill",
+        read_only=True,
         title="分析账单",
         description="读取并分析指定账户的本月账单，识别消费分类和异常订阅，只读操作。",
         risk_level=RiskLevel.GREEN,
@@ -281,6 +283,7 @@ class ListSubscriptionsArgs(BaseModel):
 class ListSubscriptionsTool(BaseTool):
     metadata = ToolMetadata(
         name="list_subscriptions",
+        read_only=True,
         title="订阅查询",
         description="查询当前订阅及异常扣费提示，只读操作。",
         risk_level=RiskLevel.GREEN,

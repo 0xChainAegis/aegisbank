@@ -10,9 +10,11 @@ from .amounts import money_mentions
 from .contracts import ExecutionPlan, PlanningRequest, PlanStep
 from .intents import (
     IntentContext,
+    card_clarification_plan,
     collect_intent_rules,
     extract_amounts,
     resolve_card_for_write,
+    resolve_card_reference,
 )
 from .safety import planning_clarification
 
@@ -127,6 +129,21 @@ class RuleBasedPlanner:
         tool_name = request.tool_name or ""
         arguments = dict(request.arguments)
         assumptions = ["用户显式指定了工具节点，参数由请求提供。"]
+        if tool_name in _CARD_WRITE_TOOLS and str(arguments.get("card_id") or "").strip():
+            resolution = resolve_card_reference(
+                request.instruction, self.repository, request.user_id
+            )
+            if resolution.reference is not None:
+                if resolution.card_id is None:
+                    return card_clarification_plan(
+                        tool_name, resolution, action=_CARD_WRITE_TOOLS[tool_name]
+                    )
+                if str(arguments["card_id"]).strip().upper() != resolution.card_id.upper():
+                    return self._clarification(
+                        "显式卡片参数与原文中的卡片标识不一致，请明确同一张卡后再发起。",
+                        tool_name,
+                    )
+                arguments["card_id"] = resolution.card_id
         if tool_name in _CARD_WRITE_TOOLS and not str(arguments.get("card_id") or "").strip():
             card_id, clarification, card_assumptions = resolve_card_for_write(
                 request.instruction,

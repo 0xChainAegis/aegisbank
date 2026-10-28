@@ -386,6 +386,7 @@ class RedeemWealthOutput(BaseModel):
 class ListWealthProductsTool(BaseTool):
     metadata = ToolMetadata(
         name="list_wealth_products",
+        read_only=True,
         title="查看理财产品",
         description="只读查询模拟理财产品清单（R1-R5），不构成任何投资建议。",
         risk_level=RiskLevel.GREEN,
@@ -420,6 +421,7 @@ class ListWealthProductsTool(BaseTool):
 class QueryWealthHoldingsTool(BaseTool):
     metadata = ToolMetadata(
         name="query_wealth_holdings",
+        read_only=True,
         title="查询理财持仓",
         description="只读查询本人模拟理财持仓、本金与市值。",
         risk_level=RiskLevel.GREEN,

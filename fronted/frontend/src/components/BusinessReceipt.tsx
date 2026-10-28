@@ -13,6 +13,11 @@ function money(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? formatCny(value) : '金额未返回';
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : {};
+}
+
 function cardStatus(value: unknown): string {
   const status = text(value, '').toLowerCase();
   if (status === 'active' || status === '正常') return '正常';
@@ -25,14 +30,14 @@ function cardStatus(value: unknown): string {
 export default function BusinessReceipt({ run }: { run: RunResponse }) {
   if (run.status !== 'completed') return null;
   const results = run.results?.filter((item) =>
-    ['query_bill', 'transfer', 'report_card_lost', 'unlock_card'].includes(item.tool_name));
+    ['query_bill', 'bill_report', 'transfer', 'transfer_to_contact', 'report_card_lost', 'unlock_card'].includes(item.tool_name));
   if (!results?.length) return null;
   return (
     <div className="business-receipts">
       {results.map((result, index) => {
         const data = result.data ?? {};
-        if (result.tool_name === 'query_bill') {
-          const { total_spend_cny: total, categories, anomalies, month } = data;
+        if (result.tool_name === 'query_bill' || result.tool_name === 'bill_report') {
+          const { total_spend_cny: total, categories, anomalies, month, label, conclusion } = data;
           const hasCategories = categories !== null && typeof categories === 'object' && !Array.isArray(categories);
           const entries = hasCategories ? Object.entries(categories) : [];
           const notes = Array.isArray(anomalies)
@@ -40,8 +45,9 @@ export default function BusinessReceipt({ run }: { run: RunResponse }) {
           return (
             <section className="business-receipt business-receipt-bill" aria-label="账单查询结果" key={index}>
               <h3>账单查询结果</h3>
-              <p>账期：{text(month, '账期未返回')}</p>
+              <p>账期：{text(month, text(label, '账期未返回'))}</p>
               <p>支出合计 <strong className="receipt-business-amount">{money(total)}</strong></p>
+              {typeof conclusion === 'string' && conclusion.trim() && <p>{conclusion}</p>}
               {entries.length > 0 ? (
                 <dl className="bill-categories">
                   {entries.map(([category, amount]) => (
@@ -56,17 +62,21 @@ export default function BusinessReceipt({ run }: { run: RunResponse }) {
             </section>
           );
         }
-        if (result.tool_name === 'transfer') {
-          const status = text(data.status, '状态未返回');
+        if (result.tool_name === 'transfer' || result.tool_name === 'transfer_to_contact') {
+          const isContactTransfer = result.tool_name === 'transfer_to_contact';
+          const transfer = isContactTransfer ? record(data.transfer) : data;
+          const contact = record(data.contact);
+          const status = text(transfer.status, '状态未返回');
           return (
             <section className="business-receipt business-receipt-transfer" aria-label="转账回执" key={index}>
               <h3>转账回执</h3>
-              <p>转账金额 <strong className="receipt-business-amount">{money(data.amount_cny)}</strong></p>
+              <p>转账金额 <strong className="receipt-business-amount">{money(transfer.amount_cny)}</strong></p>
               <dl className="receipt-business-facts">
-                <div><dt>转出账户</dt><dd>{text(data.from_account, '转出账户未返回')}</dd></div>
-                <div><dt>收款账户</dt><dd>{text(data.to_account, '收款账户未返回')}</dd></div>
+                {isContactTransfer && <div><dt>收款联系人</dt><dd>{text(contact.name, '联系人未返回')}</dd></div>}
+                <div><dt>转出账户</dt><dd>{text(transfer.from_account, '转出账户未返回')}</dd></div>
+                <div><dt>收款账户</dt><dd>{text(transfer.to_account, '收款账户未返回')}</dd></div>
                 <div><dt>交易状态</dt><dd>{status === 'simulated_success' ? '模拟转账成功' : status}</dd></div>
-                <div><dt>交易编号</dt><dd>{text(data.transaction_id, '交易编号未返回')}</dd></div>
+                <div><dt>交易编号</dt><dd>{text(transfer.transaction_id, '交易编号未返回')}</dd></div>
               </dl>
               <small>来源：本次模拟银行执行回执；不涉及真实资金。</small>
             </section>

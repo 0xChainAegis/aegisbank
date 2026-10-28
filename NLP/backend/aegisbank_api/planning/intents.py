@@ -19,14 +19,14 @@ from .amounts import extract_amounts  # re-export for scenario intent rules
 from .contracts import ExecutionPlan, PlanningRequest
 
 _ACCOUNT_PATTERN = re.compile(r"ACC-\d{3,}", re.IGNORECASE)
-_CARD_PATTERN = re.compile(r"CARD-\d{3,}", re.IGNORECASE)
+_CARD_PATTERN = re.compile(r"CARD-[A-Za-z0-9_-]+", re.IGNORECASE)
 # Card suffixes are only recognised when the text explicitly frames them as a
 # card reference. A bare number (an amount, a date or an account suffix) must
 # never be mistaken for a card.
 _CARD_SUFFIX_PATTERNS = (
-    re.compile(r"(?:尾号|末四位|后四位|末位)\D{0,4}(\d{3,4})", re.IGNORECASE),
-    re.compile(r"(\d{3,4})\s*(?:的)?\s*卡(?:片)?", re.IGNORECASE),
-    re.compile(r"卡号\s*[:：]?\s*(\d{3,4})", re.IGNORECASE),
+    re.compile(r"(?:尾号|末四位|后四位|末位)\D{0,4}(\d+)", re.IGNORECASE),
+    re.compile(r"(?<!\d)(\d+)\s*(?:的)?\s*卡(?:片)?", re.IGNORECASE),
+    re.compile(r"卡号\s*[:：]?\s*(\d+)", re.IGNORECASE),
 )
 
 
@@ -51,11 +51,12 @@ def resolve_card_reference(
     repository: BankingRepository | None,
     user_id: str,
 ) -> CardResolution:
-    """Resolve an explicit CARD id or a masked/id suffix for one user.
+    """Require every explicit ID/suffix to resolve to the same card for one user.
 
     The resolver never falls back to a demo card. When a referenced card is
     missing or matches more than one card the caller must ask the user to
-    choose; the candidate list is returned for that clarification.
+    choose. A full ID cannot hide a contradictory suffix, and an ambiguous
+    suffix cannot be silently disambiguated by another reference.
     """
     cards = []
     if repository is not None:
@@ -66,52 +67,61 @@ def resolve_card_reference(
     candidates = tuple(_card_candidate(card) for card in cards)
     by_id = {str(card.card_id).upper(): card for card in cards}
 
-    explicit = [match.group(0).upper() for match in _CARD_PATTERN.finditer(instruction)]
-    unique_explicit = list(dict.fromkeys(explicit))
-    if unique_explicit:
-        if len(unique_explicit) > 1:
-            return CardResolution(
-                None,
-                candidates,
-                reference="、".join(unique_explicit),
-                reason="multiple_card_ids",
-            )
-        card_id = unique_explicit[0]
-        if repository is None:
-            return CardResolution(card_id, candidates, reference=card_id, reason="explicit_id")
-        if card_id in by_id:
-            return CardResolution(card_id, candidates, reference=card_id, reason="explicit_id")
-        return CardResolution(None, candidates, reference=card_id, reason="unknown_card")
-
-    suffix = None
+    explicit_matches = list(_CARD_PATTERN.finditer(instruction))
+    explicit = list(dict.fromkeys(match.group(0).upper() for match in explicit_matches))
+    suffixes = []
     for pattern in _CARD_SUFFIX_PATTERNS:
-        match = pattern.search(instruction)
-        if match is not None:
-            suffix = match.group(1)
-            break
-    if suffix is not None:
-        matched = [
-            card
-            for card in cards
-            if str(card.card_id).upper().split("-")[-1].endswith(suffix)
-            or re.sub(r"\s+", "", str(card.masked_number)).endswith(suffix)
-        ]
-        if len(matched) == 1:
-            return CardResolution(
-                str(matched[0].card_id),
-                tuple(_card_candidate(card) for card in matched),
-                reference=suffix,
-                reason="masked_suffix",
-            )
-        matched_candidates = tuple(_card_candidate(card) for card in matched)
-        return CardResolution(
-            None,
-            matched_candidates or candidates,
-            reference=suffix,
-            reason="ambiguous_card" if len(matched) > 1 else "unknown_card",
-        )
+        for match in pattern.finditer(instruction):
+            # The numeric portion of CARD-12345 is an ID, not a shorter suffix.
+            start, end = match.span(1)
+            if any(item.start() <= start and end <= item.end() for item in explicit_matches):
+                continue
+            suffixes.append(match.group(1))
+    suffixes = list(dict.fromkeys(suffixes))
+    references = [(value, "id") for value in explicit] + [(value, "suffix") for value in suffixes]
+    if not references:
+        return CardResolution(None, candidates, reason="card_unspecified")
 
-    return CardResolution(None, candidates, reason="card_unspecified")
+    reference = "、".join(value for value, _ in references)
+    resolved: dict[str, str] = {}
+    for value, kind in references:
+        if kind == "id":
+            if repository is None:
+                # Preserve standalone rule-planner compatibility; execution
+                # still requires repository-backed ownership checks.
+                matched_ids = [value]
+                matched_candidates = candidates
+            else:
+                card = by_id.get(value)
+                matched_ids = [str(card.card_id)] if card is not None else []
+                matched_candidates = candidates
+        else:
+            # Keep the supported 3/4-digit suffix contract. Longer numbers are
+            # unresolved references, never a valid 4-digit substring.
+            matched = [
+                card for card in cards
+                if 3 <= len(value) <= 4 and (
+                    str(card.card_id).upper().split("-")[-1].endswith(value)
+                    or re.sub(r"\s+", "", str(card.masked_number)).endswith(value)
+                )
+            ]
+            matched_ids = [str(card.card_id) for card in matched]
+            matched_candidates = tuple(_card_candidate(card) for card in matched) or candidates
+        if len(matched_ids) != 1:
+            return CardResolution(
+                None, matched_candidates, reference=reference,
+                reason="ambiguous_card" if len(matched_ids) > 1 else "unknown_card",
+            )
+        resolved[matched_ids[0].upper()] = matched_ids[0]
+        if len(resolved) > 1:
+            return CardResolution(
+                None, candidates, reference=reference, reason="conflicting_card_references"
+            )
+
+    return CardResolution(
+        next(iter(resolved.values())), candidates, reference=reference,
+        reason="masked_suffix" if suffixes else "explicit_id",
+    )
 
 
 def card_clarification_plan(

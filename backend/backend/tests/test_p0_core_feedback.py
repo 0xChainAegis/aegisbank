@@ -125,25 +125,38 @@ def test_breaker_state_is_isolated_per_user(tmp_path: Path) -> None:
 
 def test_breaker_isolation_between_users_over_http(tmp_path: Path) -> None:
     with make_client(tmp_path, name="http-user-isolation.db") as client:
-        for user_id in ("user-a", "user-b"):
+        user_cards = {"user-a": "CARD-8811", "user-b": "CARD-8822"}
+        with client.app.state.services.db.transaction() as conn:
+            for index, (user_id, card_id) in enumerate(user_cards.items(), 1):
+                account_id = f"ACC-300{index}"
+                conn.execute(
+                    "INSERT INTO bank_accounts VALUES (?, ?, ?, 'checking', 'CNY', 100000, 100000)",
+                    (account_id, user_id, f"{user_id}的账户"),
+                )
+                conn.execute(
+                    "INSERT INTO bank_cards VALUES "
+                    "(?, ?, ?, ?, 'active', 100000, 100000, 8, 100000)",
+                    (card_id, user_id, account_id, f"**** {card_id[-4:]}"),
+                )
+        for user_id in user_cards:
             grant_tool(client, user_id, "report_card_lost")
 
         for _ in range(3):
             body = run_agent(
                 client,
-                "挂失我的信用卡 CARD-8821",
+                f"挂失我的信用卡 {user_cards['user-a']}",
                 user_id="user-a",
                 tool_name="report_card_lost",
-                arguments={"card_id": "CARD-8821"},
+                arguments={"card_id": user_cards["user-a"]},
             )
             assert body["status"] == "awaiting_confirmation", body
 
         blocked = run_agent(
             client,
-            "挂失我的信用卡 CARD-8821",
+            f"挂失我的信用卡 {user_cards['user-a']}",
             user_id="user-a",
             tool_name="report_card_lost",
-            arguments={"card_id": "CARD-8821"},
+            arguments={"card_id": user_cards["user-a"]},
         )
         assert blocked["status"] == "blocked", blocked
         assert blocked["blocked_scope"] == "write"
@@ -153,13 +166,18 @@ def test_breaker_isolation_between_users_over_http(tmp_path: Path) -> None:
         # confirmation flow; it is not blocked by user-a's open breaker.
         user_b = run_agent(
             client,
-            "挂失我的信用卡 CARD-8821",
+            f"挂失我的信用卡 {user_cards['user-b']}",
             user_id="user-b",
             tool_name="report_card_lost",
-            arguments={"card_id": "CARD-8821"},
+            arguments={"card_id": user_cards["user-b"]},
         )
         assert user_b["status"] == "awaiting_confirmation", user_b
         assert user_b["risk_level"] == "red"
+        repository = client.app.state.services.repository
+        assert all(
+            repository.card(user_id, card_id).status == "active"
+            for user_id, card_id in user_cards.items()
+        )
 
 
 # ---------------------------------------------------------------------------

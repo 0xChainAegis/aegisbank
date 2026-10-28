@@ -499,11 +499,10 @@ curl -s -X POST http://127.0.0.1:8000/api/agent/run \
         "account_id": "ACC-1001",
         "period": "current_month",
         "month": "2026-10",
-        "total_spend_cny": 6377.4,
+        "total_spend_cny": 5497.4,
         "categories": {
           "food": 1865.0,
           "transport": 108.0,
-          "transfer": 880.0,
           "shopping": 2752.4,
           "subscription": 772.0
         },
@@ -516,6 +515,9 @@ curl -s -X POST http://127.0.0.1:8000/api/agent/run \
 ```
 
 `results[0].data.transactions` 等长数组在实际响应中会返回，示例中省略。
+
+同一用户自有账户之间的内部调拨保留交易流水，但不计入支出合计和消费分类；
+对外转出仍计入支出，所有转账仍计入转账风险日累计。账单和概览采用上海月份边界。
 
 ### 7.7 `POST /api/agent/run` — 黄色待确认，再确认执行
 

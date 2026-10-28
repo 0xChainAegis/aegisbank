@@ -298,6 +298,7 @@ export default function TaskConsolePage({
   const toolNames = useMemo(() => new Set(tools.map((tool) => tool.name)), [tools]);
   const riskReasons = useMemo(() => (lastRun ? collectRiskReasons(lastRun) : []), [lastRun]);
   const overallRisk = lastRun ? runRiskLevel(lastRun) : 'green';
+  const riskPending = lastRun?.status === 'needs_clarification';
   const canExecute = canExecuteTools(role);
   const roleBlockReason = roleTaskBlockReason(role);
   const taskBlocked = !canExecute || writesBlocked;
@@ -480,7 +481,7 @@ export default function TaskConsolePage({
               <h2>处理结果</h2>
             </div>
             <div className="result-tags">
-              <RiskBadge risk={overallRisk} verbose />
+              {riskPending ? <span className="chip">风险待评估</span> : <RiskBadge risk={overallRisk} verbose />}
               <StatusPill status={lastRun.status} />
             </div>
           </div>
@@ -497,7 +498,7 @@ export default function TaskConsolePage({
             </div>
             <div>
               <span>风险等级</span>
-              <strong><RiskBadge risk={overallRisk} verbose /></strong>
+              <strong>{riskPending ? '风险待评估' : <RiskBadge risk={overallRisk} verbose />}</strong>
             </div>
             <div>
               <span>执行时间</span>
@@ -560,7 +561,7 @@ export default function TaskConsolePage({
             </div>
           )}
 
-          {riskReasons.length > 0 && (
+          {!riskPending && riskReasons.length > 0 && (
             <div className={`risk-reason-panel risk-panel-${overallRisk}`}>
               <div className="risk-reason-head">
                 <span className="eyebrow">RISK ENGINE FINDINGS</span>

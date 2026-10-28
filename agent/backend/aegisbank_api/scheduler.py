@@ -177,6 +177,33 @@ class DagScheduler:
                 base_risk=tool.metadata.risk_level,
                 instruction=instruction,
             )
+            if node.tool_name == "schedule_transfer":
+                # Recreating a task after a due-time escalation must offer the
+                # same step-up auth as its underlying transfer requires now.
+                # This also runs again during confirmation; due-time execution
+                # still checks its own current risk and the stored mandate.
+                transfer = self.registry.get("transfer")
+                transfer_risk = self.risk_engine.assess(
+                    user_id=user_id,
+                    tool_name=transfer.metadata.name,
+                    arguments=node.arguments,
+                    base_risk=transfer.metadata.risk_level,
+                    instruction=instruction,
+                )
+                previous = assessments[node.id]
+                level = self.risk_engine.max_level(previous.level, transfer_risk.level)
+                if level is not previous.level:
+                    assessments[node.id] = RiskAssessment(
+                        level=level,
+                        score=max(previous.score, transfer_risk.score),
+                        reasons=[
+                            *previous.reasons,
+                            "定时转账创建时按当前底层转账风险上调，需提前完成强验证。",
+                            *transfer_risk.reasons,
+                        ],
+                        base_risk=previous.base_risk,
+                        requires_reauth=level is RiskLevel.RED,
+                    )
             if node.tool_name in {"transfer", "transfer_to_contact"}:
                 projected_transfers += float(node.arguments.get("amount_cny") or 0)
         if (
@@ -410,11 +437,12 @@ class DagScheduler:
 
     @staticmethod
     def _tool_is_read_only(tool) -> bool:
-        """A read-only tool is green and uses a read capability, never *:manage."""
+        """Only explicitly declared pure queries may bypass a write breaker."""
         metadata = tool.metadata
         return (
             metadata.risk_level is RiskLevel.GREEN
             and metadata.permission.endswith(":read")
+            and metadata.read_only
         )
 
     def _plan_is_read_only(self, nodes: list[PlanNode]) -> bool:

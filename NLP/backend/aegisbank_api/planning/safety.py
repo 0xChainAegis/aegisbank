@@ -94,7 +94,10 @@ def planning_clarification(request: PlanningRequest) -> ExecutionPlan | None:
                     "显式参数与指令金额不一致，请明确最终金额。", "amount_conflict"
                 )
     for kind in ("CARD", "SUB", "TASK"):
-        if len(set(re.findall(rf"{kind}-[A-Za-z0-9]+", text, re.I))) > 1:
+        identifiers = re.findall(rf"{kind}-[A-Za-z0-9]+", text, re.I)
+        if kind == "CARD":
+            identifiers = [value.upper() for value in identifiers]
+        if len(set(identifiers)) > 1:
             return clarification("指令包含多个操作对象，请分别明确任务。", "multiple_targets")
     if len(set(re.findall(r"(?<!\d)1[3-9]\d{9}(?!\d)", text))) > 1 and not re.search(
         r"\baa\b", text, re.I

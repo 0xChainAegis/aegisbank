@@ -26,6 +26,18 @@ from .models import (
 CENT = Decimal("0.01")
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
+# Existing transfer rows store the destination account ID in ``merchant``.
+# Resolve ownership within the row's user so legacy rows need no migration and
+# accounts belonging to another user remain external outflows.
+_INTERNAL_TRANSFER_SQL = """(
+    tx.category = 'transfer'
+    AND EXISTS (
+        SELECT 1 FROM bank_accounts AS destination
+        WHERE destination.user_id = tx.user_id
+          AND destination.account_id = tx.merchant
+    )
+)"""
+
 
 def to_cents(value: float | str | Decimal) -> int:
     amount = Decimal(str(value))
@@ -325,8 +337,11 @@ class BankingRepository:
     def monthly_spend_cny(
         self, user_id: str, *, now: datetime | None = None
     ) -> float:
-        """Sum debits in the current Asia/Shanghai banking month.
+        """Sum external debit outflows in the Asia/Shanghai banking month.
 
+        Transfers between the user's own accounts are asset movements, not
+        spending. Other transfers remain included; daily transfer risk totals
+        deliberately count both kinds.
         ``occurred_at`` values are stored as ISO-8601 timestamps (normally UTC).
         SQLite's ``julianday`` comparison converts both the stored instant and
         the Shanghai month boundaries to the same UTC instant, so a timestamp
@@ -336,10 +351,12 @@ class BankingRepository:
         start, end = _banking_month_bounds_utc(now)
         with self.db.transaction() as conn:
             row = conn.execute(
-                "SELECT COALESCE(SUM(-amount_cents), 0) AS cents FROM bank_transactions "
-                "WHERE user_id = ? AND amount_cents < 0 "
-                "AND julianday(occurred_at) >= julianday(?) "
-                "AND julianday(occurred_at) < julianday(?)",
+                "SELECT COALESCE(SUM(-tx.amount_cents), 0) AS cents "
+                "FROM bank_transactions AS tx "
+                "WHERE tx.user_id = ? AND tx.amount_cents < 0 "
+                f"AND NOT {_INTERNAL_TRANSFER_SQL} "
+                "AND julianday(tx.occurred_at) >= julianday(?) "
+                "AND julianday(tx.occurred_at) < julianday(?)",
                 (user_id, start.isoformat(), end.isoformat()),
             ).fetchone()
         return to_cny(row["cents"])
@@ -363,14 +380,30 @@ class BankingRepository:
         account = self.account(user_id, account_id)
         if account is None:
             raise ValueError(f"账户不存在：{account_id}")
-        month = _shanghai_now().date().strftime("%Y-%m")
+        month_moment: datetime | None = _shanghai_now()
+        month = month_moment.date().strftime("%Y-%m")
         if period != "current_month" and len(period) == 7 and period[4] == "-":
             month = period
+            try:
+                month_moment = month_moment.replace(
+                    year=int(month[:4]), month=int(month[5:]), day=1
+                )
+            except ValueError:
+                # Preserve the legacy empty result for an invalid month rather
+                # than silently falling back to the current month.
+                month_moment = None
+        start_iso = end_iso = None
+        if month_moment is not None:
+            start, end = _banking_month_bounds_utc(month_moment)
+            start_iso, end_iso = start.isoformat(), end.isoformat()
         with self.db.transaction() as conn:
             rows = conn.execute(
-                "SELECT * FROM bank_transactions WHERE user_id = ? AND account_id = ? "
-                "AND occurred_at LIKE ? ORDER BY occurred_at DESC, transaction_id DESC",
-                (user_id, account_id, f"{month}%"),
+                f"SELECT tx.*, {_INTERNAL_TRANSFER_SQL} AS internal_transfer "
+                "FROM bank_transactions AS tx WHERE tx.user_id = ? AND tx.account_id = ? "
+                "AND julianday(tx.occurred_at) >= julianday(?) "
+                "AND julianday(tx.occurred_at) < julianday(?) "
+                "ORDER BY tx.occurred_at DESC, tx.transaction_id DESC",
+                (user_id, account_id, start_iso, end_iso),
             ).fetchall()
             subscriptions = conn.execute(
                 "SELECT * FROM bank_subscriptions WHERE user_id = ? AND status = 'active' "
@@ -383,7 +416,7 @@ class BankingRepository:
         transactions: list[dict[str, Any]] = []
         for row in rows:
             amount = to_cny(row["amount_cents"])
-            if row["amount_cents"] < 0:
+            if row["amount_cents"] < 0 and not row["internal_transfer"]:
                 spend_cents += -row["amount_cents"]
                 categories[row["category"]] = round(
                     categories.get(row["category"], 0.0) + abs(amount), 2

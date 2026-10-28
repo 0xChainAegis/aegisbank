@@ -630,6 +630,7 @@ class RunDueTasksArgs(BaseModel):
 class QueryContactBirthdayTool(BaseTool):
     metadata = ToolMetadata(
         name="query_contact_birthday",
+        read_only=True,
         title="查询联系人生日",
         description="按姓名/别名/手机号读取联系人簿中的生日，并计算下一次生日与剩余天数，只读操作。",
         risk_level=RiskLevel.GREEN,
@@ -1058,6 +1059,7 @@ class ScheduleTransferTool(BaseTool):
 class ListScheduledTasksTool(BaseTool):
     metadata = ToolMetadata(
         name="list_scheduled_tasks",
+        read_only=True,
         title="查看定时任务",
         description="查看本人定时转账、预算目标和生日礼物订购任务，只读操作。",
         risk_level=RiskLevel.GREEN,
@@ -1733,7 +1735,7 @@ def run_due(
     readiness = services.extras.get("readiness")
     if readiness is not None:
         readiness.require_ready()
-    if services.scheduler.breaker.is_open():
+    if services.scheduler.breaker.is_open(user_id=user_id):
         raise PermissionError("熔断已打开，定时写任务暂停执行。")
     if not services.db.in_transaction:
         response = services.scheduler.run(

@@ -8,13 +8,19 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from ..banking.repository import to_cents, to_cny
+from ..banking.repository import (
+    _INTERNAL_TRANSFER_SQL,
+    SHANGHAI_TZ,
+    _banking_month_bounds_utc,
+    to_cents,
+    to_cny,
+)
 from ..db import Database
 from ..domain import ExecutionContext, RiskLevel, ToolMetadata, ToolResult
 from ..planning.contracts import ExecutionPlan, PlanStep
@@ -78,7 +84,7 @@ _SeedRow = tuple[str, date, str, str, str, float, str | None]
 
 
 def _today() -> date:
-    return datetime.now(UTC).date()
+    return datetime.now(SHANGHAI_TZ).date()
 
 
 def _month_start(value: date) -> date:
@@ -195,20 +201,33 @@ def _parse_iso(value: str) -> datetime | None:
 def _month_rows(
     db: Database, user_id: str, account_id: str, month_key: str
 ) -> list[dict[str, Any]]:
+    try:
+        moment = datetime(int(month_key[:4]), int(month_key[5:]), 1, tzinfo=SHANGHAI_TZ)
+    except ValueError:
+        return []
+    start, end = _banking_month_bounds_utc(moment)
     return _query(
         db,
-        "SELECT * FROM bank_transactions WHERE user_id = ? AND account_id = ? "
-        "AND occurred_at LIKE ? ORDER BY occurred_at, transaction_id",
-        (user_id, account_id, f"{month_key}%"),
+        f"SELECT tx.*, {_INTERNAL_TRANSFER_SQL} AS internal_transfer "
+        "FROM bank_transactions AS tx WHERE tx.user_id = ? AND tx.account_id = ? "
+        "AND julianday(tx.occurred_at) >= julianday(?) "
+        "AND julianday(tx.occurred_at) < julianday(?) "
+        "ORDER BY tx.occurred_at, tx.transaction_id",
+        (user_id, account_id, start.isoformat(), end.isoformat()),
     )
 
 
 def _year_rows(db: Database, user_id: str, account_id: str, year: int) -> list[dict[str, Any]]:
+    start, _ = _banking_month_bounds_utc(datetime(year, 1, 1, tzinfo=SHANGHAI_TZ))
+    end, _ = _banking_month_bounds_utc(datetime(year + 1, 1, 1, tzinfo=SHANGHAI_TZ))
     return _query(
         db,
-        "SELECT * FROM bank_transactions WHERE user_id = ? AND account_id = ? "
-        "AND occurred_at LIKE ? ORDER BY occurred_at, transaction_id",
-        (user_id, account_id, f"{year:04d}%"),
+        f"SELECT tx.*, {_INTERNAL_TRANSFER_SQL} AS internal_transfer "
+        "FROM bank_transactions AS tx WHERE tx.user_id = ? AND tx.account_id = ? "
+        "AND julianday(tx.occurred_at) >= julianday(?) "
+        "AND julianday(tx.occurred_at) < julianday(?) "
+        "ORDER BY tx.occurred_at, tx.transaction_id",
+        (user_id, account_id, start.isoformat(), end.isoformat()),
     )
 
 
@@ -278,7 +297,7 @@ def _aggregate_spend(
     merchants: dict[str, dict[str, Any]] = {}
     for row in rows:
         amount_cents = int(row["amount_cents"])
-        if amount_cents >= 0:
+        if amount_cents >= 0 or row.get("internal_transfer"):
             continue
         cents = -amount_cents
         total_cents += cents
@@ -423,7 +442,7 @@ def _spend_by_category(rows: list[dict[str, Any]]) -> dict[str, int]:
     category_cents: dict[str, int] = {}
     for row in rows:
         amount_cents = int(row["amount_cents"])
-        if amount_cents >= 0:
+        if amount_cents >= 0 or row.get("internal_transfer"):
             continue
         category = str(row["category"])
         category_cents[category] = category_cents.get(category, 0) + -amount_cents
@@ -856,6 +875,7 @@ class RenewalRemindersOutput(BaseModel):
 class BillReportTool(BaseTool):
     metadata = ToolMetadata(
         name="bill_report",
+        read_only=True,
         title="账单报告",
         description="生成月报/年报：分类汇总、Top5 商户与环比，只读操作。",
         risk_level=RiskLevel.GREEN,
@@ -884,6 +904,7 @@ class BillReportTool(BaseTool):
 class DetectBillAnomaliesTool(BaseTool):
     metadata = ToolMetadata(
         name="detect_bill_anomalies",
+        read_only=True,
         title="账单异常检测",
         description="按确定性规则检测重复扣费、超预算、订阅涨价与凌晨交易，只读操作。",
         risk_level=RiskLevel.GREEN,
@@ -912,6 +933,7 @@ class DetectBillAnomaliesTool(BaseTool):
 class IdentifySubscriptionChargesTool(BaseTool):
     metadata = ToolMetadata(
         name="identify_subscription_charges",
+        read_only=True,
         title="订阅扣费识别",
         description="按订阅类目聚合订阅实体并标记未登记代扣，只读操作。",
         risk_level=RiskLevel.GREEN,
@@ -937,6 +959,7 @@ class IdentifySubscriptionChargesTool(BaseTool):
 class ListRenewalRemindersTool(BaseTool):
     metadata = ToolMetadata(
         name="list_renewal_reminders",
+        read_only=True,
         title="续费提醒",
         description="基于订阅下次扣费日生成站内续费提醒，只读操作且不含外部推送。",
         risk_level=RiskLevel.GREEN,

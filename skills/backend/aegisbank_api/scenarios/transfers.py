@@ -308,6 +308,7 @@ class ListContactsArgs(BaseModel):
 class ListContactsTool(BaseTool):
     metadata = ToolMetadata(
         name="list_contacts",
+        read_only=True,
         title="查看联系人",
         description="读取联系人簿，账户与手机号脱敏展示，纯只读操作。",
         risk_level=RiskLevel.GREEN,
