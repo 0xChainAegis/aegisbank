@@ -1243,4 +1243,4 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 
 未指定tool_name时，arguments仍可用于与完整指令一致的已支持参数（例如账单account_id）；未知字段、冲突值或不完整指令返回needs_clarification，不能用arguments切换为显式工具模式。已识别业务但对象未知时，澄清继续保留对应intent并给出当前用户的有效卡片候选。
 
-新语义报告的timezone为Asia/Shanghai，日期和月份按该业务日期规范化；旧UTC报告保持可读。默认定时时刻仍为09:00 UTC（17:00北京时间），未加入任意时分理解。完整回退、无副作用反例及评测口径见 [P1补缺验收](NLP-P1-COMPLETION-2026-10-28.md)。
+新语义报告的timezone为Asia/Shanghai，日期和月份按该业务日期规范化；旧UTC报告保持可读。默认定时时刻为 Asia/Shanghai 09:00（UTC 01:00），未加入任意时分理解。完整回退、无副作用反例及评测口径见 [P1补缺验收](NLP-P1-COMPLETION-2026-10-28.md)。

@@ -228,3 +228,32 @@ def test_semantic_reference_date_and_birthday_today_use_shanghai(monkeypatch, tm
 
     monkeypatch.setattr(automation_module, "datetime", FixedDatetime)
     assert automation_module._today() == date(2026, 10, 30)
+
+
+def test_semantic_and_schedule_cross_year_use_shanghai(monkeypatch, tmp_path):
+    real_datetime = datetime
+
+    class FixedDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            base = real_datetime(2026, 12, 31, 16, 30, tzinfo=UTC)
+            return base.astimezone(tz) if tz is not None else base.replace(tzinfo=None)
+
+    monkeypatch.setattr(semantic_module, "datetime", FixedDatetime)
+    monkeypatch.setattr(automation_module, "datetime", FixedDatetime)
+
+    with make_client(tmp_path) as client:
+        services = client.app.state.services
+        rule = RuleBasedPlanner(services.registry, services.repository)
+        request = PlanningRequest(instruction="明天给张三转500")
+        plan = verify_frame(analyze_rules(request.instruction), request, rule)
+
+        assert plan.semantic.reference_date == "2027-01-01"
+        assert automation_module._today() == date(2027, 1, 1)
+        step = plan.steps[0]
+        assert step.tool_name == "schedule_transfer"
+        run_at = datetime.fromisoformat(step.arguments["run_at"])
+        shanghai_run_at = run_at.astimezone(SHANGHAI)
+        assert shanghai_run_at.date() == date(2027, 1, 2)
+        assert shanghai_run_at.hour == 9
+        assert run_at.astimezone(UTC).hour == 1
