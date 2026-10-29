@@ -17,6 +17,7 @@ import {
   formatDateTime,
   formatDisplayValue,
   receiptHeadline,
+  receiptReference,
   resultExecutedAt,
   resultRiskLevel,
   runRiskLevel,
@@ -299,6 +300,7 @@ export default function TaskConsolePage({
   const riskReasons = useMemo(() => (lastRun ? collectRiskReasons(lastRun) : []), [lastRun]);
   const overallRisk = lastRun ? runRiskLevel(lastRun) : 'green';
   const riskPending = lastRun?.status === 'needs_clarification';
+  const reference = lastRun ? receiptReference(lastRun) : { label: '审计编号' as const, value: '—' };
   const canExecute = canExecuteTools(role);
   const roleBlockReason = roleTaskBlockReason(role);
   const taskBlocked = !canExecute || writesBlocked;
@@ -507,8 +509,8 @@ export default function TaskConsolePage({
               </strong>
             </div>
             <div>
-              <span>审计编号</span>
-              <strong>{lastRun.audit_id !== undefined ? `#${lastRun.audit_id}` : '—'}</strong>
+              <span>{reference.label}</span>
+              <strong>{reference.value}</strong>
             </div>
           </div>
 
@@ -564,7 +566,7 @@ export default function TaskConsolePage({
           {!riskPending && riskReasons.length > 0 && (
             <div className={`risk-reason-panel risk-panel-${overallRisk}`}>
               <div className="risk-reason-head">
-                <span className="eyebrow">RISK ENGINE FINDINGS</span>
+                <span className="eyebrow">风险引擎判定</span>
                 <RiskBadge risk={overallRisk} verbose />
               </div>
               <ul>

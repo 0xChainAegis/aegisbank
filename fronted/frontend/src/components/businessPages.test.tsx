@@ -157,6 +157,45 @@ describe('business page interactions', () => {
     expect(container.querySelector('.data-grid')?.textContent).toContain('CNY');
   });
 
+  it('renders the risk engine label in Chinese and the audit reference when present', async () => {
+    const props = taskProps();
+    props.lastRun = {
+      status: 'completed', run_id: 'run-risk-label', reason: '已完成',
+      audit_id: 42, risk_level: 'yellow',
+      risk: { level: 'yellow', reasons: ['本次操作需要明确确认。'] },
+      results: [{ tool_name: 'query_bill', message: '账单查询完成',
+        data: { total_spend_cny: 100 } }],
+    } as RunResponse;
+    await act(async () => root.render(<TaskConsolePage {...props} />));
+    expect(container.querySelector('.risk-reason-panel .eyebrow')?.textContent).toBe('风险引擎判定');
+    expect(container.textContent).not.toContain('RISK ENGINE FINDINGS');
+    const facts = [...container.querySelectorAll('.receipt-facts > div')].map((row) => ({
+      label: row.querySelector('span')?.textContent,
+      value: row.querySelector('strong')?.textContent,
+    }));
+    expect(facts).toContainEqual({ label: '审计编号', value: '#42' });
+    expect(facts.find((fact) => fact.label === '运行编号')).toBeUndefined();
+  });
+
+  it('labels a completed bill receipt reference with run_id when audit_id is absent', async () => {
+    const props = taskProps();
+    props.lastRun = {
+      status: 'completed', run_id: 'run-bill-1', reason: '账单查询完成',
+      risk_level: 'green', risk: { level: 'green', reasons: ['仅执行只读查询。'] },
+      results: [{ tool_name: 'query_bill', message: '账单查询完成',
+        data: { total_spend_cny: 100, month: '2026-10', categories: { food: 100 }, anomalies: [] } }],
+    } as RunResponse;
+    await act(async () => root.render(<TaskConsolePage {...props} />));
+    const facts = [...container.querySelectorAll('.receipt-facts > div')].map((row) => ({
+      label: row.querySelector('span')?.textContent,
+      value: row.querySelector('strong')?.textContent,
+    }));
+    expect(facts).toContainEqual({ label: '运行编号', value: 'run-bill-1' });
+    expect(facts.find((fact) => fact.label === '审计编号')).toBeUndefined();
+    expect(facts.find((fact) => fact.label === '执行时间')?.value).toBe('—');
+    expect(container.querySelector('.business-receipt-bill')).not.toBeNull();
+  });
+
   it('sends the actual daily-limit instruction from the card shortcut', async () => {
     const props = taskProps();
     await act(async () => root.render(<TaskConsolePage {...props} />));

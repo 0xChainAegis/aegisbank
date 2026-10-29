@@ -38,6 +38,17 @@ _SUBSCRIPTION_WORDS = (
     "续费",
     "subscription",
 )
+_SUBSCRIPTION_FILLERS = re.compile(
+    r"(?:那个|这个|那张|这张|一下|帮我|请|把|取消|退订|关闭|关掉|停掉|掉|的)"
+)
+
+
+def _merchant_matches(instruction: str, merchant: str) -> bool:
+    key = _SUBSCRIPTION_FILLERS.sub("", merchant.casefold().replace(" ", ""))
+    normalized = _SUBSCRIPTION_FILLERS.sub("", instruction.casefold().replace(" ", ""))
+    return bool(key and key in normalized)
+
+
 _ABNORMAL_SUBSCRIPTION_HINTS = (
     "异常",
     "可疑",
@@ -414,7 +425,7 @@ class RuleBasedPlanner:
             return False
         try:
             return any(
-                sub.merchant.lower() in text
+                _merchant_matches(request.instruction, sub.merchant)
                 for sub in self.repository.subscriptions(request.user_id)
                 if sub.status == "active"
             )
@@ -441,7 +452,11 @@ class RuleBasedPlanner:
             except Exception:  # noqa: BLE001 - repository is a local mock adapter
                 subscriptions = []
 
-        matched = [sub for sub in subscriptions if sub.merchant.lower() in text]
+        matched = [
+            sub
+            for sub in subscriptions
+            if _merchant_matches(request.instruction, sub.merchant)
+        ]
         if len(matched) == 1:
             sub = matched[0]
             return self._single_plan(

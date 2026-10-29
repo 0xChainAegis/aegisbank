@@ -884,7 +884,8 @@ _PREFERENCE_WORDS = (
 )
 _QUERY_HINTS = ("有什么", "推荐", "哪些", "看看", "介绍", "列表")
 _PURCHASE_VERBS = ("买入", "申购", "购买", "买")
-_REDEEM_VERBS = ("赎回", "卖出", "卖掉", "卖")
+_REDEEM_VERBS = ("赎回", "卖出", "卖掉")
+_WEALTH_CONTEXT_HINTS = ("理财", "基金", "产品", "持仓", "份额")
 _HOLDING_HINTS = ("持仓", "持有", "我的理财", "理财账户", "查询理财")
 _ASSESS_HINTS = ("风险测评", "风险评估", "风险偏好", "风险承受")
 
@@ -1059,7 +1060,11 @@ class RedeemWealthIntent:
         if not ctx.has_tool("redeem_wealth"):
             return None
         text = ctx.instruction
-        if not any(verb in text for verb in _REDEEM_VERBS):
+        explicit_redeem = any(verb in text for verb in _REDEEM_VERBS)
+        wealth_context = any(hint in text for hint in _WEALTH_CONTEXT_HINTS)
+        # Bare 卖 is not a redemption signal: 外卖/买卖 etc. require either an
+        # explicit redeem verb or an unambiguous wealth context.
+        if not explicit_redeem and not (wealth_context and "卖" in text):
             return None
         products = _intent_products(ctx)
         holdings = _intent_holdings(ctx)

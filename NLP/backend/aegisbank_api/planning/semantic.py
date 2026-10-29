@@ -21,6 +21,30 @@ from .semantic_contracts import (
 )
 from .semantic_legacy import allow_legacy
 
+_SLOT_LABELS = {
+    "money": "金额",
+    "amount": "金额",
+    "account": "账户",
+    "card": "卡片",
+    "subscription": "订阅",
+    "contact": "收款人",
+    "contact_name": "联系人",
+    "product": "理财产品",
+    "day": "还款日",
+    "date": "执行日期",
+    "month": "月份",
+}
+
+
+def _slot_label(key: str) -> str:
+    return _SLOT_LABELS.get(key, "目标信息")
+
+
+def _account_key(value: str) -> str:
+    text = value.strip().casefold().replace(" ", "")
+    return text[2:] if text.startswith("我的") else text[1:] if text.startswith("我") else text
+
+
 # A clause boundary may not split a thousands separator.
 _SEPARATOR = re.compile(r"(?<!\d)[,，]|[,，](?!\d)|[。；;！!？?\n]+")
 _NEGATIVE = re.compile(r"^(?:不要|暂不|不必|别)(?:再)?")
@@ -245,7 +269,7 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                 source, method = "demo_policy", "current_month_default"
             else:
                 frame.missing_slots.append(f"{item.id}.{key}")
-                raise SemanticError(f"请补充 {key}，系统不会猜测关键参数")
+                raise SemanticError(f"请补充{_slot_label(key)}，系统不会猜测关键参数")
         try:
             if kind == "money":
                 value, method = str(parse_amount(raw)), "decimal_whole_token"
@@ -261,13 +285,20 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                 rows = collect_entity_facts(
                     rule.repository, request.user_id, "contact" if kind == "contact_name" else kind
                 )
+                def name_matches(
+                    name: str, *, kind: str = kind, raw: str = raw
+                ) -> bool:
+                    if kind == "account":
+                        return _account_key(raw) == _account_key(name)
+                    return (
+                        raw.replace(" ", "").casefold()
+                        == name.replace(" ", "").casefold()
+                    )
+
                 hits = [
                     (value, names)
                     for value, names in rows
-                    if any(
-                        raw.replace(" ", "").casefold() == name.replace(" ", "").casefold()
-                        for name in names
-                    )
+                    if any(name_matches(name) for name in names)
                 ]
                 if len(hits) != 1:
                     options = hits or (rows if kind == "card" else [])
@@ -296,7 +327,7 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                         candidates=choices,
                     )
                     raise SemanticError(
-                        f"未找到唯一的 {key}「{raw}」；"
+                        f"未找到唯一的{_slot_label(key)}「{raw}」；"
                         + (
                             ("匹配到多个对象，请选择：" if hits else "请选择有效卡片：")
                             + "、".join(choices)
@@ -335,7 +366,7 @@ def verify_frame(frame, request, rule, specs=None, today=None):
         except (ValueError, AmountError) as exc:
             if isinstance(exc, SemanticError):
                 raise
-            raise SemanticError(f"{key} 无法验证：{exc}") from exc
+            raise SemanticError(f"{_slot_label(key)}无法验证：{exc}") from exc
         resolved[key] = value
         evidence.append(
             SlotEvidence(

@@ -119,6 +119,7 @@ _SCHEDULE_HINTS = (
     "每天",
     "每周",
     "每月",
+    "每个月",
     "自动",
     "明天",
     "后天",
@@ -156,7 +157,7 @@ _AA_NOISE_SUBSTRINGS = (
 )
 
 _NAME_TRANSFER_RE = re.compile(
-    r"(?:给|向|帮|替)\s*([\u4e00-\u9fa5A-Za-z·]{1,12}?)\s*(?:转账|汇款|转)"
+    r"(?:(?:帮我|替我)\s*)?(?:给|向)\s*([\u4e00-\u9fa5A-Za-z·]{1,12}?)\s*(?:转账|汇款|转)"
 )
 
 
@@ -761,6 +762,17 @@ class ContactTransferIntent:
         else:
             name_match = _NAME_TRANSFER_RE.search(instruction)
             if name_match is None:
+                assisted = re.search(
+                    r"(?:帮我|给我|替我|请帮我|请替我|帮|替)\s*"
+                    r"(?:转账|汇款|转|打款)",
+                    instruction,
+                )
+                if assisted:
+                    return _clarification(
+                        "请补充收款人（姓名、别名、手机号或账户），"
+                        "我不会把用户当作收款人。",
+                        "transfer_to_contact",
+                    )
                 return None
             receiver_name = name_match.group(1).strip()
             if not receiver_name:

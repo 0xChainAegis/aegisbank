@@ -45,7 +45,7 @@ python3 scripts/assemble.py
 预期输出：
 
 ```text
-Assembled 148 files into <repo>/.runtime
+Assembled 166 files into <repo>/.runtime
 ```
 
 组装规则：

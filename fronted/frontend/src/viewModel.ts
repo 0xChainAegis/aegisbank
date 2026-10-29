@@ -841,7 +841,7 @@ export function receiptHeadline(run: RunResponse): string {
   return statusLabel(run.status);
 }
 
-/** 从工具结果里取执行时间；没有就退回空串（由调用方展示占位）。 */
+/** 从工具结果里取执行时间；没有就退回空串（由调用方展示占位），不推断执行时间。 */
 export function resultExecutedAt(run: RunResponse): string {
   for (const result of run.results ?? []) {
     const data = result.data as Record<string, unknown> | undefined;
@@ -849,4 +849,22 @@ export function resultExecutedAt(run: RunResponse): string {
     if (typeof value === 'string' && value.trim()) return value;
   }
   return '';
+}
+
+export interface ReceiptReference {
+  label: '审计编号' | '运行编号';
+  value: string;
+}
+
+/**
+ * 回执引用：优先展示审计编号；只读查询等没有 audit_id 时回退到稳定的 run_id，
+ * 并明确标注为运行编号，避免显示成"审计编号 —"或伪造执行信息。
+ */
+export function receiptReference(run: RunResponse): ReceiptReference {
+  if (run.audit_id !== undefined && run.audit_id !== null && String(run.audit_id).trim()) {
+    return { label: '审计编号', value: '#' + String(run.audit_id) };
+  }
+  const runId = typeof run.run_id === 'string' ? run.run_id.trim() : '';
+  if (runId) return { label: '运行编号', value: runId };
+  return { label: '审计编号', value: '—' };
 }

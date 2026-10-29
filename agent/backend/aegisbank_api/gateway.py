@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .db import Database
-from .domain import GatewayDecision, RiskLevel
+from .domain import GatewayDecision, RiskLevel, ToolMetadata
 from .registry import ToolRegistry
 from .trust.authz import AuthzService
 
@@ -35,6 +35,31 @@ def scan_injection(instruction: str, arguments: dict[str, Any] | None = None) ->
     return detect_injection(scan_text(instruction, arguments))
 
 
+# Tools that are implementation details of compensation, scheduled execution or
+# the demo harness. They are deliberately not ordinary-user capabilities.
+DEMO_INTERNAL_TOOLS = frozenset(
+    (
+        "cancel_virtual_card_application",
+        "demo_charge_fee",
+        "demo_fail_step",
+        "demo_irreversible_marker",
+        "demo_reserve_funds",
+        "execute_gift_order",
+        "reactivate_subscription",
+        "restore_card_limit",
+        "restore_repayment_date",
+        "restore_transaction_limit",
+        "restore_wealth_risk",
+        "reverse_demo_charge",
+        "reverse_demo_reserve",
+        "reverse_purchase_wealth",
+        "reverse_transfer",
+    )
+)
+
+# Minimum permissions: demo users receive only user-operable tools. Internal
+# compensation tools are reachable only through an internal execution purpose,
+# never through an implicit user grant.
 DEMO_PREGRANTED_TOOLS = frozenset(
     (
         "add_contact",
@@ -45,11 +70,6 @@ DEMO_PREGRANTED_TOOLS = frozenset(
         "bill_report",
         "cancel_scheduled_task",
         "cancel_subscription",
-        "cancel_virtual_card_application",
-        "demo_charge_fee",
-        "demo_fail_step",
-        "demo_irreversible_marker",
-        "demo_reserve_funds",
         "detect_bill_anomalies",
         "identify_subscription_charges",
         "issue_virtual_card",
@@ -60,21 +80,13 @@ DEMO_PREGRANTED_TOOLS = frozenset(
         "list_wealth_products",
         "lock_budget_funds",
         "purchase_wealth",
+        "query_balance",
         "query_bill",
         "query_contact_birthday",
         "query_wealth_holdings",
-        "reactivate_subscription",
         "redeem_wealth",
         "report_card_lost",
         "reset_card_password",
-        "restore_card_limit",
-        "restore_repayment_date",
-        "restore_transaction_limit",
-        "restore_wealth_risk",
-        "reverse_demo_charge",
-        "reverse_demo_reserve",
-        "reverse_purchase_wealth",
-        "reverse_transfer",
         "run_due_tasks",
         "schedule_cake_order",
         "schedule_flower_order",
@@ -89,7 +101,9 @@ DEMO_PREGRANTED_TOOLS = frozenset(
 )
 
 
-DEMO_PREGRANTED_TOOLS = DEMO_PREGRANTED_TOOLS | {"execute_gift_order", "query_balance"}
+def is_internal_tool(tool_name: str, manifest: ToolMetadata) -> bool:
+    """Return whether a tool is internal-only for user-facing permission UX."""
+    return bool(manifest.internal_only or tool_name in DEMO_INTERNAL_TOOLS)
 
 
 class PermissionStore:
@@ -97,16 +111,37 @@ class PermissionStore:
         self.db = db
 
     def seed(self, user_id: str, registry: ToolRegistry) -> None:
-        if user_id == "demo-user":
-            self.db.seed_permissions(user_id, sorted(set(registry.names()) & DEMO_PREGRANTED_TOOLS))
+        if user_id != "demo-user":
+            return
+        user_facing = sorted(
+            tool.metadata.name
+            for tool in registry.list()
+            if tool.metadata.name in DEMO_PREGRANTED_TOOLS
+            and not is_internal_tool(tool.metadata.name, tool.metadata)
+        )
+        internal_tools = sorted(
+            tool.metadata.name
+            for tool in registry.list()
+            if is_internal_tool(tool.metadata.name, tool.metadata)
+        )
+        with self.db.transaction():
+            self.db.seed_permissions(user_id, user_facing)
+            # Older builds silently granted all 50 tools. Remove positive
+            # internal grants while preserving an explicit revocation row.
+            self.db.remove_granted_permissions(user_id, internal_tools)
 
     def ensure(self, user_id: str, registry: ToolRegistry) -> None:
         # Reading permissions never grants new capabilities.
         return None
 
-    def is_granted(self, user_id: str, tool_name: str, registry: ToolRegistry) -> bool:
+    def permission_state(
+        self, user_id: str, tool_name: str, registry: ToolRegistry
+    ) -> bool | None:
         self.ensure(user_id, registry)
-        return self.db.get_permission(user_id, tool_name) is True
+        return self.db.get_permission(user_id, tool_name)
+
+    def is_granted(self, user_id: str, tool_name: str, registry: ToolRegistry) -> bool:
+        return self.permission_state(user_id, tool_name, registry) is True
 
     def set_granted(self, user_id: str, tool_name: str, granted: bool) -> None:
         self.db.set_permission(user_id, tool_name, granted)
@@ -118,6 +153,8 @@ class PermissionStore:
         }
         result: list[dict[str, Any]] = []
         for tool in registry.list():
+            if is_internal_tool(tool.metadata.name, tool.metadata):
+                continue
             item = tool.metadata.as_dict()
             item["granted"] = grants.get(tool.metadata.name, False)
             result.append(item)
@@ -143,8 +180,12 @@ class PermissionGateway:
         purpose: str = "execution",
     ) -> GatewayDecision:
         manifest = self.registry.get(tool_name).metadata
-        if manifest.internal_only and purpose not in manifest.allowed_purposes:
-            return GatewayDecision(outcome="deny", reason="该工具仅供已记录动作的内部补偿使用。")
+        internal_tool = is_internal_tool(manifest.name, manifest)
+        if internal_tool and purpose not in manifest.allowed_purposes:
+            return GatewayDecision(
+                outcome="deny",
+                reason="该工具仅供已记录动作的内部补偿或调度执行使用。",
+            )
         if scan_injection(instruction, arguments):
             return GatewayDecision(
                 outcome="deny",
@@ -157,7 +198,14 @@ class PermissionGateway:
                 reason=f"当前角色 {role} 无工具执行权限，仅普通用户可发起银行操作。",
             )
 
-        if not self.permissions.is_granted(user_id, tool_name, self.registry):
+        if internal_tool:
+            state = self.permissions.permission_state(user_id, tool_name, self.registry)
+            if state is False:
+                return GatewayDecision(
+                    outcome="deny",
+                    reason=f"内部工具权限已被显式撤回，当前用户未授权工具权限 {permission}。",
+                )
+        elif not self.permissions.is_granted(user_id, tool_name, self.registry):
             return GatewayDecision(
                 outcome="deny",
                 reason=f"当前用户未授权工具权限 {permission}，请先在权限控制台开启。",
@@ -168,7 +216,7 @@ class PermissionGateway:
         if risk_level is RiskLevel.YELLOW:
             return GatewayDecision(
                 outcome="confirm",
-                reason="黄色操作会修改账户设置，需要在 5 分钟内完成一次轻量确认。",
+                reason="黄色操作涉及资金变动或账户设置，需要在 5 分钟内完成一次轻量确认。",
             )
         return GatewayDecision(
             outcome="confirm",

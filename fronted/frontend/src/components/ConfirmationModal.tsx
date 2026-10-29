@@ -19,6 +19,10 @@ import {
 } from '../twoA';
 import { EvidenceBadges, ResourceState, RiskBadge } from './ui';
 
+const YELLOW_GATEWAY_REASON = '黄色操作涉及资金变动或账户设置，需要在 5 分钟内完成一次轻量确认。';
+const LEGACY_YELLOW_GATEWAY_REASON = '黄色操作会修改账户设置，需要在 5 分钟内完成一次轻量确认。';
+const RED_GATEWAY_REASON = '红色操作涉及资金变动，需要二次身份校验并明确确认。';
+
 interface Props {
   pending: RunResponse;
   busy: boolean;
@@ -60,8 +64,9 @@ export default function ConfirmationModal({
   const risk = runRiskLevel(pending);
   const needsOtp = Boolean(pending.confirmation?.requires_reauth) || risk === 'red';
   const reasons = collectRiskReasons(pending);
-  const fixedGatewayReason = pending.reason === '黄色操作会修改账户设置，需要在 5 分钟内完成一次轻量确认。'
-    || pending.reason === '红色操作涉及资金变动，需要二次身份校验并明确确认。';
+  const fixedGatewayReason = pending.reason === YELLOW_GATEWAY_REASON
+    || pending.reason === LEGACY_YELLOW_GATEWAY_REASON
+    || pending.reason === RED_GATEWAY_REASON;
   const reason = fixedGatewayReason
     ? needsOtp ? '本次操作需要身份验证和你的确认。' : '本次操作需要你的确认。'
     : pending.reason;
