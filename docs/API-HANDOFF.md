@@ -1238,3 +1238,9 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 现有请求字段和路由保持兼容。Planner/执行响应的 `plan.semantic` 可包含 `SemanticAnalysis/v1`：`status`（verified / clarification / legacy）、`instruction_hash`、候选 `frame`、`slots`、`reason`、`reference_date`、`timezone`。每个槽位有原文 span、服务端规范值、source、verified、verification_kind，歧义时可有候选选项。旧计划或关闭语义模块时该字段可为 null；前端应容忍此情况。
 
 这是服务端验证报告，客户端不能把该对象作为授权或把 verified 等同于已执行。用户仍需通过原有确认链；报告已绑定 plan_hash，内容篡改和非法结构均返回 409。时间目前为 UTC；模板之外的表达可能澄清或保留 legacy 状态。模型与前端不可自行补成“已验证事实”。字段说明、复现命令和测试边界见 [P1 报告](NLP-P1-2026-10-27.md)。
+
+## P1 完整表达验证增量（2026-10-28）
+
+未指定tool_name时，arguments仍可用于与完整指令一致的已支持参数（例如账单account_id）；未知字段、冲突值或不完整指令返回needs_clarification，不能用arguments切换为显式工具模式。已识别业务但对象未知时，澄清继续保留对应intent并给出当前用户的有效卡片候选。
+
+新语义报告的timezone为Asia/Shanghai，日期和月份按该业务日期规范化；旧UTC报告保持可读。默认定时时刻仍为09:00 UTC（17:00北京时间），未加入任意时分理解。完整回退、无副作用反例及评测口径见 [P1补缺验收](NLP-P1-COMPLETION-2026-10-28.md)。

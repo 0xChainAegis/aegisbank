@@ -66,3 +66,10 @@ AEGIS_SCENARIO_STRICT=0 uv run pytest -q
 - `semantic_entities(repository, user_id, kind)` 返回 `(canonical_identity, aliases)` 列表；必须按用户限定私有实体，返回身份元数据，不执行金融动作。理财产品目录为共享 Mock 产品列表。
 
 共享校验器负责来源、覆盖、金额/日期及实体唯一性；场景维护业务词汇与工具映射。未知或重复实体需澄清。canonical template 只调用 Planner，不得调用工具；生成步骤仍由网关和统一执行链执行。无需修改核心装配文件即可发现钩子。当前支持类型与实现以 `NLP/backend/aegisbank_api/planning/semantic_catalog.py` 为准（路径从分类仓库根起算）。
+
+
+### P1 参数绑定补充
+
+有槽位的 `SemanticSpec` 还须声明 `bindings`，覆盖全部slot_types键：`{"amount": (0, "amount_cny")}` 表示金额必须等于第1个步骤对应入参。可声明有序参数键元组，例如联系人 `(0, ("to_phone", "to_name"))`，按工具实际优先级选择第一个非None值；定时联系人用contact_account解析并绑定to_account。不得用绑定跳过schema、网关或工具自身核验。
+
+共享日期类型以Asia/Shanghai为业务区；date比较实际run_at转换后的业务日期，day限制1–28，month明确本月/上月。已有定时时刻默认值保持由场景定义。未声明、越界或不一致的绑定必须澄清；新增表达需补关键参数与完整依赖的标注回归。

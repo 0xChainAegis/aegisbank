@@ -59,22 +59,29 @@
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/semantic.py",
       "runtime_path": "backend/aegisbank_api/planning/semantic.py",
-      "bytes": 16471,
-      "sha256": "4de1cd37c2f8979b629ab2d08c70547b5218b5cca4b5b150ed3209d42e85a8cd"
+      "bytes": 21482,
+      "sha256": "f563901cdb9e2ca209d25235ea18bfe52cb911666fbd46e313ff4a0fe974fc2a"
     },
     {
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/semantic_catalog.py",
       "runtime_path": "backend/aegisbank_api/planning/semantic_catalog.py",
-      "bytes": 3873,
-      "sha256": "2505d26ccf67752487783174e3a9d23d0ed5967782a3fb50c1d98b8d18ed1e9b"
+      "bytes": 4591,
+      "sha256": "d842e6bd001ffce962c6f5129da1145636a3911cb5f47ef4d255c02bb5086268"
     },
     {
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/semantic_contracts.py",
       "runtime_path": "backend/aegisbank_api/planning/semantic_contracts.py",
-      "bytes": 2735,
-      "sha256": "d4b8638eba6649063a93dfbbb002370f9da9ba28e9c27ab080497cb98406b58a"
+      "bytes": 2762,
+      "sha256": "cdfb0142ba4bd591be48f89f2f962be42682addf2c6e5d77919c394873081648"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/aegisbank_api/planning/semantic_legacy.py",
+      "runtime_path": "backend/aegisbank_api/planning/semantic_legacy.py",
+      "bytes": 19019,
+      "sha256": "131d5cd0cd5c8122f161529e067a2a82b1b03e752760def16a33e7858cf92445"
     },
     {
       "group": "NLP",
@@ -89,6 +96,41 @@
       "runtime_path": "backend/aegisbank_api/trust/clarification.py",
       "bytes": 2132,
       "sha256": "1124c4bb75c4f8a122649306cfe2be55db2dcb539b5e8e473d392dfd600e2611"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-acceptance-dev.json",
+      "runtime_path": "backend/evals/nlp/p1-acceptance-dev.json",
+      "bytes": 13139,
+      "sha256": "cd78a599590956378746c2deb9be042c33ce2931b89236c9533f0bfa384880d4"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-completion-dev-report.json",
+      "runtime_path": "backend/evals/nlp/p1-completion-dev-report.json",
+      "bytes": 63147,
+      "sha256": "9f26b38c61cf247e5971dbca75494a798a6ac872243970831aa2485d7c9c92f4"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-feedback-report.json",
+      "runtime_path": "backend/evals/nlp/p1-feedback-report.json",
+      "bytes": 38413,
+      "sha256": "702529cb9f0adb12b57d0a0e169d26a0caf509aa1ff774ef6e9dd5bdb2351c19"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-independent-probes.json",
+      "runtime_path": "backend/evals/nlp/p1-independent-probes.json",
+      "bytes": 7879,
+      "sha256": "ddff93c0e63aa6f1c134e2d8192d73050f6b9212c635a5ce1822bd711d53a355"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-independent-report.json",
+      "runtime_path": "backend/evals/nlp/p1-independent-report.json",
+      "bytes": 33726,
+      "sha256": "4ecdbab5a180c575e1af8417055412525ce812551a1975e80579945c5e03da59"
     },
     {
       "group": "NLP",
@@ -117,6 +159,13 @@
       "runtime_path": "backend/evals/nlp/p1-review-probes.json",
       "bytes": 2624,
       "sha256": "847ff101137fc7aade8ef63264b0c2f9f7812495666dc31a5ea4f0345b0ed079"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/p1-reviewed-probes.json",
+      "runtime_path": "backend/evals/nlp/p1-reviewed-probes.json",
+      "bytes": 7691,
+      "sha256": "1c175ee95b63e77274a003b12aa86bfde337f58d4e73f4537420448a5623ca4f"
     },
     {
       "group": "NLP",

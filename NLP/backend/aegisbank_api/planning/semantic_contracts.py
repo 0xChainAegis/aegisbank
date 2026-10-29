@@ -76,4 +76,4 @@ class SemanticAnalysis(StrictModel):
     slots: list[SlotEvidence] = Field(default_factory=list)
     reason: str | None = None
     reference_date: str | None = None
-    timezone: Literal["UTC"] = "UTC"
+    timezone: Literal["UTC", "Asia/Shanghai"] = "Asia/Shanghai"

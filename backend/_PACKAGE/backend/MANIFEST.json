@@ -211,6 +211,13 @@
     },
     {
       "group": "backend",
+      "path": "backend/tests/test_nlp_evaluation.py",
+      "runtime_path": "backend/tests/test_nlp_evaluation.py",
+      "bytes": 2718,
+      "sha256": "6ff0f9655441ed6ccc27f8e1bbddcf8a20dbf2c9b44fb98edc4dcad6400b0d92"
+    },
+    {
+      "group": "backend",
       "path": "backend/tests/test_nlp_safety.py",
       "runtime_path": "backend/tests/test_nlp_safety.py",
       "bytes": 13713,
@@ -229,6 +236,20 @@
       "runtime_path": "backend/tests/test_p0_nlp_feedback.py",
       "bytes": 12630,
       "sha256": "8399c4c487487e3462f2cde088127c0ab7ca225ffef3ef46de6e8b986e073195"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_p1_acceptance.py",
+      "runtime_path": "backend/tests/test_p1_acceptance.py",
+      "bytes": 2384,
+      "sha256": "fe4889482a737c560a5ecfeaa4575e41343fde9a8b9989a371df03a7c7737ef2"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_p1_completion.py",
+      "runtime_path": "backend/tests/test_p1_completion.py",
+      "bytes": 7193,
+      "sha256": "bb1cc92d301423cc8ce8be8c902e96c682259cf8fe965b924a16c3633526673c"
     },
     {
       "group": "backend",
@@ -264,6 +285,13 @@
       "runtime_path": "backend/tests/test_security_regressions.py",
       "bytes": 37279,
       "sha256": "831bd2111590ba449cc82bd406ec6d11ac9405d91bbed6ddb8f1e9a271449d40"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_semantic_legacy.py",
+      "runtime_path": "backend/tests/test_semantic_legacy.py",
+      "bytes": 6234,
+      "sha256": "bbaab114825e824f5efb5e6619f0e87f6b483f86e9f85dd43b8de41e8c792a1b"
     },
     {
       "group": "backend",

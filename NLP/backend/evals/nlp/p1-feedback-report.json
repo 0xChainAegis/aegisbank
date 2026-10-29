@@ -1,0 +1,1358 @@
+{
+  "schema_version": "NlpEvaluation/v2",
+  "dataset": "review feedback regression with schema-reviewed labels; not held-out",
+  "corpus_sha256": "1c175ee95b63e77274a003b12aa86bfde337f58d4e73f4537420448a5623ca4f",
+  "base_commit": "bd6c2b6a9988b542840430d4866d47a2ba8a94fc",
+  "implementation_sha256": "301abac82f2de427ce3239d1265a356ec9d4f8c278749f8bfa7ee6b9d2e2845a",
+  "reference_date": "2026-10-28",
+  "timezone": "Asia/Shanghai",
+  "mock_seed": "unmodified create_app demo seed; isolated temporary DB per mode",
+  "metric": "tool sequence + all annotated step parameters + annotated dependencies; negative cases must clarify/block with no steps; verified coverage separate",
+  "real_model_calls": 0,
+  "cases": 30,
+  "positive_cases": 17,
+  "negative_cases": 13,
+  "modes": {
+    "p0_rules": {
+      "matched": 17,
+      "verified_matched": 10,
+      "positive_matched": 7,
+      "negative_matched": 10,
+      "results": [
+        {
+          "id": "p1-sealed-001",
+          "family": "transfers",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-002",
+          "family": "transfers",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-003",
+          "family": "transfers",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-004",
+          "family": "bills",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_bill"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "current_month"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-005",
+          "family": "bills",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_bill"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "current_month"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-006",
+          "family": "bills",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_bill"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "current_month"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-007",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 1200.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-008",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R1",
+              "amount_cny": 2000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-009",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-010",
+          "family": "cards",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_limit_cny": 3500.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-011",
+          "family": "cards",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-9902",
+              "new_day": 16
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-012",
+          "family": "cards",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-013",
+          "family": "subscriptions",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "list_renewal_reminders"
+          ],
+          "arguments": [
+            {
+              "cycle": null,
+              "days_ahead": 30
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-014",
+          "family": "subscriptions",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "list_renewal_reminders"
+          ],
+          "arguments": [
+            {
+              "cycle": null,
+              "days_ahead": 30
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-015",
+          "family": "subscriptions",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3002"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-016",
+          "family": "automation",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-017",
+          "family": "automation",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 800.0,
+              "name": "妈妈的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈的生日鲜花"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈的生日蛋糕"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "p1-sealed-018",
+          "family": "automation",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "老爸",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 600.0,
+              "name": "老爸的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "老爸的生日鲜花"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "老爸的生日蛋糕"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "p1-sealed-019",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-020",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-021",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-022",
+          "family": "bills",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "year",
+              "month": null
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-023",
+          "family": "bills",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-024",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-025",
+          "family": "wealth",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "list_wealth_products"
+          ],
+          "arguments": [
+            {
+              "risk_level": null
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-026",
+          "family": "cards",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-027",
+          "family": "cards",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-028",
+          "family": "subscriptions",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-029",
+          "family": "subscriptions",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "list_renewal_reminders"
+          ],
+          "arguments": [
+            {
+              "cycle": null,
+              "days_ahead": 30
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-030",
+          "family": "automation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        }
+      ]
+    },
+    "p1_semantics": {
+      "matched": 30,
+      "verified_matched": 30,
+      "positive_matched": 17,
+      "negative_matched": 13,
+      "results": [
+        {
+          "id": "p1-sealed-001",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": "13900001111",
+              "amount_cny": 360.0,
+              "note": "给妈妈汇三百六十元。"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-002",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "老爸",
+              "to_phone": "13900002222",
+              "amount_cny": 720.0,
+              "note": "麻烦往老爸那儿打款720块。"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-003",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "张三",
+              "to_phone": "13800138000",
+              "amount_cny": 125.5,
+              "note": "帮我给张三打款125.50元。"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-004",
+          "family": "bills",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-10",
+              "month": "2026-10"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-005",
+          "family": "bills",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-09",
+              "month": "2026-09"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-006",
+          "family": "bills",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-10",
+              "month": "2026-10"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-007",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 1200.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-008",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R1",
+              "amount_cny": 2000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-009",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-010",
+          "family": "cards",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_limit_cny": 3500.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-011",
+          "family": "cards",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-9902",
+              "new_day": 16
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-012",
+          "family": "cards",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-9902",
+              "new_limit_cny": 6000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-013",
+          "family": "subscriptions",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-014",
+          "family": "subscriptions",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3003"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-015",
+          "family": "subscriptions",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3002"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-sealed-016",
+          "family": "automation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_bill",
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "current_month"
+            },
+            {
+              "subscription_id": "${steps.step-1.data.suspicious_subscription_id}"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ]
+          ]
+        },
+        {
+          "id": "p1-sealed-017",
+          "family": "automation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 800.0,
+              "name": "妈妈的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "替我查下妈妈的生日，先锁定800元预算，再安排鲜花和蛋糕。"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "替我查下妈妈的生日，先锁定800元预算，再安排鲜花和蛋糕。"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "p1-sealed-018",
+          "family": "automation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "老爸",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 600.0,
+              "name": "老爸的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "查查老爸的生日是哪天，锁住600元预算，把鲜花和蛋糕订好。"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "查查老爸的生日是哪天，锁住600元预算，把鲜花和蛋糕订好。"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "p1-sealed-019",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-020",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-021",
+          "family": "transfers",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-022",
+          "family": "bills",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-023",
+          "family": "bills",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-024",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-025",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-026",
+          "family": "cards",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-027",
+          "family": "cards",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-028",
+          "family": "subscriptions",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-029",
+          "family": "subscriptions",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-sealed-030",
+          "family": "automation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        }
+      ]
+    }
+  },
+  "tool_catalog_sha256": "54bdb9cae738b22d1a2dafbfd215cb64f4da64b7165f79a6623721308fa7a6f1"
+}
