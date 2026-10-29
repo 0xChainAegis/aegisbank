@@ -147,7 +147,7 @@ def _contact_transfer(text, arguments, repository, user_id):
     rows = collect_entity_facts(repository, user_id, "contact")
     pattern = (
         rf"(?:给|向)(?P<contact>{_aliases(rows)})"
-        rf"(?:转账|汇款|打款|转|汇|打|划)(?:补充信息：)?{_AMOUNT}"
+        rf"(?:转账|汇款|打款|转|汇|打|划)(?:个|笔)?(?:补充信息：)?{_AMOUNT}"
     )
     match = _match(pattern, text)
     if not match:
@@ -162,6 +162,16 @@ def _contact_transfer(text, arguments, repository, user_id):
 
 def _subscription(text, arguments, repository, user_id):
     rows = collect_entity_facts(repository, user_id, "subscription")
+    # Spoken fillers are not part of the merchant identity: "健身房那个月卡"
+    # must still resolve to the single controlled fact "健身房月卡".
+    text = re.sub(r"(?:那个|这个|那张|这张|一下)", "", text)
+    rows = [
+        (
+            identity,
+            [re.sub(r"(?:那个|这个|那张|这张|一下)", "", name) for name in names],
+        )
+        for identity, names in rows
+    ]
     increased = {
         item.subscription_id
         for item in repository.subscriptions(user_id)
@@ -243,7 +253,7 @@ def _birthday(text, steps, repository, user_id):
 
 def _scheduled(text, arguments, repository, user_id):
     rows = collect_entity_facts(repository, user_id, "contact")
-    when = r"(?:明天|后天|下周[一二三四五六日天]|每月\d{1,2}[号日]|\d{4}-\d{2}-\d{2})"
+    when = r"(?:明天|后天|下周[一二三四五六日天]|每(?:个)?月\d{1,2}[号日]|\d{4}-\d{2}-\d{2})"
     match = _match(
         rf"(?:定时)?(?P<when>{when})(?:给|向)(?P<contact>{_aliases(rows)}|{_ACCOUNT})(?:转账|转|汇款|汇){_AMOUNT}",
         text,
@@ -313,6 +323,25 @@ def _wealth(text, tool, arguments, repository, user_id):
             holdings = [h for h in holdings if hit and h["product_id"] == hit[0]]
         return len(holdings) == 1 and holdings[0]["holding_id"] == arguments.get("holding_id")
     return False
+
+
+def _bill_spend(text, arguments) -> bool:
+    """Validate the new colloquial bill-spend grammar against the rule plan."""
+    from ..scenarios.bills import _spend_category, _spend_month
+
+    match = _match(
+        r"(?:我)?(?:(?P<period>这个月|本月|上个月|上月))?(?:在)?"
+        r"(?P<category>餐饮|外卖|购物|交通|订阅)?(?:上)?"
+        r"(?:花了?多少钱?|花费多少|消费多少|支出多少)",
+        text,
+    )
+    if not match:
+        return False
+    return (
+        arguments.get("period") == "month"
+        and arguments.get("month") == _spend_month(text)
+        and arguments.get("category") == _spend_category(text)
+    )
 
 
 def allow_legacy(request, plan, repository) -> bool:
@@ -387,6 +416,8 @@ def allow_legacy(request, plan, repository) -> bool:
             return _card_plan(text, tool, arguments, repository, request.user_id)
         if tool in {"purchase_wealth", "redeem_wealth"}:
             return _wealth(text, tool, arguments, repository, request.user_id)
+        if tool == "bill_report" and _bill_spend(text, arguments):
+            return True
         if tool == "assess_wealth_risk":
             match = _match(r"我的风险偏好是(?P<level>R[1-5])", text)
             return bool(match) and arguments.get("risk_preference") == match["level"].upper()
@@ -409,7 +440,10 @@ def allow_legacy(request, plan, repository) -> bool:
             "query_wealth_holdings": r"(?:查询|查看)?(?:我的)?理财持仓",
             "bill_report": (r"(?:生成|查询|分析)(?:我的?)?(?:(?:本月|月度)?账单报告|年度账单)"),
             "annual_bill": r"(?:生成|查询|分析)(?:我的?)?年度账单",
-            "detect_bill_anomalies": r"(?:有没有|检查|查询|分析)(?:账单)?异常扣费",
+            "detect_bill_anomalies": (
+                r"(?:最近)?(?:有没有|检查|查询|分析)?(?:账单)?"
+                r"(?:异常扣费|乱扣钱|乱扣费|可疑扣费)(?:的)?"
+            ),
             "identify_subscription_charges": r"(?:做|分析)?订阅扣费分析",
             "list_renewal_reminders": (
                 r"(?:有哪些快到期订阅|我的订阅还有哪些要续费|"

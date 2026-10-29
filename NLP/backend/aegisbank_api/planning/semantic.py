@@ -45,6 +45,11 @@ def _account_key(value: str) -> str:
     return text[2:] if text.startswith("我的") else text[1:] if text.startswith("我") else text
 
 
+def _subscription_key(value: str) -> str:
+    text = re.sub(r"(?:那个|这个|那张|这张|一下)", "", value)
+    return text.replace(" ", "").casefold()
+
+
 # A clause boundary may not split a thousands separator.
 _SEPARATOR = re.compile(r"(?<!\d)[,，]|[,，](?!\d)|[。；;！!？?\n]+")
 _NEGATIVE = re.compile(r"^(?:不要|暂不|不必|别)(?:再)?")
@@ -290,6 +295,8 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                 ) -> bool:
                     if kind == "account":
                         return _account_key(raw) == _account_key(name)
+                    if kind == "subscription":
+                        return _subscription_key(raw) == _subscription_key(name)
                     return (
                         raw.replace(" ", "").casefold()
                         == name.replace(" ", "").casefold()

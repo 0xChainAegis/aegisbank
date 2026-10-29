@@ -59,8 +59,8 @@
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/semantic.py",
       "runtime_path": "backend/aegisbank_api/planning/semantic.py",
-      "bytes": 22932,
-      "sha256": "1820e87a1cde3bd18600a901c4d94763da80ea28fb63138711c6771985535d1c"
+      "bytes": 23227,
+      "sha256": "ba45494511fa7e88534ed1814620ca043938ab07cd645fdd226d50e6f022b91e"
     },
     {
       "group": "NLP",
@@ -80,8 +80,8 @@
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/semantic_legacy.py",
       "runtime_path": "backend/aegisbank_api/planning/semantic_legacy.py",
-      "bytes": 19019,
-      "sha256": "131d5cd0cd5c8122f161529e067a2a82b1b03e752760def16a33e7858cf92445"
+      "bytes": 20799,
+      "sha256": "d65b7afc4d28a1d004ead566984ae59f3a7eed60aaa108455b0c086a8413bed5"
     },
     {
       "group": "NLP",
