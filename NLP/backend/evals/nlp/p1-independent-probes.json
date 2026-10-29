@@ -1,0 +1,376 @@
+[
+  {
+    "id": "p1-sealed-001",
+    "family": "transfers",
+    "instruction": "给妈妈汇三百六十元。",
+    "tools": [
+      "transfer_to_contact"
+    ],
+    "checks": {
+      "to_name": "妈妈",
+      "to_phone": "13900001111",
+      "amount_cny": 360.0
+    }
+  },
+  {
+    "id": "p1-sealed-002",
+    "family": "transfers",
+    "instruction": "麻烦往老爸那儿打款720块。",
+    "tools": [
+      "transfer_to_contact"
+    ],
+    "checks": {
+      "to_name": "老爸",
+      "to_phone": "13900002222",
+      "amount_cny": 720.0
+    }
+  },
+  {
+    "id": "p1-sealed-003",
+    "family": "transfers",
+    "instruction": "帮我给张三打款125.50元。",
+    "tools": [
+      "transfer_to_contact"
+    ],
+    "checks": {
+      "to_name": "张三",
+      "to_phone": "13800138000",
+      "amount_cny": 125.5
+    }
+  },
+  {
+    "id": "p1-sealed-004",
+    "family": "bills",
+    "instruction": "替我看看这个月账单，钱都花在哪儿了。",
+    "tools": [
+      "bill_report"
+    ],
+    "checks": {
+      "month": "@current_month"
+    }
+  },
+  {
+    "id": "p1-sealed-005",
+    "family": "bills",
+    "instruction": "我想复盘上个月的账单支出。",
+    "tools": [
+      "bill_report"
+    ],
+    "checks": {
+      "month": "@previous_month"
+    }
+  },
+  {
+    "id": "p1-sealed-006",
+    "family": "bills",
+    "instruction": "帮我盘一盘本月账单里的消费。",
+    "tools": [
+      "bill_report"
+    ],
+    "checks": {
+      "month": "@current_month"
+    }
+  },
+  {
+    "id": "p1-sealed-007",
+    "family": "wealth",
+    "instruction": "拿1200元申购稳健短债A。",
+    "tools": [
+      "purchase_wealth"
+    ],
+    "checks": {
+      "product_id": "WPRD-R2",
+      "amount_cny": 1200.0,
+      "account_id": "ACC-1001"
+    }
+  },
+  {
+    "id": "p1-sealed-008",
+    "family": "wealth",
+    "instruction": "帮我买两千元的稳健货币A理财。",
+    "tools": [
+      "purchase_wealth"
+    ],
+    "checks": {
+      "product_id": "WPRD-R1",
+      "amount_cny": 2000.0,
+      "account_id": "ACC-1001"
+    }
+  },
+  {
+    "id": "p1-sealed-009",
+    "family": "wealth",
+    "instruction": "我想往稳健短债A投850.25元。",
+    "tools": [
+      "purchase_wealth"
+    ],
+    "checks": {
+      "product_id": "WPRD-R2",
+      "amount_cny": 850.25,
+      "account_id": "ACC-1001"
+    }
+  },
+  {
+    "id": "p1-sealed-010",
+    "family": "cards",
+    "instruction": "把尾号8821这张卡的额度调到3500元。",
+    "tools": [
+      "adjust_card_limit"
+    ],
+    "checks": {
+      "card_id": "CARD-8821",
+      "new_limit_cny": 3500.0
+    }
+  },
+  {
+    "id": "p1-sealed-011",
+    "family": "cards",
+    "instruction": "CARD-9902的还款日换成每月16号。",
+    "tools": [
+      "adjust_repayment_date"
+    ],
+    "checks": {
+      "card_id": "CARD-9902",
+      "new_day": 16
+    }
+  },
+  {
+    "id": "p1-sealed-012",
+    "family": "cards",
+    "instruction": "我这张9902尾号的卡，额度帮我改为六千元。",
+    "tools": [
+      "adjust_card_limit"
+    ],
+    "checks": {
+      "card_id": "CARD-9902",
+      "new_limit_cny": 6000.0
+    }
+  },
+  {
+    "id": "p1-sealed-013",
+    "family": "subscriptions",
+    "instruction": "请关闭云端影音的自动续费。",
+    "tools": [
+      "cancel_subscription"
+    ],
+    "checks": {
+      "subscription_id": "SUB-3001"
+    }
+  },
+  {
+    "id": "p1-sealed-014",
+    "family": "subscriptions",
+    "instruction": "健身房月卡这个订阅，我要停掉下次续费。",
+    "tools": [
+      "cancel_subscription"
+    ],
+    "checks": {
+      "subscription_id": "SUB-3003"
+    }
+  },
+  {
+    "id": "p1-sealed-015",
+    "family": "subscriptions",
+    "instruction": "把AI 工具订阅取消掉，之后不续了。",
+    "tools": [
+      "cancel_subscription"
+    ],
+    "checks": {
+      "subscription_id": "SUB-3002"
+    }
+  },
+  {
+    "id": "p1-sealed-016",
+    "family": "automation",
+    "instruction": "看看本月账单，顺手把扣费不正常的订阅停掉。",
+    "tools": [
+      "query_bill",
+      "cancel_subscription"
+    ],
+    "checks": {},
+    "step_checks": [
+      {},
+      {
+        "subscription_id": "${steps.step-1.data.suspicious_subscription_id}"
+      }
+    ],
+    "depends_on": [
+      [],
+      [
+        0
+      ]
+    ]
+  },
+  {
+    "id": "p1-sealed-017",
+    "family": "automation",
+    "instruction": "替我查下妈妈的生日，先锁定800元预算，再安排鲜花和蛋糕。",
+    "tools": [
+      "query_contact_birthday",
+      "lock_budget_funds",
+      "schedule_flower_order",
+      "schedule_cake_order"
+    ],
+    "checks": {
+      "to_name": "妈妈"
+    },
+    "step_checks": [
+      {
+        "to_name": "妈妈"
+      },
+      {
+        "amount_cny": 800.0
+      },
+      {
+        "goal_id": "${steps.step-2.data.goal_id}",
+        "birthday": "${steps.step-1.data.next_birthday}"
+      },
+      {
+        "goal_id": "${steps.step-2.data.goal_id}",
+        "birthday": "${steps.step-1.data.next_birthday}"
+      }
+    ],
+    "depends_on": [
+      [],
+      [
+        0
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        1
+      ]
+    ]
+  },
+  {
+    "id": "p1-sealed-018",
+    "family": "automation",
+    "instruction": "查查老爸的生日是哪天，锁住600元预算，把鲜花和蛋糕订好。",
+    "tools": [
+      "query_contact_birthday",
+      "lock_budget_funds",
+      "schedule_flower_order",
+      "schedule_cake_order"
+    ],
+    "checks": {
+      "to_name": "老爸"
+    },
+    "step_checks": [
+      {
+        "to_name": "老爸"
+      },
+      {
+        "amount_cny": 600.0
+      },
+      {
+        "goal_id": "${steps.step-2.data.goal_id}",
+        "birthday": "${steps.step-1.data.next_birthday}"
+      },
+      {
+        "goal_id": "${steps.step-2.data.goal_id}",
+        "birthday": "${steps.step-1.data.next_birthday}"
+      }
+    ],
+    "depends_on": [
+      [],
+      [
+        0
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        1
+      ]
+    ]
+  },
+  {
+    "id": "p1-sealed-019",
+    "family": "transfers",
+    "instruction": "给新邻居许文汇280元。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-020",
+    "family": "transfers",
+    "instruction": "给家里人打500元。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-021",
+    "family": "transfers",
+    "instruction": "给妈妈汇200美元。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-022",
+    "family": "bills",
+    "instruction": "帮我分析今年全年账单。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-023",
+    "family": "bills",
+    "instruction": "查本月账单，若开支不到3000元就给妈妈汇200元。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-024",
+    "family": "wealth",
+    "instruction": "买1000元的星河优选理财。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-025",
+    "family": "wealth",
+    "instruction": "把1000元投到收益最高的理财里。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-026",
+    "family": "cards",
+    "instruction": "把尾号5566的卡额度改为4000元。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-027",
+    "family": "cards",
+    "instruction": "把我的信用卡还款日改成18号。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-028",
+    "family": "subscriptions",
+    "instruction": "别取消云端影音订阅。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-029",
+    "family": "subscriptions",
+    "instruction": "停掉星际云盘的续费。",
+    "tools": [],
+    "checks": {}
+  },
+  {
+    "id": "p1-sealed-030",
+    "family": "automation",
+    "instruction": "先分析本月账单，再往ACC-2002转300元。",
+    "tools": [],
+    "checks": {}
+  }
+]

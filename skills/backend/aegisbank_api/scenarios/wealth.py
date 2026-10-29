@@ -1272,12 +1272,15 @@ def semantic_intents():
         SemanticSpec(
             "wealth_purchase",
             (
-                rf"(?:用|拿)(?P<amount>{MONEY}){CURRENCY}(?:买入|买|配置|投入)(?P<product>{ENTITY})",
+                rf"(?:用|拿)(?P<amount>{MONEY}){CURRENCY}(?:买入|买|申购|配置|投入)(?:的)?(?P<product>{ENTITY})(?:理财|产品)?",
                 rf"投(?P<amount>{MONEY}){CURRENCY}(?:到|买)(?P<product>{ENTITY})",
+                rf"往(?P<product>{ENTITY})(?:投|投入)(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?:买入|买|申购)(?P<amount>{MONEY}){CURRENCY}(?:的)?(?P<product>{ENTITY})(?:理财|产品)?",
             ),
             "买入{product}，金额为{amount}元",
             {"product": "product", "amount": "money"},
             tools=("purchase_wealth",),
+            bindings={"product": (0, "product_id"), "amount": (0, "amount_cny")},
         ),
         SemanticSpec(
             "wealth_holdings",

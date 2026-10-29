@@ -1,5 +1,7 @@
 # AegisBank 文档索引
 
+- [P1补缺、安全回退与最新验收](NLP-P1-COMPLETION-2026-10-28.md)
+
 - [NLP P1 实现、验收与未完成边界](NLP-P1-2026-10-27.md)
 
 运行与修改项目先阅读[根目录 README](../README.md)。源码保留在 `fronted/`、`backend/`、`agent/`、`NLP/`、`skills/`、`plans/` 六个职责包中，运行前执行 `python3 scripts/assemble.py` 生成 `.runtime/`。

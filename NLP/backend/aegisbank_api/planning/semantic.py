@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal, DecimalException
 
+from ..banking.repository import SHANGHAI_TZ
 from .amounts import AmountError, parse_amount
 from .contracts import ExecutionPlan
 from .safety import _CONDITION, planning_clarification
@@ -17,6 +19,7 @@ from .semantic_contracts import (
     SlotEvidence,
     TextSpan,
 )
+from .semantic_legacy import allow_legacy
 
 # A clause boundary may not split a thousands separator.
 _SEPARATOR = re.compile(r"(?<!\d)[,，]|[,，](?!\d)|[。；;！!？?\n]+")
@@ -52,6 +55,11 @@ def _match(text, start, end, specs):
     if start == end:
         return None
     original_start = start
+    polite = re.match(
+        r"(?:(?:请|麻烦(?:你|您)?|劳驾|帮我|替我|烦请|能否|我想)\s*){1,3}", text[start:end]
+    )
+    if polite:
+        start += polite.end()
     negative = _NEGATIVE.match(text[start:end])
     if negative:
         start += negative.end()
@@ -87,7 +95,14 @@ def _match(text, start, end, specs):
 
 def analyze_rules(text, specs=None):
     specs = specs or collect_semantic_specs()
-    conditions = [span(text, m.start(), m.end()) for m in _CONDITION.finditer(text)]
+    condition_matches = list(_CONDITION.finditer(text))
+    if len(condition_matches) > 12 or len(list(_SEPARATOR.finditer(text))) > 23:
+        return SemanticFrame(
+            uncovered=[span(text, 0, len(text))],
+            needs_clarification=True,
+            clarification="指令分句过多，请分成较短的完整任务。",
+        )
+    conditions = [span(text, m.start(), m.end()) for m in condition_matches]
     whole = _match(text, 0, len(text), specs)
     if whole:
         whole.id = "i1"
@@ -106,6 +121,12 @@ def analyze_rules(text, specs=None):
             else:
                 uncovered.append(span(text, left, right))
         start = next_start
+    if len(intents) > 12 or len(uncovered) > 24:
+        return SemanticFrame(
+            uncovered=[span(text, 0, len(text))],
+            needs_clarification=True,
+            clarification="指令分句过多，请分成较短的完整任务。",
+        )
     return SemanticFrame(
         intents=intents,
         conditions=conditions,
@@ -177,10 +198,37 @@ def _resolve_date(raw, today):
     return result.isoformat()
 
 
+def _arguments_match(request, plan):
+    return all(
+        any(
+            step.arguments.get(key) == value
+            and key in step.arguments
+            and isinstance(step.arguments[key], bool) == isinstance(value, bool)
+            for step in plan.steps
+        )
+        for key, value in request.arguments.items()
+    )
+
+
+def _slot_matches(actual, expected, kind):
+    try:
+        if kind in {"money", "day"}:
+            return actual is not None and Decimal(str(actual)) == Decimal(expected)
+        if kind == "date":
+            moment = datetime.fromisoformat(str(actual))
+            return (
+                moment.tzinfo is not None
+                and moment.astimezone(SHANGHAI_TZ).date().isoformat() == expected
+            )
+        return actual == expected
+    except (ValueError, TypeError, DecimalException, OverflowError):
+        return False
+
+
 def verify_frame(frame, request, rule, specs=None, today=None):
     """Returns a deterministic plan; model values/tools/permissions are never used."""
     specs = specs or collect_semantic_specs()
-    today = today or datetime.now(UTC).date()
+    today = today or datetime.now(SHANGHAI_TZ).date()
     item = _candidate_shape(frame, request.instruction, specs)
     spec = specs[item.kind]
     resolved, evidence = {}, []
@@ -201,7 +249,15 @@ def verify_frame(frame, request, rule, specs=None, today=None):
         try:
             if kind == "money":
                 value, method = str(parse_amount(raw)), "decimal_whole_token"
-            elif kind in ("account", "card", "subscription", "contact", "contact_name", "product"):
+            elif kind in (
+                "account",
+                "card",
+                "subscription",
+                "contact",
+                "contact_name",
+                "contact_account",
+                "product",
+            ):
                 rows = collect_entity_facts(
                     rule.repository, request.user_id, "contact" if kind == "contact_name" else kind
                 )
@@ -214,9 +270,21 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                     )
                 ]
                 if len(hits) != 1:
-                    choices = [names[0] + ("（尾号" + value[-4:] + "）") for value, names in hits][
-                        :8
-                    ]
+                    options = hits or (rows if kind == "card" else [])
+                    if kind == "card":
+                        choices = [
+                            identity
+                            + "（"
+                            + next(
+                                (name for name in names if name.startswith("尾号")), "未提供尾号"
+                            )
+                            + "）"
+                            for identity, names in options
+                        ][:8]
+                    else:
+                        choices = [
+                            names[0] + "（尾号" + value[-4:] + "）" for value, names in options
+                        ][:8]
                     unresolved = SlotEvidence(
                         intent_id=item.id,
                         slot=key,
@@ -230,7 +298,8 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                     raise SemanticError(
                         f"未找到唯一的 {key}「{raw}」；"
                         + (
-                            "匹配到多个对象，请选择：" + "、".join(choices)
+                            ("匹配到多个对象，请选择：" if hits else "请选择有效卡片：")
+                            + "、".join(choices)
                             if choices
                             else "请明确有效对象"
                         ),
@@ -241,15 +310,16 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                     source = "mock_entity_catalog"
                 method = "user_scoped_exact_entity"
             elif kind == "day":
-                value = str(int(raw))
-                if not 1 <= int(value) <= 28:
+                day = parse_amount(raw)
+                if day != day.to_integral_value() or not 1 <= day <= 28:
                     raise SemanticError("还款日必须为 1–28 日")
+                value = str(int(day))
                 method = "repayment_day_range"
             elif kind == "date":
                 value, source, method = (
                     _resolve_date(raw, today),
                     "calendar",
-                    "utc_future_calendar_date",
+                    "shanghai_future_calendar_date",
                 )
             elif kind == "month":
                 month = today.replace(day=1)
@@ -257,8 +327,8 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                     month = month - timedelta(days=1)
                 value, source, method = (
                     month.strftime("%Y-%m"),
-                    "calendar",
-                    "utc_month_normalization",
+                    source if source == "demo_policy" else "calendar",
+                    "shanghai_month_normalization",
                 )
             else:
                 raise SemanticError("未知槽位类型")
@@ -307,12 +377,23 @@ def verify_frame(frame, request, rule, specs=None, today=None):
     expected_tools = list(spec.tools)
     if [s.tool_name for s in plan.steps] != expected_tools:
         raise SemanticError("编译后的动作与已验证意图不一致，已停止规划", evidence)
+    if set(spec.bindings) != set(spec.slot_types):
+        raise SemanticError("场景未声明完整槽位参数绑定，已停止规划", evidence)
+    for key, (index, argument) in spec.bindings.items():
+        arguments = plan.steps[index].arguments if 0 <= index < len(plan.steps) else {}
+        keys = (argument,) if isinstance(argument, str) else argument
+        actual = next((arguments.get(k) for k in keys if arguments.get(k) is not None), None)
+        if not _slot_matches(actual, resolved[key], spec.slot_types[key]):
+            raise SemanticError(f"已验证槽位 {key} 与计划参数不一致，已停止规划", evidence)
+    if not _arguments_match(request, plan):
+        raise SemanticError("显式参数与完整指令的计划不一致，请明确参数。", evidence)
     plan.semantic = SemanticAnalysis(
         status="verified",
         instruction_hash=hashlib.sha256(request.instruction.encode()).hexdigest(),
         frame=frame,
         slots=evidence,
         reference_date=today.isoformat(),
+        timezone="Asia/Shanghai",
     )
     # Canonical-template offsets are not positions in the original utterance.
     plan.assumptions = [a for a in plan.assumptions if not a.startswith("金额来源：")]
@@ -335,6 +416,19 @@ class SemanticPlanner:
         self.specs = collect_semantic_specs()
 
     def _attach(self, plan, request, frame, status, evidence=None):
+        if (
+            not request.tool_name
+            and not plan.needs_clarification
+            and not _arguments_match(request, plan)
+        ):
+            plan = ExecutionPlan(
+                intent="semantic_clarification",
+                planner=self.name,
+                confidence=0,
+                needs_clarification=True,
+                clarification="显式参数与完整指令的计划不一致。",
+            )
+            status = "clarification"
         plan.semantic = SemanticAnalysis(
             status=status,
             instruction_hash=hashlib.sha256(request.instruction.encode()).hexdigest(),
@@ -347,7 +441,7 @@ class SemanticPlanner:
         return plan
 
     def plan(self, request):
-        if request.tool_name or request.arguments:
+        if request.tool_name:
             plan = self.rule.plan(request)
             return self._attach(
                 plan, request, None, "clarification" if plan.needs_clarification else "legacy"
@@ -357,6 +451,15 @@ class SemanticPlanner:
         migratable = not frame.conditions and not frame.uncovered and bool(frame.intents)
         if guard and (guard.intent != "unsupported_composition" or not migratable):
             return self._attach(guard, request, frame, "clarification")
+        if frame.needs_clarification and frame.clarification:
+            plan = ExecutionPlan(
+                intent="semantic_clarification",
+                planner=self.name,
+                confidence=0,
+                needs_clarification=True,
+                clarification=frame.clarification,
+            )
+            return self._attach(plan, request, frame, "clarification")
         if self.model:
             frame = self.model.analyze(request.instruction, self.specs)
         elif frame.uncovered and frame.intents:
@@ -370,6 +473,14 @@ class SemanticPlanner:
             return self._attach(plan, request, frame, "clarification")
         elif frame.uncovered:
             plan = self.rule.plan(request)
+            if not allow_legacy(request, plan, self.rule.repository):
+                plan = ExecutionPlan(
+                    intent="semantic_clarification",
+                    planner=self.name,
+                    confidence=0,
+                    needs_clarification=True,
+                    clarification="尚不能完整验证这条指令，请明确一个完整任务；不会执行部分计划。",
+                )
             return self._attach(
                 plan, request, frame, "clarification" if plan.needs_clarification else "legacy"
             )
@@ -379,8 +490,13 @@ class SemanticPlanner:
                 plan.planner = self.name
             return plan
         except SemanticError as exc:
+            intent = "semantic_clarification"
+            if len(frame.intents) == 1:
+                spec = self.specs.get(frame.intents[0].kind)
+                if spec and len(spec.tools) == 1:
+                    intent = spec.tools[0]
             plan = ExecutionPlan(
-                intent="semantic_clarification",
+                intent=intent,
                 planner=self.name,
                 confidence=0,
                 needs_clarification=True,

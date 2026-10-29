@@ -891,25 +891,33 @@ def router(services: CoreServices) -> APIRouter:
 
 
 def semantic_intents():
-    from ..planning.semantic_catalog import CURRENCY, ENTITY, MONEY, SemanticSpec
+    from ..planning.semantic_catalog import (
+        CURRENCY,
+        CURRENCY_PREFIX,
+        ENTITY,
+        MONEY,
+        SemanticSpec,
+    )
 
     return [
         SemanticSpec(
             "contact_transfer",
             (
-                rf"(?:请)?(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:转账|转|汇|打|划)(?:\n补充信息：)?(?P<amount>{MONEY}){CURRENCY}",
-                rf"(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:汇款|打款)\s*(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?:请)?(?:给|向|往)(?P<contact>(?!\s*ACC-){ENTITY})(?:那儿|那里)?(?:转账|转|汇款|打款|汇|打|划)(?:\n补充信息：)?{CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:汇款|打款){CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}",
                 rf"(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:汇款|打款|转账|汇|转)(?:钱)?",
+                rf"(?:汇款|转账|打款|转|汇)(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY}){CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}",
             ),
             "给{contact}转{amount}元",
             {"contact": "contact", "amount": "money"},
             tools=("transfer_to_contact",),
+            bindings={"contact": (0, ("to_phone", "to_name")), "amount": (0, "amount_cny")},
         )
     ]
 
 
 def semantic_entities(repository, user_id, kind):
-    if kind != "contact":
+    if kind not in {"contact", "contact_account"}:
         return []
     # Use phone as the canonical lookup key to disambiguate duplicate names.
     # Spoken kin terms are facts derived from the contact's actual name/alias;
@@ -934,5 +942,8 @@ def semantic_entities(repository, user_id, kind):
         ]:
             if name and name not in names:
                 names.append(name)
-        rows.append((contact.phone or contact.name, names))
+        identity = (contact.account_id if kind == "contact_account"
+                    else (contact.phone or contact.name))
+        if identity:
+            rows.append((identity, names))
     return rows

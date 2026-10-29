@@ -1,0 +1,2258 @@
+{
+  "schema_version": "NlpEvaluation/v2",
+  "dataset": "development regression, not held-out",
+  "corpus_sha256": "cd78a599590956378746c2deb9be042c33ce2931b89236c9533f0bfa384880d4",
+  "base_commit": "bd6c2b6a9988b542840430d4866d47a2ba8a94fc",
+  "implementation_sha256": "301abac82f2de427ce3239d1265a356ec9d4f8c278749f8bfa7ee6b9d2e2845a",
+  "reference_date": "2026-10-28",
+  "timezone": "Asia/Shanghai",
+  "mock_seed": "unmodified create_app demo seed; isolated temporary DB per mode",
+  "metric": "tool sequence + all annotated step parameters + annotated dependencies; negative cases must clarify/block with no steps; verified coverage separate",
+  "real_model_calls": 0,
+  "cases": 53,
+  "positive_cases": 36,
+  "negative_cases": 17,
+  "modes": {
+    "p0_rules": {
+      "matched": 27,
+      "verified_matched": 13,
+      "positive_matched": 14,
+      "negative_matched": 13,
+      "results": [
+        {
+          "id": "p1-001",
+          "family": "bill_colloquial",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-002",
+          "family": "bill_colloquial",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-003",
+          "family": "bill_period",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-004",
+          "family": "bill_period",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-005",
+          "family": "transfer_synonym",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-006",
+          "family": "transfer_synonym",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-007",
+          "family": "transfer_synonym",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-008",
+          "family": "balance_alias",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-009",
+          "family": "balance_alias",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-010",
+          "family": "subscription_synonym",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3002"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-011",
+          "family": "subscription_synonym",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-012",
+          "family": "card_synonym",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_limit_cny": 3000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-013",
+          "family": "card_synonym",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-9902",
+              "new_limit_cny": 1500.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-014",
+          "family": "card_date",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_day": 18
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-015",
+          "family": "wealth_synonym",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-016",
+          "family": "wealth_synonym",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-017",
+          "family": "wealth_read",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_wealth_holdings"
+          ],
+          "arguments": [
+            {
+              "status": "active"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-018",
+          "family": "cross_birthday",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 1000.0,
+              "name": "妈妈的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈的生日鲜花"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈的生日蛋糕"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "p1-019",
+          "family": "cross_bill",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3002"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-020",
+          "family": "schedule",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-021",
+          "family": "schedule",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-022",
+          "family": "negation",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-023",
+          "family": "negation",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-024",
+          "family": "negation",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-025",
+          "family": "missing",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-026",
+          "family": "unknown_entity",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-027",
+          "family": "unknown_entity",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-028",
+          "family": "unknown_entity",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-029",
+          "family": "unknown_entity",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "list_wealth_products"
+          ],
+          "arguments": [
+            {
+              "risk_level": null
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-030",
+          "family": "invalid_date",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 400,
+          "status": "error",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-031",
+          "family": "invalid_date",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-032",
+          "family": "condition",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-033",
+          "family": "composition",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-034",
+          "family": "composition",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_balance"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-035",
+          "family": "composition",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_balance"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-036",
+          "family": "money",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-037",
+          "family": "money",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-038",
+          "family": "negation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-039",
+          "family": "negation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-040",
+          "family": "money",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-041",
+          "family": "injection",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "blocked",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "probe-01",
+          "family": "transfer",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "probe-02",
+          "family": "transfer",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "张三",
+              "to_phone": "13800138000",
+              "amount_cny": 2000.0,
+              "note": "给张三汇款人民币2000元"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-03",
+          "family": "bill",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "probe-04",
+          "family": "bill",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "probe-05",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 1000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-06",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 2000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-07",
+          "family": "card",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_limit_cny": 3000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-08",
+          "family": "card",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_day": 18
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-09",
+          "family": "subscription",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "probe-10",
+          "family": "subscription",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-11",
+          "family": "cross",
+          "matched": true,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 1000.0,
+              "name": "妈妈的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈的生日鲜花"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈的生日蛋糕"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "probe-12",
+          "family": "cross",
+          "matched": false,
+          "verified_match": false,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": false,
+          "annotated_arguments_match": false,
+          "dependencies_match": false,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        }
+      ]
+    },
+    "p1_semantics": {
+      "matched": 53,
+      "verified_matched": 53,
+      "positive_matched": 36,
+      "negative_matched": 17,
+      "results": [
+        {
+          "id": "p1-001",
+          "family": "bill_colloquial",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-10",
+              "month": "2026-10"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-002",
+          "family": "bill_colloquial",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-10",
+              "month": "2026-10"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-003",
+          "family": "bill_period",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-09",
+              "month": "2026-09"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-004",
+          "family": "bill_period",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-09",
+              "month": "2026-09"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-005",
+          "family": "transfer_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": "13900001111",
+              "amount_cny": 500.0,
+              "note": "给妈妈汇五百元"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-006",
+          "family": "transfer_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "老爸",
+              "to_phone": "13900002222",
+              "amount_cny": 1500.0,
+              "note": "向老爸打款1,500元"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-007",
+          "family": "transfer_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "张三",
+              "to_phone": "13800138000",
+              "amount_cny": 2000.0,
+              "note": "给张三划两千块"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-008",
+          "family": "balance_alias",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_balance"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-009",
+          "family": "balance_alias",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_balance"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-2002"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-010",
+          "family": "subscription_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3002"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-011",
+          "family": "subscription_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-012",
+          "family": "card_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_limit_cny": 3000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-013",
+          "family": "card_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-9902",
+              "new_limit_cny": 1500.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-014",
+          "family": "card_date",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_day": 18
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-015",
+          "family": "wealth_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 1000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-016",
+          "family": "wealth_synonym",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 2000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-017",
+          "family": "wealth_read",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_wealth_holdings"
+          ],
+          "arguments": [
+            {
+              "status": "active"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-018",
+          "family": "cross_birthday",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 1000.0,
+              "name": "妈妈的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "为妈妈筹备生日礼物，预算1000元"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "为妈妈筹备生日礼物，预算1000元"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "p1-019",
+          "family": "cross_bill",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_bill",
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "current_month"
+            },
+            {
+              "subscription_id": "${steps.step-1.data.suspicious_subscription_id}"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ]
+          ]
+        },
+        {
+          "id": "p1-020",
+          "family": "schedule",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "schedule_transfer"
+          ],
+          "arguments": [
+            {
+              "to_account": "ACC-9003",
+              "to_name": null,
+              "amount_cny": 500.0,
+              "run_at": "2026-10-29T09:00:00+00:00",
+              "recurrence": "none",
+              "note": "明天给张三汇500元",
+              "from_account": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-021",
+          "family": "schedule",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "schedule_transfer"
+          ],
+          "arguments": [
+            {
+              "to_account": "ACC-9001",
+              "to_name": null,
+              "amount_cny": 500.0,
+              "run_at": "2026-10-30T09:00:00+00:00",
+              "recurrence": "none",
+              "note": "后天向妈妈打五百元",
+              "from_account": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-022",
+          "family": "negation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_balance"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-023",
+          "family": "negation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_balance"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-024",
+          "family": "negation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_balance"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "p1-025",
+          "family": "missing",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-026",
+          "family": "unknown_entity",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-027",
+          "family": "unknown_entity",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-028",
+          "family": "unknown_entity",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-029",
+          "family": "unknown_entity",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-030",
+          "family": "invalid_date",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-031",
+          "family": "invalid_date",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-032",
+          "family": "condition",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-033",
+          "family": "composition",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-034",
+          "family": "composition",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-035",
+          "family": "composition",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-036",
+          "family": "money",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-037",
+          "family": "money",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-038",
+          "family": "negation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-039",
+          "family": "negation",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-040",
+          "family": "money",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "needs_clarification",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "clarification",
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "p1-041",
+          "family": "injection",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "blocked",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": null,
+          "tools": [],
+          "arguments": [],
+          "depends_on": []
+        },
+        {
+          "id": "probe-01",
+          "family": "transfer",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": "13900001111",
+              "amount_cny": 500.0,
+              "note": "麻烦给妈妈汇五百块钱"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-02",
+          "family": "transfer",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "transfer_to_contact"
+          ],
+          "arguments": [
+            {
+              "to_name": "张三",
+              "to_phone": "13800138000",
+              "amount_cny": 2000.0,
+              "note": "给张三汇款人民币2000元"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-03",
+          "family": "bill",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-09",
+              "month": "2026-09"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-04",
+          "family": "bill",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "bill_report"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "2026-10",
+              "month": "2026-10"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-05",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 1000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-06",
+          "family": "wealth",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "purchase_wealth"
+          ],
+          "arguments": [
+            {
+              "product_id": "WPRD-R2",
+              "amount_cny": 2000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-07",
+          "family": "card",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_card_limit"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_limit_cny": 3000.0
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-08",
+          "family": "card",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "adjust_repayment_date"
+          ],
+          "arguments": [
+            {
+              "card_id": "CARD-8821",
+              "new_day": 18
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-09",
+          "family": "subscription",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3002"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-10",
+          "family": "subscription",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "subscription_id": "SUB-3001"
+            }
+          ],
+          "depends_on": [
+            []
+          ]
+        },
+        {
+          "id": "probe-11",
+          "family": "cross",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_contact_birthday",
+            "lock_budget_funds",
+            "schedule_flower_order",
+            "schedule_cake_order"
+          ],
+          "arguments": [
+            {
+              "to_name": "妈妈",
+              "to_phone": null
+            },
+            {
+              "amount_cny": 1000.0,
+              "name": "妈妈的生日预算",
+              "deadline": null
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈快过生日了，帮我用1000元准备鲜花和蛋糕"
+            },
+            {
+              "goal_id": "${steps.step-2.data.goal_id}",
+              "birthday": "${steps.step-1.data.next_birthday}",
+              "date": null,
+              "note": "妈妈快过生日了，帮我用1000元准备鲜花和蛋糕"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ],
+            [
+              "step-1",
+              "step-2"
+            ]
+          ]
+        },
+        {
+          "id": "probe-12",
+          "family": "cross",
+          "matched": true,
+          "verified_match": true,
+          "http_status": 200,
+          "status": "planned",
+          "tool_sequence_match": true,
+          "annotated_arguments_match": true,
+          "dependencies_match": true,
+          "semantic_status": "verified",
+          "tools": [
+            "query_bill",
+            "cancel_subscription"
+          ],
+          "arguments": [
+            {
+              "account_id": "ACC-1001",
+              "period": "current_month"
+            },
+            {
+              "subscription_id": "${steps.step-1.data.suspicious_subscription_id}"
+            }
+          ],
+          "depends_on": [
+            [],
+            [
+              "step-1"
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "tool_catalog_sha256": "54bdb9cae738b22d1a2dafbfd215cb64f4da64b7165f79a6623721308fa7a6f1"
+}

@@ -477,8 +477,16 @@ React 控制台（`frontend/src/`）七个页面：
 
 `SemanticPlanner` 包装原规则 Planner。离线规则或可选模型只产生 `SemanticFrame/v1`：意图、原文跨度、槽位、极性、条件、顺序、未覆盖片段、缺失槽位。候选不允许工具名、风险、权限、实体规范值或 verified 字段。服务端逐项核验来源、范围、覆盖、极性及场景注册的表达；不支持的条件/通用组合保持澄清。
 
-场景可提供 `semantic_intents` 和 `semantic_entities`。通过当前用户事实目录解析实体；金额沿用 Decimal 完整 token 校验；日期基于 UTC。可信模板将已验证槽位交给原规则 Planner 生成 DAG，并核对工具序列。新增语义路径没有工具执行入口，仍通过现有 Compiler → 风险/权限 → 确认 → Executor/Guard → 审计。
+场景可提供 `semantic_intents` 和 `semantic_entities`。通过当前用户事实目录解析实体；金额沿用 Decimal 完整 token 校验；日期基于 Asia/Shanghai 业务日（2026-10-28统一）。可信模板将已验证槽位交给原规则 Planner 生成 DAG，并核对工具序列。新增语义路径没有工具执行入口，仍通过现有 Compiler → 风险/权限 → 确认 → Executor/Guard → 审计。
 
 `ExecutionPlan.semantic` 是服务端 `SemanticAnalysis/v1` 报告，包含原文哈希、规范值、来源和校验类型。报告加入 `plan_hash`，确认时恢复并复算；畸形契约或内容篡改返回 409。旧计划没有 semantic 时保持原哈希算法。显式工具调用和未迁移旧表达标为 `legacy`；这不表示全句语义已验证。
 
 模型服务未配置时默认离线；`auto` 的传输/契约失败回退仍经过语义校验，语义冲突直接澄清。`AEGIS_SEMANTIC_ENABLED=false` 可回退原规划实现。当前未开放超出可独立核验模板的模型表达，不能以“候选覆盖全文”替代理解限定词。详见根目录 P1 报告。
+
+## P1 完整表达与参数绑定（2026-10-28）
+
+`semantic_legacy.allow_legacy` 在旧规则产生计划之后、进入Compiler之前验证完整表达。自然语言缺少语义匹配时，未知前后词或附加任务不能仅因子串命中而生成工具计划；明确旧语法仍作为legacy兼容。无工具名的补充arguments必须与最终参数一致，不能绕过该过程。
+
+`SemanticSpec.bindings` 将每个槽位映射到 `(步骤索引, 参数键)`，可声明有序候选参数键以匹配工具真实选择语义。日期按上海业务日验证；金额用Decimal比较；账户、卡片、订阅、产品及联系人由用户范围事实核验。定时联系人解析实际收款账户，非手机号推测。语义契约与计划哈希继续使用v1，旧UTC报告仍可反序列化；新报告注明Asia/Shanghai。
+
+评测契约为NlpEvaluation/v2，核对工具序列、已标注的每步参数、引用和依赖；legacy计划匹配与verified覆盖单列。模型候选协议已接通，真实模型效果和独立人工保留集仍未验证。

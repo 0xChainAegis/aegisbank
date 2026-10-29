@@ -10,7 +10,7 @@
 
 本次整合恢复或更新必要的验证与说明材料；业务执行链没有新增旁路。
 
-当前运行白名单包含 **16 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
+当前运行白名单包含 **23 个文件**，`bytes` 和 `sha256` 记录这些文件的当前字节；`path` 相对本分类目录，`runtime_path` 表示组装后的路径。后端测试、前端测试和验证脚本已经按职责恢复，不再采用最初资料包的“排除全部测试”口径。
 
 根 `docs/` 和 `deliverables/` 是团队阅读、验收及比赛材料入口；包内旧文档保留背景，不单独维护新主线。旧 `plans/README.md` 和 `plans/AGENTS.md` 属历史来源说明，不进入运行组装白名单。`_PACKAGE` 为来源、许可与校验元数据，不复制进 `.runtime/`。
 
@@ -33,10 +33,17 @@ Git checkout 中扫描已跟踪或未被忽略的新文件；没有 `.git` 的�
 - `backend/aegisbank_api/planning/semantic.py`
 - `backend/aegisbank_api/planning/semantic_catalog.py`
 - `backend/aegisbank_api/planning/semantic_contracts.py`
+- `backend/aegisbank_api/planning/semantic_legacy.py`
 - `backend/aegisbank_api/planning/semantic_model.py`
 - `backend/aegisbank_api/trust/clarification.py`
+- `backend/evals/nlp/p1-acceptance-dev.json`
+- `backend/evals/nlp/p1-completion-dev-report.json`
+- `backend/evals/nlp/p1-feedback-report.json`
+- `backend/evals/nlp/p1-independent-probes.json`
+- `backend/evals/nlp/p1-independent-report.json`
 - `backend/evals/nlp/p1-probe-report.json`
 - `backend/evals/nlp/p1-regression.json`
 - `backend/evals/nlp/p1-report.json`
 - `backend/evals/nlp/p1-review-probes.json`
+- `backend/evals/nlp/p1-reviewed-probes.json`
 - `docs/NLP-ASSESSMENT-AND-PLAN-2026-10-25.md`

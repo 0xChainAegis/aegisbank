@@ -27,7 +27,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from ..banking.repository import to_cents, to_cny
+from ..banking.repository import SHANGHAI_TZ, to_cents, to_cny
 from ..compensation import CompensationSpec
 from ..db import Database
 from ..domain import ExecutionContext, RiskLevel, ToolMetadata, ToolResult
@@ -253,7 +253,9 @@ def _at_morning_utc(moment: date) -> datetime:
 
 def _resolve_run_at(instruction: str, now: datetime) -> tuple[datetime, str]:
     """Resolve a scheduled-transfer execution time from the instruction."""
-    today = now.date()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    today = now.astimezone(SHANGHAI_TZ).date()
     if "每天" in instruction or "每周" in instruction:
         raise ValueError("当前仅支持一次性、每月或每年的定时转账，暂不支持每天/每周。")
     recurrence = "none"
@@ -653,7 +655,7 @@ class QueryContactBirthdayTool(BaseTool):
         if not birthday_text:
             raise ValueError(f"联系人 {contact.get('name')} 未登记生日，请先在联系人簿补充生日。")
         birthday = _parse_date(birthday_text)
-        today = datetime.now(UTC).date()
+        today = datetime.now(SHANGHAI_TZ).date()
         next_birthday = _next_birthday(birthday, today)
         return ToolResult(
             tool_name=self.metadata.name,
@@ -2358,13 +2360,17 @@ def semantic_intents():
                 rf"(?P<date>{DATE})(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:汇|打|转)(?P<amount>{MONEY}){CURRENCY}",
             ),
             "定时{date}给{contact}转{amount}元",
-            {"date": "date", "contact": "contact", "amount": "money"},
+            {"date": "date", "contact": "contact_account", "amount": "money"},
             tools=("schedule_transfer",),
+            bindings={"date": (0, "run_at"), "contact": (0, "to_account"),
+                      "amount": (0, "amount_cny")},
         ),
         SemanticSpec(
             "birthday",
             (
-                rf"(?:给|为)(?P<contact>(?!\s*ACC-){ENTITY})(?:筹备|安排)生日(?:礼物)?[，,]?预算\s*(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?:给|为)(?P<contact>(?!\s*ACC-){ENTITY})(?:筹备|安排|准备)生日(?:礼物)?[，,]?预算\s*(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?P<contact>{ENTITY})(?:快过|快要过|过)?生日(?:了)?[，,]?(?:帮我)?(?:用|拿)(?P<amount>{MONEY}){CURRENCY}(?:准备|安排)鲜花(?:和|与)蛋糕",
+                rf"(?:查下|查查|查询)(?P<contact>{ENTITY})的生日(?:是哪天)?[，,](?:先)?(?:锁定|锁住)(?P<amount>{MONEY}){CURRENCY}预算[，,](?:再安排|把)鲜花(?:和|与)蛋糕(?:订好)?",
             ),
             "帮我准备{contact}的生日，预算{amount}元",
             {"contact": "contact_name", "amount": "money"},
@@ -2374,5 +2380,6 @@ def semantic_intents():
                 "schedule_flower_order",
                 "schedule_cake_order",
             ),
+            bindings={"contact": (0, "to_name"), "amount": (1, "amount_cny")},
         ),
     ]

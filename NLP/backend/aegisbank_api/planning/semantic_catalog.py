@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 MONEY = r"[0-9０-９零〇一二两三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟.,，．点]+"
 CURRENCY = r"\s*(?:元|块钱|块|人民币|CNY|RMB)?"
 ENTITY = r"[^，,。；;!?！？\n]{1,48}?"
-CARD = r"(?:CARD-\d{3,}|尾号\s*\d{4})"
+CARD = r"(?:CARD-\d{3,}|尾号\s*\d{4}|\d{4}\s*尾号)"
+CURRENCY_PREFIX = r"(?:人民币|CNY|RMB)?\s*"
 DATE = r"(?:明天|后天|下周[一二三四五六日天]|\d{4}-\d{2}-\d{2})"
 
 
@@ -21,6 +22,7 @@ class SemanticSpec:
     # Read-only model classifications still need an independent domain anchor.
     read_anchor: str | None = None
     tools: tuple[str, ...] = ()
+    bindings: dict[str, tuple[int, str | tuple[str, ...]]] = field(default_factory=dict)
 
 
 def core_specs() -> list[SemanticSpec]:
@@ -36,16 +38,22 @@ def core_specs() -> list[SemanticSpec]:
             {"account": "account"},
             r"余额|剩.*钱|账户.*钱",
             tools=("query_balance",),
+            bindings={"account": (0, "account_id")},
         ),
         SemanticSpec(
             "cancel_subscription",
             (
-                rf"(?:把)?(?P<subscription>{ENTITY})(?:停掉|关掉|退订|停止续费)",
-                rf"(?:停掉|关掉|退订|停止续费)(?P<subscription>{ENTITY})",
+                rf"(?:把|将)?(?P<subscription>{ENTITY})(?:的)?(?:停掉|关掉|退订|停止续费|取消掉)(?:[，,](?:之后|以后)不续了)?",
+                rf"关闭(?P<subscription>{ENTITY})的自动续费",
+                rf"(?P<subscription>{ENTITY})这个订阅[，,]我要停掉下次续费",
+                rf"以后别(?:再)?给(?P<subscription>{ENTITY})续费(?:了)?",
+                rf"(?:取消订阅|停掉|关掉|退订|停止续费)(?P<subscription>{ENTITY})",
+                rf"取消(?:那个|这个)?(?P<subscription>(?!定时任务|预约|任务|订阅$){ENTITY})",
             ),
             "取消订阅 {subscription}",
             {"subscription": "subscription"},
             tools=("cancel_subscription",),
+            bindings={"subscription": (0, "subscription_id")},
         ),
     ]
 
@@ -83,7 +91,7 @@ def _entity_facts(repository, user_id: str, kind: str):
             tail = re.search(r"(?<!\d)(\d{4})\s*$", card.masked_number)
             names = [card.card_id]
             if tail:
-                names.append("尾号" + tail.group(1))
+                names.extend(["尾号" + tail.group(1), tail.group(1) + "尾号"])
             rows.append((card.card_id, names))
         return rows
     if kind == "subscription":

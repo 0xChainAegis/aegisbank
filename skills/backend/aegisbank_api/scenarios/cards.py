@@ -752,19 +752,21 @@ def semantic_intents():
         SemanticSpec(
             "card_limit",
             (
-                rf"(?:把)?(?P<card>{CARD})(?:的)?(?:消费额度|额度)(?:调至|改为|设成)\s*(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?:把|将|我这张|我那张)?(?P<card>{CARD})(?:这张|那张)?(?:的)?(?:卡|信用卡)?(?:的)?[，,]?(?:消费额度|额度)(?:帮我)?(?:调至|改为|设成|改到|调整到|调到|设为|提高到|降低到)\s*(?P<amount>{MONEY}){CURRENCY}",
             ),
             "把{card}额度调整到{amount}元",
             {"card": "card", "amount": "money"},
             tools=("adjust_card_limit",),
+            bindings={"card": (0, "card_id"), "amount": (0, "new_limit_cny")},
         ),
         SemanticSpec(
             "card_repayment",
             (
-                rf"(?:把)?(?P<card>{CARD})(?:的)?还款日(?:挪到|改为|设成)(?P<day>\d{{1,2}})(?:号|日)",
+                rf"(?:把|将|我这张|我那张)?(?P<card>{CARD})(?:这张|那张)?(?:的)?(?:卡|信用卡)?(?:的)?[，,]?还款日(?:期)?(?:挪到|改为|设成|改到|调整到|设为|换成)(?:每月)?(?P<day>{MONEY})(?:号|日)",
             ),
             "把{card}还款日调整到{day}日",
             {"card": "card", "day": "day"},
             tools=("adjust_repayment_date",),
+            bindings={"card": (0, "card_id"), "day": (0, "new_day")},
         ),
     ]
