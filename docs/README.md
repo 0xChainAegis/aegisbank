@@ -1,5 +1,7 @@
 # AegisBank 文档索引
 
+- [U1 独立评测、有界语义补强与未完成边界](U1-NLP-EVALUATION-2026-10-30.md)
+
 - [P1补缺、安全回退与最新验收](NLP-P1-COMPLETION-2026-10-28.md)
 
 - [NLP P1 实现、验收与未完成边界](NLP-P1-2026-10-27.md)
