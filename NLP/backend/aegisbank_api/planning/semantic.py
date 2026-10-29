@@ -33,6 +33,7 @@ _SLOT_LABELS = {
     "day": "还款日",
     "date": "执行日期",
     "month": "月份",
+    "risk_level": "风险等级",
 }
 
 
@@ -47,6 +48,7 @@ def _account_key(value: str) -> str:
 
 def _subscription_key(value: str) -> str:
     text = re.sub(r"(?:那个|这个|那张|这张|一下)", "", value)
+    text = re.sub(r"订阅$", "", text)
     return text.replace(" ", "").casefold()
 
 
@@ -57,6 +59,7 @@ _NEGATIVE_TOPICS = {
     "contact_transfer": r"转账|汇款|打款|转钱",
     "cancel_subscription": r"取消[^,，。；;\n]*订阅|退订[^,，。；;\n]*",
     "card_limit": r"调[^,，。；;\n]*额度|修改[^,，。；;\n]*额度",
+    "card_lost": r"挂失|冻结",
     "wealth_purchase": r"买[^,，。；;\n]*理财|申购[^,，。；;\n]*",
 }
 
@@ -368,6 +371,11 @@ def verify_frame(frame, request, rule, specs=None, today=None):
                     source if source == "demo_policy" else "calendar",
                     "shanghai_month_normalization",
                 )
+            elif kind == "risk_level":
+                value = raw.upper()
+                if not re.fullmatch(r"R[1-5]", value):
+                    raise SemanticError("风险等级必须为 R1–R5")
+                method = "bounded_wealth_risk_level"
             else:
                 raise SemanticError("未知槽位类型")
         except (ValueError, AmountError) as exc:

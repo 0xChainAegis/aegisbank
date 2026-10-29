@@ -918,6 +918,7 @@ def semantic_intents():
                 rf"(?:请)?(?:给|向|往)(?P<contact>(?!\s*ACC-){ENTITY})(?:那儿|那里)?(?:转账|转|汇款|打款|汇|打|划)(?:\n补充信息：)?{CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}",
                 rf"(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:汇款|打款){CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}",
                 rf"(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})(?:汇款|打款|转账|汇|转)(?:钱)?",
+                rf"(?:汇款|转账|打款|转|汇){CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY})",
                 rf"(?:汇款|转账|打款|转|汇)(?:给|向)(?P<contact>(?!\s*ACC-){ENTITY}){CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}",
             ),
             "给{contact}转{amount}元",

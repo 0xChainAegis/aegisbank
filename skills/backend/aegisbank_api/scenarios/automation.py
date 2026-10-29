@@ -2388,7 +2388,7 @@ def semantic_intents():
         SemanticSpec(
             "birthday",
             (
-                rf"(?:给|为)(?P<contact>(?!\s*ACC-){ENTITY})(?:筹备|安排|准备)生日(?:礼物)?[，,]?预算\s*(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?:帮|给|为)(?P<contact>(?!\s*ACC-){ENTITY})(?:筹备|安排|准备)生日(?:礼物)?[，,]?预算\s*(?P<amount>{MONEY}){CURRENCY}",
                 rf"(?P<contact>{ENTITY})(?:快过|快要过|过)?生日(?:了)?[，,]?(?:帮我)?(?:用|拿)(?P<amount>{MONEY}){CURRENCY}(?:准备|安排)鲜花(?:和|与)蛋糕",
                 rf"(?:查下|查查|查询)(?P<contact>{ENTITY})的生日(?:是哪天)?[，,](?:先)?(?:锁定|锁住)(?P<amount>{MONEY}){CURRENCY}预算[，,](?:再安排|把)鲜花(?:和|与)蛋糕(?:订好)?",
             ),

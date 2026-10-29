@@ -6,9 +6,10 @@ import re
 from dataclasses import dataclass, field
 
 MONEY = r"[0-9０-９零〇一二两三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟.,，．点]+"
-CURRENCY = r"\s*(?:元|块钱|块|人民币|CNY|RMB)?"
+CURRENCY = r"\s*(?:(?:元|块钱|块)(?:人民币|CNY|RMB)?|人民币|CNY|RMB)?"
 ENTITY = r"[^，,。；;!?！？\n]{1,48}?"
 CARD = r"(?:CARD-\d{3,}|尾号\s*\d{4}|\d{4}\s*尾号)"
+ACCOUNT = r"ACC-\d{3,}"
 CURRENCY_PREFIX = r"(?:人民币|CNY|RMB)?\s*"
 DATE = r"(?:明天|后天|下周[一二三四五六日天]|\d{4}-\d{2}-\d{2})"
 
@@ -30,15 +31,27 @@ def core_specs() -> list[SemanticSpec]:
         SemanticSpec(
             "balance",
             (
-                r"(?:查(?:询|看|一下)?|看看|看下|查看一下)(?:我的?|账户)?余额",
+                r"(?:查(?:询|看|一下)?|查查|看看|看下|查看一下)(?:我的?(?:账户)?|账户)?余额",
                 r"(?:我的?)?(?:账户里)?(?:还剩|还有|剩下)(?:多少)?钱",
-                rf"(?:看看|查查)?(?P<account>{ENTITY})(?:还剩|还有)多少钱",
+                rf"(?:看看|查查)?(?P<account>{ENTITY})(?:里面)?(?:还剩|还有)多少(?:钱|余额)",
+                rf"(?P<account>{ENTITY})(?:账户)?余额(?:是多少|有多少)",
             ),
             "查询{account}余额",
             {"account": "account"},
             r"余额|剩.*钱|账户.*钱",
             tools=("query_balance",),
             bindings={"account": (0, "account_id")},
+        ),
+        SemanticSpec(
+            "account_transfer",
+            (
+                rf"(?:向|给)(?P<account>{ACCOUNT})(?:转账|转|汇款){CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}",
+                rf"(?:汇款|转账|打款|转){CURRENCY_PREFIX}(?P<amount>{MONEY}){CURRENCY}(?:到|至|给)(?P<account>{ACCOUNT})",
+            ),
+            "向{account}转账{amount}元",
+            {"account": "account", "amount": "money"},
+            tools=("transfer",),
+            bindings={"account": (0, "to_account"), "amount": (0, "amount_cny")},
         ),
         SemanticSpec(
             "cancel_subscription",

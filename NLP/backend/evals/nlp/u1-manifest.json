@@ -1,0 +1,108 @@
+{
+  "schema_version": "U1Corpus/v1",
+  "frozen_date": "2026-10-29",
+  "base_commit": "49c2f48cd4d590479403145dc13d4e92b4c1d732",
+  "annotation": {
+    "method": "逐条静态金标，AI 辅助整理；不是模型自评",
+    "human_adjudication": "pending",
+    "note": "人工复核完成前不得称为正式人工标注集"
+  },
+  "adjudications": [
+    {
+      "date": "2026-10-29",
+      "status": "accepted_gold_correction",
+      "case_ids": [
+        "u1-137",
+        "u1-138",
+        "u1-139",
+        "u1-140",
+        "u1-193",
+        "u1-194",
+        "u1-195"
+      ],
+      "reason": "开发基线显示 query_bill 的固定参数名为 period；原金标误写为 month。仅修正该字段，不改变保留集答案。",
+      "old": {
+        "month": "@current_month"
+      },
+      "new": {
+        "period": "current_month"
+      },
+      "baseline_report": "NLP/backend/evals/nlp/u1-development-baseline.json",
+      "human_review": "pending"
+    }
+  ],
+  "split_policy": "family-disjoint; held-out instructions disjoint from earlier list-shaped P1 corpora",
+  "cases": 304,
+  "families": 76,
+  "splits": {
+    "development": {
+      "cases": 156,
+      "families": 39
+    },
+    "heldout": {
+      "cases": 148,
+      "families": 37
+    }
+  },
+  "categories": {
+    "bounded_dag": 16,
+    "chinese_amount": 16,
+    "colloquial": 12,
+    "condition": 12,
+    "cross_user": 4,
+    "currency": 8,
+    "entity": 52,
+    "entity_alias": 8,
+    "filtered_read": 4,
+    "injection": 8,
+    "invalid_amount": 12,
+    "invalid_date": 8,
+    "missing_slot": 8,
+    "multi_intent": 12,
+    "negation_scope": 20,
+    "politeness": 16,
+    "read_action": 8,
+    "reference_correction": 4,
+    "synonym": 8,
+    "time": 28,
+    "unknown_entity": 16,
+    "word_order": 16,
+    "write_action": 8
+  },
+  "scenarios": {
+    "accounts": 20,
+    "automation": 36,
+    "bills": 64,
+    "cards": 44,
+    "conversation": 4,
+    "cross": 12,
+    "security": 12,
+    "transfers": 72,
+    "wealth": 40
+  },
+  "planner_config": {
+    "p0_rules": {
+      "planner_mode": "rule",
+      "semantic_enabled": false
+    },
+    "p1_semantics": {
+      "planner_mode": "rule",
+      "semantic_enabled": true
+    },
+    "existing_llm": {
+      "planner_mode": "llm",
+      "semantic_enabled": false
+    },
+    "semantic_llm": {
+      "planner_mode": "llm",
+      "semantic_enabled": true
+    },
+    "timezone": "Asia/Shanghai",
+    "real_model": "not configured in this checkout; never inferred from MockTransport"
+  },
+  "mock_seed_sha256": "88a7f21df90e5db9016c016be4715af3a52844ddec59ddd883ff54c8c2f46da7",
+  "corpus_sha256": {
+    "u1-development.json": "23839257b34f801d8185feaf1eb4e65697ccc5db6bc543f4a84533ce673cf314",
+    "u1-heldout.json": "0f08ee94ea7c235dab4703ee7895237a0f7ef6752484689bbc8704957455669e"
+  }
+}

@@ -59,15 +59,15 @@
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/semantic.py",
       "runtime_path": "backend/aegisbank_api/planning/semantic.py",
-      "bytes": 22684,
-      "sha256": "caeedc38675fff0de6fb200146a835c0add42efa403976da628c492cd661f54d"
+      "bytes": 23049,
+      "sha256": "18803acff231362ad1523006988842aae312a0856be8f63c5b85484378828862"
     },
     {
       "group": "NLP",
       "path": "backend/aegisbank_api/planning/semantic_catalog.py",
       "runtime_path": "backend/aegisbank_api/planning/semantic_catalog.py",
-      "bytes": 4591,
-      "sha256": "d842e6bd001ffce962c6f5129da1145636a3911cb5f47ef4d255c02bb5086268"
+      "bytes": 5328,
+      "sha256": "5df204a455df4d6ddb221a03f3fbb46270a3c032db2962b13d9e3c5cbd49c330"
     },
     {
       "group": "NLP",
@@ -166,6 +166,62 @@
       "runtime_path": "backend/evals/nlp/p1-reviewed-probes.json",
       "bytes": 7691,
       "sha256": "1c175ee95b63e77274a003b12aa86bfde337f58d4e73f4537420448a5623ca4f"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-development-baseline.json",
+      "runtime_path": "backend/evals/nlp/u1-development-baseline.json",
+      "bytes": 684003,
+      "sha256": "db6b1047164b85cc517c7786bf74aef649f956f78467c48b2073983ff7336677"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-development-report.json",
+      "runtime_path": "backend/evals/nlp/u1-development-report.json",
+      "bytes": 658083,
+      "sha256": "ccf23160490b9e3ca6720ffa6bb4eb9fdc0f9c91e038973fd950433bbbd90cbc"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-development.json",
+      "runtime_path": "backend/evals/nlp/u1-development.json",
+      "bytes": 99258,
+      "sha256": "23839257b34f801d8185feaf1eb4e65697ccc5db6bc543f4a84533ce673cf314"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-heldout-initial-report.json",
+      "runtime_path": "backend/evals/nlp/u1-heldout-initial-report.json",
+      "bytes": 692588,
+      "sha256": "cd3ea954fd2c4bf7a0b7064ddce57593023103b7e30ae830a2499e6c50c08113"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-heldout-report.json",
+      "runtime_path": "backend/evals/nlp/u1-heldout-report.json",
+      "bytes": 692588,
+      "sha256": "b4249d4704c38494d6d1c65720471dd8e1ddcb9b8e23e425909b16c107456908"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-heldout.json",
+      "runtime_path": "backend/evals/nlp/u1-heldout.json",
+      "bytes": 93353,
+      "sha256": "0f08ee94ea7c235dab4703ee7895237a0f7ef6752484689bbc8704957455669e"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-manifest.json",
+      "runtime_path": "backend/evals/nlp/u1-manifest.json",
+      "bytes": 2813,
+      "sha256": "3899bde9e1bd08afb656ec0584038137565c79b49c4673266fcad32643810ebc"
+    },
+    {
+      "group": "NLP",
+      "path": "backend/evals/nlp/u1-real-model-report.json",
+      "runtime_path": "backend/evals/nlp/u1-real-model-report.json",
+      "bytes": 2171,
+      "sha256": "f7b0b23b8e37c23608c063d92e8ad06e0285d48783433d50c868350c4997dd93"
     },
     {
       "group": "NLP",

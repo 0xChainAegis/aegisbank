@@ -1183,9 +1183,11 @@ class ListWealthProductsIntent:
             return None
         if any(word in text for word in ("持仓", "持有", "赎回", "卖出")):
             return None
+        risk_levels = _risk_tokens(text)
+        arguments = {"risk_level": risk_levels[0]} if len(risk_levels) == 1 else {}
         return _plan(
             "list_wealth_products",
-            {},
+            arguments,
             intent=self.name,
             assumptions=["只返回模拟理财产品清单，不构成任何投资建议。", DISCLAIMER],
             description="列出模拟理财产品。",
@@ -1293,6 +1295,29 @@ def semantic_intents():
             "查询理财持仓",
             read_anchor=r"投资|理财|持仓",
             tools=("query_wealth_holdings",),
+        ),
+        SemanticSpec(
+            "wealth_products",
+            (
+                r"(?:查看|查询|列出|看看)(?:全部|所有)?(?:模拟)?理财产品(?:列表)?",
+                r"(?:有哪些|有什么)(?:模拟)?理财产品",
+                r"列出可购买的理财",
+            ),
+            "查询理财产品",
+            read_anchor=r"理财|产品",
+            tools=("list_wealth_products",),
+        ),
+        SemanticSpec(
+            "wealth_products_risk",
+            (
+                r"(?:查询|列出|看看|有哪些)(?P<risk_level>R[1-5])(?:风险等级|风险)?(?:的)?(?:理财|产品|理财产品)",
+                r"(?P<risk_level>R[1-5])理财产品",
+            ),
+            "查询{risk_level}理财产品",
+            {"risk_level": "risk_level"},
+            read_anchor=r"理财|产品|R[1-5]",
+            tools=("list_wealth_products",),
+            bindings={"risk_level": (0, "risk_level")},
         ),
     ]
 

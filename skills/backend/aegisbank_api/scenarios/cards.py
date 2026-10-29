@@ -762,11 +762,35 @@ def semantic_intents():
         SemanticSpec(
             "card_repayment",
             (
-                rf"(?:把|将|我这张|我那张)?(?P<card>{CARD})(?:这张|那张)?(?:的)?(?:卡|信用卡)?(?:的)?[，,]?还款日(?:期)?(?:挪到|改为|设成|改到|调整到|设为|换成)(?:每月)?(?P<day>{MONEY})(?:号|日)",
+                rf"(?:把|将|我这张|我那张)?(?P<card>{CARD})(?:这张|那张)?(?:的)?(?:卡|信用卡)?(?:的)?[，,]?还款日(?:期)?(?:挪到|改为|设成|改到|调整到|调整为|设为|换成)(?:每月)?(?P<day>{MONEY})(?:号|日)",
             ),
             "把{card}还款日调整到{day}日",
             {"card": "card", "day": "day"},
             tools=("adjust_repayment_date",),
             bindings={"card": (0, "card_id"), "day": (0, "new_day")},
+        ),
+        SemanticSpec(
+            "card_lost",
+            (
+                rf"(?:挂失|冻结)(?:卡片|卡)?(?P<card>{CARD})(?:的)?(?:卡|卡片)?",
+                rf"(?:把|将)?(?P<card>{CARD})(?:的)?(?:卡|卡片)?(?:挂失|冻结)",
+                rf"(?:我的?)?(?P<card>{CARD})(?:丢了|遗失|不见了)[，,]?(?:请)?挂失",
+            ),
+            "挂失{card}",
+            {"card": "card"},
+            tools=("report_card_lost",),
+            bindings={"card": (0, "card_id")},
+        ),
+        SemanticSpec(
+            "card_unlock",
+            (
+                rf"(?:解挂|解除(?:卡片)?挂失|解锁(?:卡片)?挂失)(?:卡片|卡)?(?P<card>{CARD})(?:的)?(?:卡|卡片)?",
+                rf"(?:把|将)?(?P<card>{CARD})(?:的)?(?:卡|卡片)?解挂",
+                rf"解除(?P<card>{CARD})的挂失状态",
+            ),
+            "解挂{card}",
+            {"card": "card"},
+            tools=("unlock_card",),
+            bindings={"card": (0, "card_id")},
         ),
     ]

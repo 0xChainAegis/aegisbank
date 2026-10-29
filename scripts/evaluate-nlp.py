@@ -33,12 +33,15 @@ def normalize_gold(value, reference):
 def arguments_match(actual, expected, reference):
     for key, gold in expected.items():
         value = actual.get(key)
-        if isinstance(gold, str) and gold.startswith("@local_date:"):
+        if isinstance(gold, str) and gold.startswith(("@local_date:", "@fixed_date:")):
             try:
                 moment = datetime.fromisoformat(str(value))
-                if moment.tzinfo is None or moment.astimezone(TZ).date() != (
+                expected_date = (
                     reference + timedelta(days=int(gold.split(":", 1)[1]))
-                ):
+                    if gold.startswith("@local_date:")
+                    else datetime.fromisoformat(gold.split(":", 1)[1]).date()
+                )
+                if moment.tzinfo is None or moment.astimezone(TZ).date() != expected_date:
                     return False
             except (ValueError, TypeError):
                 return False
