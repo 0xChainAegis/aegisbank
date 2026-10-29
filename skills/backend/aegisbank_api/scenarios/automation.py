@@ -49,7 +49,8 @@ CAKE_AMOUNT_CNY = 159.0
 GIFT_LEAD_DAYS = 2
 MAX_TRANSFER_CNY = 50_000.0
 HIGH_TRANSFER_THRESHOLD_CNY = 5_000.0
-DEFAULT_RUN_HOUR_UTC = 9
+DEFAULT_RUN_HOUR_SHANGHAI = 9
+DEFAULT_RUN_HOUR_UTC = DEFAULT_RUN_HOUR_SHANGHAI
 
 
 class ScheduledTaskNeedsReauth(PermissionError):
@@ -137,6 +138,7 @@ _SCHEDULE_HINTS = (
     "每天",
     "每周",
     "每月",
+    "每个月",
     "每年",
     "明天",
     "后天",
@@ -203,8 +205,20 @@ def _safe_date(year: int, month: int, day: int) -> date:
         raise ValueError(f"日期非法：{year} 年 {month} 月 {day} 日") from exc
 
 
+def _today() -> date:
+    """Return the user-facing banking date in Asia/Shanghai."""
+    return datetime.now(SHANGHAI_TZ).date()
+
+
 def _future_morning(moment: date, now: datetime) -> datetime:
-    target = datetime(moment.year, moment.month, moment.day, DEFAULT_RUN_HOUR_UTC, tzinfo=UTC)
+    # 09:00 is a China-local wall-clock time, not 09:00 UTC.
+    target = datetime(
+        moment.year,
+        moment.month,
+        moment.day,
+        DEFAULT_RUN_HOUR_SHANGHAI,
+        tzinfo=SHANGHAI_TZ,
+    ).astimezone(UTC)
     if target <= now:
         raise ValueError("执行时间必须晚于当前时间，请调整时间。")
     return target
@@ -248,7 +262,13 @@ def _next_birthday(birthday: date, today: date) -> date:
 
 
 def _at_morning_utc(moment: date) -> datetime:
-    return datetime(moment.year, moment.month, moment.day, DEFAULT_RUN_HOUR_UTC, tzinfo=UTC)
+    return datetime(
+        moment.year,
+        moment.month,
+        moment.day,
+        DEFAULT_RUN_HOUR_SHANGHAI,
+        tzinfo=SHANGHAI_TZ,
+    ).astimezone(UTC)
 
 
 def _resolve_run_at(instruction: str, now: datetime) -> tuple[datetime, str]:
@@ -655,7 +675,7 @@ class QueryContactBirthdayTool(BaseTool):
         if not birthday_text:
             raise ValueError(f"联系人 {contact.get('name')} 未登记生日，请先在联系人簿补充生日。")
         birthday = _parse_date(birthday_text)
-        today = datetime.now(SHANGHAI_TZ).date()
+        today = _today()
         next_birthday = _next_birthday(birthday, today)
         return ToolResult(
             tool_name=self.metadata.name,

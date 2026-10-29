@@ -20,7 +20,7 @@ from .compensation import CompensationRegistry
 from .db import Database
 from .domain import ExecutionContext, ExecutionStatus, PlanNode, RiskLevel
 from .executor import SandboxViolation, ToolExecutor
-from .gateway import PermissionGateway, scan_injection
+from .gateway import PermissionGateway, is_internal_tool, scan_injection
 from .planning.compiler import CompiledPlan, PlanCompilationError, PlanCompiler
 from .planning.contracts import ExecutionPlan, Planner, PlanningRequest, PlanStep
 from .registry import ToolRegistry
@@ -58,6 +58,9 @@ class IntentError(ValueError):
 
 class ReauthError(ValueError):
     pass
+
+
+MFA_MAX_FAILURES = 5
 
 
 class ExecutionFailedError(ValueError):
@@ -981,6 +984,12 @@ class DagScheduler:
         if replay is not None:
             return replay
         if pending["status"] != "pending":
+            attempts = int(pending.get("mfa_failures") or 0)
+            if attempts >= MFA_MAX_FAILURES:
+                raise ReauthError(
+                    f"该确认已因连续 {attempts} 次二次身份校验失败被锁定；"
+                    "正确验证码也不会执行，请重新发起操作。"
+                )
             raise IntentError(f"确认请求已处理：{pending['status']}。")
 
         breaker = self.breaker.status(user_id=user_id)
@@ -1125,8 +1134,9 @@ class DagScheduler:
                 )
                 raise ReauthError(f"二次身份校验失败：{exc}") from exc
             if not mfa_result.ok:
-                # Wrong OTP is an authentication failure; keep retry UX and the
-                # circuit breaker untouched.
+                # Wrong OTP is an authentication failure; keep the per-user
+                # breaker untouched and count it against this confirmation only.
+                attempts = self.db.increment_mfa_failures(action_id)
                 self.audit.record(
                     event="mfa_failed",
                     user_id=user_id,
@@ -1134,10 +1144,39 @@ class DagScheduler:
                     dag_path=self._dag_path(nodes),
                     tool_name=nodes[0].tool_name,
                     arguments=nodes[0].arguments,
-                    result={"mfa": mfa_result.as_dict()},
+                    result={
+                        "mfa": mfa_result.as_dict(),
+                        "attempt": attempts,
+                        "max_attempts": MFA_MAX_FAILURES,
+                    },
                     confirmation_state="reauth_failed",
                     risk_level=pending["risk_level"],
                 )
+                if attempts >= MFA_MAX_FAILURES:
+                    machine.transition(
+                        ActionState.FAILED,
+                        reason="二次身份校验连续失败达到上限，确认已锁定",
+                    )
+                    self.db.resolve_pending(action_id, "blocked")
+                    self.audit.record(
+                        event="mfa_locked",
+                        user_id=user_id,
+                        instruction=pending["instruction"],
+                        dag_path=self._dag_path(nodes),
+                        tool_name=nodes[0].tool_name,
+                        arguments=nodes[0].arguments,
+                        result={
+                            "attempt_count": attempts,
+                            "max_attempts": MFA_MAX_FAILURES,
+                            "reason": "二次身份校验连续失败达到上限，确认已锁定",
+                        },
+                        confirmation_state="blocked",
+                        risk_level=pending["risk_level"],
+                    )
+                    raise ReauthError(
+                        f"二次身份校验连续失败 {attempts} 次，确认已锁定；"
+                        "正确验证码也不会执行，请重新发起操作。"
+                    )
                 raise ReauthError(f"二次身份校验失败：{mfa_result.detail}")
 
         # Re-check permissions and dynamic risk immediately before execution.
@@ -1411,6 +1450,7 @@ class DagScheduler:
         start_index: int = 0,
         prior_results: list[dict[str, Any]] | None = None,
         count_failures: bool = True,
+        purpose: str = "execution",
     ) -> list[dict[str, Any]]:
         dag_path = self._dag_path(nodes)
         read_only_plan = self._plan_is_read_only(nodes)
@@ -1466,6 +1506,7 @@ class DagScheduler:
                 dag_path=dag_path,
                 approved_risk=authorized_risk,
                 reauth_verified=authorization.get("mfa_verified") is True,
+                purpose=purpose,
             )
             try:
                 resolved_args = self._resolve_arguments(node.arguments, results_by_id)
@@ -1519,6 +1560,7 @@ class DagScheduler:
                     instruction=instruction,
                     arguments=resolved_args,
                     role=role,
+                    purpose=purpose,
                 )
                 if decision.denied:
                     raise PermissionError(decision.reason)
@@ -2184,6 +2226,7 @@ class DagScheduler:
                 instruction=instruction,
                 arguments=node.arguments,
                 role=role,
+                purpose="compensation",
             )
             if decision.denied:
                 audit_entry = self.audit.record(
@@ -2226,6 +2269,7 @@ class DagScheduler:
                 role=role,
                 # Controlled demo failures must not trip the shared breaker.
                 count_failures=False,
+                purpose="compensation",
             )
         except ExecutionPaused as paused:
             response = self._paused_response(
@@ -2544,6 +2588,14 @@ class DagScheduler:
             )
             if machine.state is ActionState.PAUSED:
                 machine.transition(ActionState.EXECUTING, reason="恢复暂停的执行")
+        resume_purpose = (
+            "compensation"
+            if any(
+                is_internal_tool(node.tool_name, self.registry.get(node.tool_name).metadata)
+                for node in nodes
+            )
+            else "execution"
+        )
         self.journal.mark_running(action_id)
         try:
             results = self._execute_nodes(
@@ -2558,6 +2610,7 @@ class DagScheduler:
                 role=role,
                 start_index=start_index,
                 prior_results=prior,
+                purpose=resume_purpose,
             )
         except ExecutionPaused as paused:
             self._advance(machine, ActionState.PAUSED, "恢复后再次暂停")

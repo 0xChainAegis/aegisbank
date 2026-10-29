@@ -9,7 +9,7 @@ import { confirmationSummary } from './viewModel';
 let root: Root;
 let container: HTMLDivElement;
 const currentTime = new Date('2026-10-27T10:00:00Z');
-const yellowReason = '黄色操作会修改账户设置，需要在 5 分钟内完成一次轻量确认。';
+const yellowReason = '黄色操作涉及资金变动或账户设置，需要在 5 分钟内完成一次轻量确认。';
 const redReason = '红色操作涉及资金变动，需要二次身份校验并明确确认。';
 const transfer: PlanStep = {
   id: 'transfer-1', tool_name: 'transfer', depends_on: [], risk_level: 'yellow',
@@ -73,7 +73,7 @@ describe('confirmation product facts', () => {
     expect(frontText()).toContain('转出账户：我的日常账户（ACC-1001）');
     expect(frontText()).toContain('收款账户：我的储蓄账户（ACC-2002）');
     expect(frontText()).toContain('待确认 · 尚未执行');
-    expect(frontText()).not.toContain('修改账户设置');
+    expect(frontText()).not.toContain('资金变动或账户设置');
     expect(frontText()).not.toContain('5 分钟');
     expect(container.querySelector('details')?.textContent).toContain(yellowReason);
     expect(input.onDecision).not.toHaveBeenCalled();

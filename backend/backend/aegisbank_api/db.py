@@ -74,7 +74,8 @@ class Database:
                     envelopes_json TEXT NOT NULL DEFAULT '[]',
                     state TEXT NOT NULL DEFAULT 'DRAFT',
                     state_history_json TEXT NOT NULL DEFAULT '[]',
-                    result_json TEXT NOT NULL DEFAULT ''
+                    result_json TEXT NOT NULL DEFAULT '',
+                    mfa_failures INTEGER NOT NULL DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS audit_log (
@@ -137,6 +138,8 @@ class Database:
                 "state_history_json TEXT NOT NULL DEFAULT '[]'",
                 "result_json": "ALTER TABLE pending_actions ADD COLUMN "
                 "result_json TEXT NOT NULL DEFAULT ''",
+                "mfa_failures": "ALTER TABLE pending_actions ADD COLUMN "
+                "mfa_failures INTEGER NOT NULL DEFAULT 0",
             }
             for column, statement in migrations.items():
                 if column not in pending_columns:
@@ -218,6 +221,19 @@ class Database:
                 [(user_id, name, now) for name in tool_names],
             )
 
+    def remove_granted_permissions(self, user_id: str, tool_names: list[str]) -> None:
+        """Delete stale positive grants without reviving an explicit denial."""
+        names = sorted({str(name) for name in tool_names if str(name)})
+        if not names:
+            return
+        placeholders = ",".join("?" for _ in names)
+        with self.transaction() as conn:
+            conn.execute(
+                "DELETE FROM permissions WHERE user_id = ? AND granted = 1 "
+                f"AND tool_name IN ({placeholders})",
+                (user_id, *names),
+            )
+
     def list_permissions(self, user_id: str) -> list[dict[str, Any]]:
         with self.transaction() as conn:
             rows = conn.execute(
@@ -255,6 +271,7 @@ class Database:
             "state": "DRAFT",
             "state_history_json": "[]",
             "result_json": "",
+            "mfa_failures": 0,
             **record,
         }
         with self.transaction() as conn:
@@ -263,10 +280,11 @@ class Database:
                 INSERT INTO pending_actions
                 (id, user_id, instruction, dag_json, plan_json, risk_level, requires_reauth,
                  status, created_at, expires_at, resolved_at, envelopes_json, state,
-                 state_history_json, result_json)
+                 state_history_json, result_json, mfa_failures)
                 VALUES (:id, :user_id, :instruction, :dag_json, :plan_json, :risk_level,
                         :requires_reauth, :status, :created_at, :expires_at, NULL,
-                        :envelopes_json, :state, :state_history_json, :result_json)
+                        :envelopes_json, :state, :state_history_json, :result_json,
+                        :mfa_failures)
                 """,
                 payload,
             )
@@ -284,6 +302,22 @@ class Database:
                 "UPDATE pending_actions SET status = ?, resolved_at = ? WHERE id = ?",
                 (status, utc_now(), action_id),
             )
+
+    def increment_mfa_failures(self, action_id: str) -> int:
+        """Persist one failed MFA attempt for exactly one pending confirmation."""
+        with self.transaction() as conn:
+            cursor = conn.execute(
+                "UPDATE pending_actions SET mfa_failures = mfa_failures + 1 WHERE id = ?",
+                (action_id,),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("确认请求不存在。")
+            row = conn.execute(
+                "SELECT mfa_failures FROM pending_actions WHERE id = ?", (action_id,)
+            ).fetchone()
+        if row is None:
+            raise ValueError("确认请求不存在。")
+        return int(row["mfa_failures"])
 
     def set_pending_state(self, action_id: str, state: str, history_json: str) -> None:
         with self.transaction() as conn:

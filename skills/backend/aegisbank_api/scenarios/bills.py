@@ -631,6 +631,7 @@ def build_bill_report(
     account_id: str = DEFAULT_ACCOUNT,
     period: str | None = "month",
     month: str | None = None,
+    category: str | None = None,
 ) -> dict[str, Any]:
     """生成月报或年报：分类汇总、Top5 商户、环比与结论文本。"""
     mode, month_key, year, label = _resolve_period(period, month)
@@ -643,11 +644,17 @@ def build_bill_report(
         rows = _year_rows(db, user_id, account_id, year)
         previous_rows = _year_rows(db, user_id, account_id, year - 1)
         previous_label = "去年"
+    if category:
+        rows = [row for row in rows if str(row["category"]) == category]
+        previous_rows = [
+            row for row in previous_rows if str(row["category"]) == category
+        ]
     total_cents, spend_count, categories_cents, merchants = _aggregate_spend(rows)
     previous_total_cents, _, _, _ = _aggregate_spend(previous_rows)
     total_cny = to_cny(total_cents)
     ordered_categories = sorted(categories_cents.items(), key=lambda item: (-item[1], item[0]))
-    categories = {category: to_cny(cents) for category, cents in ordered_categories}
+    categories = {name: to_cny(cents) for name, cents in ordered_categories}
+    category_spend_cny = total_cny if category else None
     comparison = _comparison(total_cny, to_cny(previous_total_cents), previous_label)
     budget_usage = _budget_usage(categories, budgets_cents) if mode == "month" else []
     over_budget = [item for item in budget_usage if item["over_budget"]]
@@ -659,6 +666,8 @@ def build_bill_report(
         "year": year,
         "total_spend_cny": total_cny,
         "categories": categories,
+        "category": category,
+        "category_spend_cny": category_spend_cny,
         "top_merchants": _top_merchants(merchants),
         "transaction_count": spend_count,
         "all_transaction_count": len(rows),
@@ -803,6 +812,7 @@ class BillReportArgs(BaseModel):
     account_id: str = Field(default=DEFAULT_ACCOUNT, min_length=3, max_length=32)
     period: str = Field(default="month", max_length=16)
     month: str | None = Field(default=None, max_length=7)
+    category: str | None = Field(default=None, max_length=32)
 
 
 class BillReportOutput(BaseModel):
@@ -813,6 +823,8 @@ class BillReportOutput(BaseModel):
     year: int
     total_spend_cny: float
     categories: dict[str, float] = Field(default_factory=dict)
+    category: str | None = None
+    category_spend_cny: float | None = None
     top_merchants: list[dict[str, Any]] = Field(default_factory=list)
     transaction_count: int
     all_transaction_count: int
@@ -893,7 +905,9 @@ class BillReportTool(BaseTool):
         args = BillReportArgs.model_validate(arguments)
         if self.repository.account(context.user_id, args.account_id) is None:
             raise ValueError(f"账户不存在：{args.account_id}")
-        data = build_bill_report(self.db, context.user_id, args.account_id, args.period, args.month)
+        data = build_bill_report(
+            self.db, context.user_id, args.account_id, args.period, args.month, args.category
+        )
         return ToolResult(
             self.metadata.name,
             f"已生成 {data['label']} 账单报告（演示银行数据）。",
@@ -1012,6 +1026,29 @@ def _explicit_month(ctx: IntentContext) -> str | None:
     return f"{year:04d}-{month:02d}"
 
 
+_SPEND_QUESTION_RE = re.compile(r"(?:花了?多少(?:钱)?|花多少钱|花费多少|消费多少|支出多少)")
+_CATEGORY_MARKERS = (
+    ("food", ("餐饮", "吃饭", "外卖", "美食", "夜宵", "宵夜")),
+    ("shopping", ("购物", "买东西", "商超", "网购")),
+    ("transport", ("交通", "出行", "打车", "地铁")),
+    ("subscription", ("订阅", "会员", "自动扣费")),
+)
+
+
+def _spend_category(text: str) -> str | None:
+    for category, markers in _CATEGORY_MARKERS:
+        if any(marker in text for marker in markers):
+            return category
+    return None
+
+
+def _spend_month(text: str) -> str:
+    today = _today()
+    if "上个月" in text or "上月" in text:
+        return (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+    return today.strftime("%Y-%m")
+
+
 class DetectAnomaliesIntent:
     """异常扣费 / 账单异常 → detect_bill_anomalies。"""
 
@@ -1027,6 +1064,11 @@ class DetectAnomaliesIntent:
         "扣费异常",
         "重复扣款",
         "被多扣",
+        "乱扣",
+        "乱扣钱",
+        "乱扣费",
+        "乱扣款",
+        "莫名扣款",
         "anomal",
     )
 
@@ -1081,9 +1123,11 @@ class BillReportIntent:
             return None
         instruction = ctx.instruction
         text = ctx.text
+        spend_question = bool(_SPEND_QUESTION_RE.search(instruction))
         matched = any(marker in text for marker in self._markers)
         if not matched:
             matched = bool(self._generate_pattern.search(instruction))
+        matched = matched or spend_question
         if not matched:
             return None
         account_id, assumptions = _default_account(ctx)
@@ -1091,13 +1135,17 @@ class BillReportIntent:
         period = "month"
         month: str | None = None
         if explicit_month:
-            period = explicit_month
             month = explicit_month
+        elif spend_question:
+            month = _spend_month(instruction)
         elif any(marker in text for marker in ("年度", "全年", "年报", "year")):
             period = "year"
         arguments: dict[str, Any] = {"account_id": account_id, "period": period}
         if month:
             arguments["month"] = month
+        category = _spend_category(instruction)
+        if category:
+            arguments["category"] = category
         return ExecutionPlan(
             intent="bill_report",
             planner="scenario:bills",
@@ -1272,13 +1320,19 @@ def router(services: CoreServices) -> APIRouter:
         account_id: str = Query(default=DEFAULT_ACCOUNT, max_length=32),
         period: str = Query(default="month", max_length=16),
         month: str | None = Query(default=None, max_length=7),
+        category: str | None = Query(default=None, max_length=32),
         user_id: str = Query(default=DEMO_USER, max_length=64),
     ) -> dict[str, Any]:
         try:
             result = read_query(
                 request,
                 "bill_report",
-                {"account_id": account_id, "period": period, "month": month},
+                {
+                    "account_id": account_id,
+                    "period": period,
+                    "month": month,
+                    "category": category,
+                },
                 user_id,
             )
         except ValueError as exc:

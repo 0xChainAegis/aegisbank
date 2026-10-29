@@ -108,8 +108,8 @@
       "group": "fronted",
       "path": "frontend/src/components/ConfirmationModal.tsx",
       "runtime_path": "frontend/src/components/ConfirmationModal.tsx",
-      "bytes": 15082,
-      "sha256": "2a39d7905912facabb9e0335d0b534a8515946ca8ee87c75077bfaaad4a7bdbc"
+      "bytes": 15375,
+      "sha256": "30b99b9c3c192da40df1998584b92a4008fb6b6d7617080eb6b187ec8c153863"
     },
     {
       "group": "fronted",
@@ -157,8 +157,8 @@
       "group": "fronted",
       "path": "frontend/src/components/TaskConsolePage.tsx",
       "runtime_path": "frontend/src/components/TaskConsolePage.tsx",
-      "bytes": 35773,
-      "sha256": "5745416bf4479f36b7cd536080488e342ec981327c7babbe910b443fd72f2c35"
+      "bytes": 35856,
+      "sha256": "307118b0c20adc36c69792662647ee000288b4d900f3c561b546a18f37cc9939"
     },
     {
       "group": "fronted",
@@ -171,8 +171,8 @@
       "group": "fronted",
       "path": "frontend/src/components/businessPages.test.tsx",
       "runtime_path": "frontend/src/components/businessPages.test.tsx",
-      "bytes": 16527,
-      "sha256": "53397372b27324f574f395fa87f3324175f8f30f1a4fa0e5c755583ed9779bff"
+      "bytes": 18773,
+      "sha256": "18fb41f3cb2bc0f1504565f09bdfd9f133404c4807f3859c01bbcf9fd3511888"
     },
     {
       "group": "fronted",
@@ -199,8 +199,8 @@
       "group": "fronted",
       "path": "frontend/src/confirmationProduct.test.tsx",
       "runtime_path": "frontend/src/confirmationProduct.test.tsx",
-      "bytes": 7929,
-      "sha256": "a24be33ecd81f2d9118f097b7d74420d0f4889bc48230b743ffbf53c0004a908"
+      "bytes": 7950,
+      "sha256": "a6a087a7c2c2ed02f9de7c19d30d0be26f27b686d7289d7d15c89cbd0b34a312"
     },
     {
       "group": "fronted",
@@ -318,15 +318,15 @@
       "group": "fronted",
       "path": "frontend/src/viewModel.test.ts",
       "runtime_path": "frontend/src/viewModel.test.ts",
-      "bytes": 12574,
-      "sha256": "66e544d18c32ec93a818fbe218e6688d4b24d52ee1e7798ca910fe79af2a8a75"
+      "bytes": 13371,
+      "sha256": "c207fe43a32ee2b2c5f4f62053e662aabe462c3dd6ef2b0c1bbd0434a8bb0fac"
     },
     {
       "group": "fronted",
       "path": "frontend/src/viewModel.ts",
       "runtime_path": "frontend/src/viewModel.ts",
-      "bytes": 31325,
-      "sha256": "34f4a6c5be3d8db6fe980209cb7a1627be262fd1f9b9d1e9f7b96f0097c4630b"
+      "bytes": 32084,
+      "sha256": "33e290ca63e930e93e8677da26c94d8996cc42cb5105be7d738666c9ed10cc89"
     },
     {
       "group": "fronted",

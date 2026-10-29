@@ -236,3 +236,22 @@ def test_unknown_kin_alias_is_not_guessed(tmp_path):
         assert body["status"] == "needs_clarification"
         assert "舅舅" in (body.get("reason") or "")
         assert body["plan"]["steps"] == []
+
+
+def test_missing_payee_is_clarified_without_treating_me_as_contact(tmp_path):
+    with make_client(tmp_path) as client:
+        body = run_agent(client, "帮我转200元")
+        assert body["status"] == "needs_clarification", body
+        assert body["plan"]["steps"] == []
+        assert "收款人" in (body.get("reason") or "")
+        assert "未找到" not in (body.get("reason") or "")
+
+
+def test_assisted_transfer_with_colloquial_amount_resolves_contact(tmp_path):
+    with make_client(tmp_path) as client:
+        body = run_agent(client, "帮我给张三转个两百")
+        assert body["status"] == "awaiting_confirmation", body
+        step = body["plan"]["steps"][0]
+        assert step["tool_name"] == "transfer_to_contact"
+        assert step["arguments"]["to_name"] == "张三"
+        assert step["arguments"]["amount_cny"] == 200.0

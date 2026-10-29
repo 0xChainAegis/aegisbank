@@ -19,7 +19,7 @@ _TOKEN = re.compile(
 )
 _SUFFIX = re.compile(r"\s*(元|块(?:钱)?|人民币|rmb\b|cny\b|美元|美金|港币|欧元|usd\b)", re.I)
 _PREFIX = re.compile(
-    r"(?:人民币|rmb|cny|[¥￥$€]|转账|汇款|打款|转|预算|aa|总共|总计|合计|一共|"
+    r"(?:人民币|rmb|cny|[¥￥$€]|转账|汇款|打款|转(?:个|笔)?|预算|aa|总共|总计|合计|一共|"
     r"金额(?:为|是)?|transfer|send|budget|到|至|为|改成)\s*$",
     re.I,
 )
@@ -145,7 +145,7 @@ def money_mentions(instruction: str) -> list[MoneyMention]:
         if _FOREIGN.search(unicodedata.normalize("NFKC", instruction)):
             raise AmountError("当前仅支持人民币金额，请明确币种与人民币金额")
         # Counters describe number of operations/dates, not monetary values.
-        if not suffix and re.match(r"(?:笔|个|张|人|次|年|月|日|号)", after):
+        if not suffix and re.match(r"\s*(?:笔|个|张|人|次|年|月|日|号)", after):
             continue
         # Avoid treating an amount prefix as the beginning of an account/date.
         if not suffix and not re.match(

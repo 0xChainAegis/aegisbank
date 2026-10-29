@@ -15,6 +15,7 @@ import {
   prettyEvidence,
   readinessBlockers,
   receiptHeadline,
+  receiptReference,
   resultExecutedAt,
   runRiskLevel,
   severityLabel,
@@ -306,6 +307,22 @@ describe('receipt headline (UX-14)', () => {
     };
     expect(receiptHeadline(run)).toContain('转账指令');
     expect(resultExecutedAt(run)).toBe('2026-10-23T08:42:57+00:00');
+  });
+
+  it('prefers audit_id and falls back to the stable run_id for the receipt reference', () => {
+    expect(receiptReference({
+      status: 'completed', run_id: 'run-audit', reason: '', audit_id: 42,
+    })).toEqual({ label: '审计编号', value: '#42' });
+    expect(receiptReference({
+      status: 'completed', run_id: 'run-bill-1', reason: '',
+    })).toEqual({ label: '运行编号', value: 'run-bill-1' });
+    expect(receiptReference({
+      status: 'completed', run_id: '', reason: '',
+    })).toEqual({ label: '审计编号', value: '—' });
+    expect(resultExecutedAt({
+      status: 'completed', run_id: 'run-bill-1', reason: '',
+      results: [{ tool_name: 'query_bill', message: '账单查询完成', data: { total_spend_cny: 100 } }],
+    })).toBe('');
   });
 
   it('maps terminal states to plain language without leaking status codes', () => {

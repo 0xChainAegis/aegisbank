@@ -278,3 +278,16 @@ def test_card_password_intent_resolves_masked_suffix(tmp_path):
         assert body["status"] == "awaiting_confirmation", body
         assert body["risk_level"] == "red"
         assert body["plan"]["steps"][0]["arguments"] == {"card_id": "CARD-9902"}
+
+
+def test_repayment_day_with_multiple_cards_clarifies_card_not_amount(tmp_path):
+    with make_client(tmp_path) as client:
+        body = run_agent(client, instruction="把还款日改到 18 号")
+        assert body["status"] == "needs_clarification", body
+        assert body["plan"]["intent"] == "adjust_repayment_date"
+        assert body["plan"]["steps"] == []
+        reason = body.get("reason") or ""
+        assert "CARD-8821" in reason and "CARD-9902" in reason
+        assert "ambiguous_amount" not in reason
+        assert "amount" not in reason.lower()
+        assert "account" not in reason.lower()
