@@ -332,6 +332,35 @@ def test_shanghai_day_and_month_boundaries(tmp_path: Path) -> None:
     assert repo.monthly_spend_cny(user_id, now=month_now) == 400.0
 
 
+def test_shanghai_cross_year_day_and_month_boundaries(tmp_path: Path) -> None:
+    db = Database(tmp_path / "shanghai-cross-year.db")
+    repo = BankingRepository(db)
+    user_id = "cross-year-user"
+
+    for transaction_id, occurred_at, category, amount_cents in (
+        ("TX-2026-TRANSFER", "2026-12-31T23:30:00+08:00", "transfer", -10000),
+        ("TX-2026-SHOPPING", "2026-12-31T23:30:00+08:00", "shopping", -30000),
+        ("TX-2027-TRANSFER", "2027-01-01T00:10:00+08:00", "transfer", -20000),
+        ("TX-2027-SHOPPING", "2027-01-01T00:10:00+08:00", "shopping", -40000),
+    ):
+        insert_bank_transaction(
+            db,
+            transaction_id=transaction_id,
+            user_id=user_id,
+            amount_cents=amount_cents,
+            occurred_at=occurred_at,
+            category=category,
+        )
+
+    before_midnight = datetime(2026, 12, 31, 23, 30, tzinfo=SHANGHAI)
+    assert repo.daily_transfer_total_cny(user_id, now=before_midnight) == 100.0
+    assert repo.monthly_spend_cny(user_id, now=before_midnight) == 400.0
+
+    after_midnight = datetime(2027, 1, 1, 0, 30, tzinfo=SHANGHAI)
+    assert repo.daily_transfer_total_cny(user_id, now=after_midnight) == 200.0
+    assert repo.monthly_spend_cny(user_id, now=after_midnight) == 600.0
+
+
 # ---------------------------------------------------------------------------
 # 5) Escalated run-due task remains pending with an actionable reauth path.
 # ---------------------------------------------------------------------------
