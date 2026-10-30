@@ -38,6 +38,14 @@ class ConfirmationRequest(BaseModel):
     draft_id: str | None = Field(default=None, min_length=1, max_length=64)
     draft_version: int | None = Field(default=None, ge=1, le=1_000_000)
 
+    @model_validator(mode="after")
+    def draft_fields_are_complete(self):
+        if self.draft_id is not None and self.draft_version is None:
+            raise ValueError("使用 draft_id 时必须同时提供 draft_version。")
+        if self.draft_version is not None and self.draft_id is None:
+            raise ValueError("提供 draft_version 时必须同时提供 draft_id。")
+        return self
+
 
 class PermissionUpdateRequest(BaseModel):
     granted: bool

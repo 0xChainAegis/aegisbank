@@ -87,8 +87,8 @@
       "group": "backend",
       "path": "backend/aegisbank_api/schemas.py",
       "runtime_path": "backend/aegisbank_api/schemas.py",
-      "bytes": 2062,
-      "sha256": "a8c758b4c33f85d4cedb70b1e7762b00ad38b8aa38d7fdcbf882e9ae6b782bb5"
+      "bytes": 2471,
+      "sha256": "4db48263e4b569bfde155db1103fb09717486d6b1af6e1b2ce8caf06c6a4c2bb"
     },
     {
       "group": "backend",
@@ -348,6 +348,13 @@
       "runtime_path": "backend/tests/test_u2_lead_integration.py",
       "bytes": 13935,
       "sha256": "989bb42b4de001df0ed577832d75035cf53c02b6e6d9cc76ac44c001e5cd9c6f"
+    },
+    {
+      "group": "backend",
+      "path": "backend/tests/test_u4_delivery_regression.py",
+      "runtime_path": "backend/tests/test_u4_delivery_regression.py",
+      "bytes": 37251,
+      "sha256": "b110285fbfc32d708a6b2e04d04bb027b12c1edda1ad33007a6eec75edc8ce67"
     },
     {
       "group": "backend",

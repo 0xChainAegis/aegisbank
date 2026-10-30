@@ -2,8 +2,8 @@
 
 > 状态：**已完成**。覆盖组装、启动、后端地址、核心接口请求/返回示例、错误码、排障与验证记录。
 >
-> 文档修订基线：`main` @ `778c9c7`（PR #3 合并后）。API 验证代码基线：`bad8e64`。
-> 验证日期：2026-10-26。
+> 文档修订基线：U4 文档收尾（2026-10-30）。API 冻结与真实联调证据基于工作树开发基线 `309e43d0ee3a1127f0ae77dd15775c4604df4583`，另含本轮 U4 schema 修复、独立测试与 fixture。
+> 验证日期：2026-10-30（U4 增量）。§5 与 §11 保留历史验证记录，不作为当前测试口径。
 > 后端运行环境：Linux / WSL Ubuntu 24.04。
 
 ## 1. 版本与源码位置
@@ -243,6 +243,7 @@ Idempotency-Key: <uuid>
 | `GET /api/tools` | 工具目录与授权状态 | HTTP 200 |
 | `GET /api/permissions` | 当前用户工具授权 | HTTP 200 |
 | `PUT /api/permissions/{tool_name}` | 授予/撤回工具权限 | 200 / 403 / 404 |
+
 ### 7.1 `GET /api/health`
 
 ```bash
@@ -838,6 +839,7 @@ curl -s http://127.0.0.1:8000/api/audit/verify \
 ```
 
 `checked` 随操作数量变化；示例中为上述完整流程后的条数。
+
 ### 7.10 `GET /api/tools`
 
 返回当前用户可见的工具目录与授权状态。完整目录当前为 50 个工具，示例只展示第一个。
@@ -1045,6 +1047,7 @@ curl -s -X POST http://127.0.0.1:8000/api/agent/run \
   "detail": "系统未就绪，写操作已按 fail closed 拒绝（sqlite: 模拟 SQLite 未就绪）。"
 }
 ```
+
 ## 9. 演示数据与排障
 
 - 首次启动会自动建库并写入确定性 Mock Bank Core 种子，不需要手工迁移。
@@ -1084,6 +1087,7 @@ ss -ltnp | grep -E ':8000|:5173'
   6. `POST /api/agent/run`（1200 元红色，日累计升级）
   7. 错误 OTP → 正确 OTP
   8. `GET /api/audit`、`GET /api/audit/verify`
+
 ## 10. 前端契约核对与已知边界
 
 ### 10.1 前端契约核对
@@ -1094,8 +1098,8 @@ ss -ltnp | grep -E ':8000|:5173'
 |---|---|---|
 | `fetchBankingOverview()` | `GET /api/banking/overview?user_id=demo-user` | `accounts`、`cards`、`subscriptions`、`monthly_spend_cny` |
 | `previewPlan(input)` | `POST /api/planner/plan` | `plan`、`steps`、`risk` |
-| `runAgent(input)` | `POST /api/agent/run` | `status`、`run_id`、`plan`、`confirmation`、`results` |
-| `resolveConfirmation(id, approved, reauthToken, mfaProvider)` | `POST /api/confirmations/{id}` | `approved`、`reauth_token`、`mfa_provider` |
+| `runAgent(input)` | `POST /api/agent/run` | `status`、`run_id`、`session_id`、`reason_code`、`plan`、`confirmation`、`draft`、`results`；输入可带 `session_id` / `draft_id` / `draft_version` |
+| `resolveConfirmation(id, approved, reauthToken, mfaProvider, options?)` | `POST /api/confirmations/{id}` | `approved`、`reauth_token`、`mfa_provider`，以及可选的 `session_id` / `draft_id` / `draft_version` |
 | `fetchReadiness()` | `GET /api/health/ready` | `status`、`components` |
 | `fetchAudit(limit, runId)` | `GET /api/audit` | `entries`、`count` |
 | `verifyAudit()` | `GET /api/audit/verify` | `valid`、`checked` |
@@ -1104,13 +1108,15 @@ ss -ltnp | grep -E ':8000|:5173'
 | `updatePermission(toolName, granted)` | `PUT /api/permissions/{tool_name}` | `tool_name`、`title`、`granted` |
 | `fetchAuthzMe()` | `GET /api/authz/me` | `role`、`capabilities` |
 
-前端 `RunResponse` 类型已覆盖 `completed`、`awaiting_confirmation`、`needs_clarification`、`blocked` 等业务状态。接口字段变更时，必须同步 `fronted/frontend/src/api.ts` 与 `types.ts`。
+前端 `RunResponse` / `AgentRunInput` 类型已覆盖 `session_id`、`reason_code`、`draft` 和草稿三元组；接口字段变更时必须同步 `fronted/frontend/src/api.ts` 与 `types.ts`。
+
 ### 10.2 NLP 能力边界
 
-- P0 已落地：完整金额词元规范化、Decimal 分位校验、金额原文与位置记录；已识别的条件、组合和参数冲突转澄清；rule / llm / auto / 显式工具入口共用安全检查。
-- P1-P4 未实现：没有通用 SemanticFrame、会话记忆与纠错、任意条件与组合规划，也没有正式 NLP 保留集评测。
-- 当前可表述为支持限定表达、部分口语、受限续问和预置跨场景 DAG 的可信银行智能体原型，不能表述为通用自然语言理解或任意复杂任务规划。
-- 详见 [NLP 现状与 P0 修复](NLP-ASSESSMENT-AND-PLAN-2026-10-25.md) 与 [NLP 后续待办](NLP-BACKLOG.md)。
+- P0/P1 已有有界语义模块、金额/日期规范化、当前用户实体验证、受控澄清和安全回退；不代表任意自然语言都已支持。
+- U2 只交付联系人转账的最小多轮补槽、金额修订、本人最近转账回读；通用跨轮指代、跨轮订阅目标选择、长期记忆和自由组合未实现。
+- U1 已交付 304 条 AI 辅助静态金标和离线对照；保留集完整计划语义为 116/148（78.38%），正式人工复核为 `pending`、真实模型对照为 `not_run`，不能写成 U1 完成或达到 95%。
+- U3 习惯学习/推荐与 U5 多意图组合/条件规划仍未实施。
+
 ### 10.3 安全与演示边界
 
 - 全部账户、卡片、账单、理财和交易均为 Mock Bank Core 模拟数据，不连接真实银行或支付网络。
@@ -1122,9 +1128,9 @@ ss -ltnp | grep -E ':8000|:5173'
 
 ### 10.4 验证数字口径
 
-- 应用验证基线（2026-10-25）：后端 pytest 252 项、前端 Vitest 73 项、六场景回归 29/29、实际前端入口 15/15。
-- 职责包组装器测试：18 项通过。
-- 以上数字来自对应版本的历史记录；当前变更后应重新运行并引用实际输出，不能用旧数字代替新验证。
+- **当前基线（2026-10-30 U4 收尾）**：后端 652 项 pytest（36 个测试文件；0 failed / 0 skipped / 0 xfail，唯一 warning 为 Starlette/httpx 弃用警告）、前端 144 项 Vitest（12 个测试文件）、根组装器 18 项、六场景 30/30、工具 51 个、HTTP `/api` 路径 49 个；前端 39 个 `/api` 路径契约全部存在。U4 独立回归 6 条通过。
+- **历史快照（非当前）**：2026-10-25 为后端 252 / 前端 73 / 六场景 29/29 / 实际入口 15/15；2026-10-23 为后端 187 / 前端 53 / 六场景 29；U2 收尾时为后端 646（35 个测试文件）。这些数字只代表对应日期，不能作为当前基线。
+- 职责包组装器测试单独计数为 18 项。完整浏览器证据、API 冻结和截图见 [U4 交付报告](U4-DELIVERY-2026-10-30.md)。测试通过不等于生产安全认证。
 
 ## 11. Stage 4 验证记录
 
@@ -1214,6 +1220,7 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 - `PUT /api/permissions/query_bill`：200，`granted=false` 与恢复 `granted=true` 均验证；
 - dsh-workflow docs-only gate：encoding / lint / security pass，test 按 docs fast path 跳过；
 - 本次收尾只修改 `docs/API-HANDOFF.md`，不修改业务代码、依赖或 `.runtime/`。
+
 ### 11.7 P0 契约守卫
 
 - 新增 `scripts/check_api_contract.py`：从 `fronted/frontend/src/api.ts` 提取 39 个前端 `/api` 路径，与后端 OpenAPI 的 49 个路径比对，当前全部匹配。
@@ -1307,6 +1314,7 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 {"detail": {"code": "draft_version_conflict",
             "message": "该确认已被新的草稿金额替代，旧确认不可执行。"}}
 ```
+
 ### 稳定错误码
 
 | code | HTTP | 说明 |
@@ -1343,3 +1351,90 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 - 补槽/修订不继承旧授权、旧 MFA、旧 nonce 或旧确认；
 - 只支持联系人转账金额补槽与金额修订；U3 习惯学习/推荐、U5 组合与条件规划、通用跨轮指代均未实施；
 - 草稿默认 TTL 900 秒，每用户最多保留 20 个终态草稿；过期或已结束草稿不继续执行。
+
+## U4 增量：成对校验、交付回归与真实浏览器证据（2026-10-30）
+
+本增量只覆盖联系人转账最小多轮范围。U1 正式人工复核/真实模型对照、U3 习惯学习/推荐、U5 组合与条件规划仍未完成；真实银行、生产身份/MFA、OS 级沙箱也未完成。
+
+### `ConfirmationRequest` 成对字段
+
+`POST /api/confirmations/{action_id}` 的 `draft_id` 与 `draft_version` 现在必须成对：
+
+| 请求组合 | 结果 |
+|---|---|
+| 两者都省略 | 兼容旧确认请求，继续进入用户/动作/上下文检查 |
+| 两者都提供 | 进入业务上下文检查；版本必须与当前草稿一致 |
+| 只提供 `draft_id` | Pydantic 在 handler 前返回 HTTP 422，零执行 |
+| 只提供 `draft_version` | Pydantic 在 handler 前返回 HTTP 422，零执行 |
+
+只传 `draft_id` 的真实冻结响应形状：
+
+```json
+{
+  "detail": [
+    {
+      "type": "value_error",
+      "loc": ["body"],
+      "msg": "Value error, 使用 draft_id 时必须同时提供 draft_version。",
+      "input": {
+        "approved": true,
+        "user_id": "demo-user",
+        "draft_id": "<draft_id>"
+      },
+      "ctx": {"error": {}}
+    }
+  ]
+}
+```
+
+只传 `draft_version` 的错误位置相同，`msg` 为 `Value error, 提供 draft_version 时必须同时提供 draft_id。`。两种 422 之后原 pending action 仍为 `pending`，`result_json` 为空，转账记录数为 0。冻结细节见 [`fixtures/u4-api-freeze-2026-10-30.json`](fixtures/u4-api-freeze-2026-10-30.json) 的 `pair_validation`。
+
+### 成功确认的请求/响应形状
+
+`POST /api/confirmations/<current_action_id>` 请求体：
+
+```json
+{
+  "approved": true,
+  "user_id": "demo-user",
+  "session_id": "<session_id>",
+  "draft_id": "<draft_id>",
+  "draft_version": 3
+}
+```
+
+成功响应保留原有 `status / run_id / plan / results / evidence`，并返回 `status=completed`、`reason_code=completed`、`draft.status=completed`，草稿 `version` 再递增；`results[0].data.transfer.simulated=true`，金额为 300.0 元。完整值见冻结 fixture 的 `reconfirmed_execution`，本文不写死运行时会变化的 action/transaction ID。
+
+旧确认被金额修订替代后，再次确认返回：
+
+```json
+{"detail": {"code": "draft_version_conflict",
+            "message": "该确认已被金额修订或更新的草稿替代，请使用最新确认。"}}
+```
+
+### 稳定错误码
+
+| code | HTTP | 触发条件 |
+|---|---:|---|
+| `missing_amount` | 200 / 422 | 首轮联系人转账缺金额；或补充金额不可解析/非法 |
+| `context_expired` | 409 | 草稿不存在、跨用户、会话不匹配、过期或已结束 |
+| `unsupported_amendment` | 409 | 补充/修订包含金额以外的收款人、动作、条件或多金额 |
+| `draft_version_conflict` | 409 | 版本过期、并发冲突、旧确认被替代或 action 与草稿不匹配 |
+
+失败响应不得生成可执行计划、不得新增 pending action、不得扣款；客户端不得把 409 显示为成功或 `completed`。
+
+### 当前交付冻结与真实联调
+
+API 冻结文件：[`fixtures/u4-api-freeze-2026-10-30.json`](fixtures/u4-api-freeze-2026-10-30.json)。它由真实 TestClient 运行捕获 12 个交互及最终业务状态：一笔 `-30000` 分转账、旧 action `superseded`、新 action `completed`、草稿 `completed`、审计链 `valid=true`。
+
+真实浏览器证据：[`fixtures/u4-real-integration-2026-10-30.json`](fixtures/u4-real-integration-2026-10-30.json)。链路为 Edge 156 headless CDP → Vite 5173 真实 `/api` 代理 → FastAPI 8000 → 全新 SQLite。UI 完成后数据库中只有一笔 `category=transfer`、`amount_cents=-30000` 的记录；旧确认重放返回 409 `draft_version_conflict`；历史回执显示妈妈 / 300.00 元。两张 1440×1200 截图见 [U4 报告](U4-DELIVERY-2026-10-30.md)。
+
+当前验证数字（Lead 2026-10-30 最终复跑）：后端 652 passed / 36 个测试文件（0 failed、0 skipped、0 xfail，唯一 warning 为 Starlette/httpx 弃用警告），U4 独立回归 6 passed；前端 144 passed / 12 个文件；组装器 18 passed；六场景 30/30；工具 51 个；HTTP `/api` 路径 49 个；前端 39 个 `/api` 路径契约全部存在。
+
+### 边界
+
+- 前端 Vitest 是 jsdom/契约级测试，不是真实浏览器联调；真实浏览器证据只来自上述 headless CDP 运行。
+- headless CDP 的 DOM 事件真实经过 Chromium，但不是人工物理鼠标/键盘；只覆盖联系人转账主链路和两条历史查询。
+- 账户、转账与回执均来自 Mock Bank Core，不是真实银行或支付网络。
+- `user_id` 仍是本地演示身份；固定 OTP、模拟生物识别和 `X-Aegis-Role` 不是生产身份/MFA。
+- 草稿保存于本机 SQLite，默认 TTL 900 秒；没有后台 TTL 调度器、分布式锁或跨设备同步。

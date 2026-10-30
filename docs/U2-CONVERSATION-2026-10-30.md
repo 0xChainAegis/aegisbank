@@ -156,7 +156,7 @@
 6. 确认接口拒绝旧 draft_version 且不产生银行流水。
 
 既有 U1/NLP、信任层、六场景回归全部保持通过。
-### 5.2 本轮实测输出
+### 5.2 U2 收尾时实测输出（历史快照；当前基线见 U4 报告）
 
 ```text
 后端 pytest            646 passed（35 个测试文件）
@@ -167,13 +167,16 @@
 HTTP 路径               49 个
 ```
 
+> 上述 646/144/18/30/30/51/49 为 U2 收尾时口径。U4 新增 6 条独立业务状态回归后，当前后端全量为 652 passed（36 个测试文件）；当前完整口径与真实浏览器证据见 [U4 交付报告](U4-DELIVERY-2026-10-30.md)。
+
 运行命令：
 
 ```bash
+# 在仓库根目录执行
 python3 scripts/assemble.py
-cd .runtime/backend && uv run pytest -q
-cd .runtime/frontend && pnpm test -- --run
-cd .runtime/backend && uv run python ../scripts/scenario-check.py
+(cd .runtime/backend && uv run pytest -q)
+(cd .runtime/frontend && pnpm test -- --run)
+(cd .runtime/backend && uv run python ../scripts/scenario-check.py)
 ```
 
 ### 5.3 前端支持
@@ -184,7 +187,7 @@ cd .runtime/backend && uv run python ../scripts/scenario-check.py
 - 确认请求回传草稿三元组；`409 draft_version_conflict` 映射为「需重新确认/重新发起」，不伪装成功；
 - `query_recent_transfer` 回执展示联系人、金额、执行时间、交易号和模拟来源；无记录时明确显示无记录。
 
-前端测试为契约级 Mock 联调；本轮未在浏览器中连接真实运行后端做人工点击联调，U4 交付回归时应补一次真实前后端联调。
+前端测试为契约级 Mock/jsdom 联调，本轮未在浏览器中连接真实运行后端做点击联调；该缺口已由 U4 的 Edge headless CDP + Vite 代理 + FastAPI + 全新 SQLite 真实浏览器联调补齐，见 [U4 交付报告](U4-DELIVERY-2026-10-30.md)。
 
 ## 6. 已知限制
 

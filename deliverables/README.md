@@ -1,12 +1,11 @@
 # AegisBank 参赛交付包（阶段 3）
 
-> 交付版本说明：本目录材料（含 PPT）保留 2026-10-23 验收快照。2026-10-24 后端补强增加 13 项回归，当前后端 200 项；最新功能和测试基线见 [补强记录](../docs/BACKEND-HARDENING-2026-10-24.md) 及根 README。
-
-> 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](../docs/REMEDIATION-PLAN-2026-10-23.md)。
+> **当前验证基线（2026-10-30 U4 收尾）**：后端 652 项 pytest（36 个测试文件）、前端 144 项 Vitest（12 个测试文件）、根组装器 18 项、六场景 30/30、工具 51 个、HTTP `/api` 路径 49 个；前端 39 个 `/api` 路径契约全部匹配。真实浏览器联调、API 冻结、截图与未完成边界见 [U4 交付报告](../docs/U4-DELIVERY-2026-10-30.md)。U1 正式人工复核/真实模型对照、U3/U5 仍未完成。
+> **交付材料版本说明**：本目录的 `01`–`07` 文档与 `current/` 中的 Word/PDF/PPT 是 2026-10-25 前后生成的材料快照；其中的旧测试数字和界面描述不代表当前基线。答辩引用前应使用本页第 3 节与 U4 报告的最新口径，并重新渲染对应文档。
+> **历史记录**：2026-10-23 安全复审、2026-10-25 前端复验、U1/U2 等阶段性数字保留为历史快照；187/53/29、252/73 等旧数字不得当作当前结果。
 > 赛题：人工智能赛道 · 银行 AI 智能体
-> 版本：阶段 3 交付版　基线：`main` @ `75df12b`
-> 仓库：<https://github.com/LQZ5885/aegisbank>（Public / MIT）
-> 说明：本目录是比赛**提交/答辩用**的整合材料；实现细节与长期文档见仓库 `docs/`。
+> 仓库：<https://github.com/0xChainAegis/aegisbank>（Public / MIT）
+> 说明：本目录是比赛**提交/答辩用**材料索引；实现细节与长期文档见仓库 `docs/`。
 
 ---
 
@@ -29,42 +28,35 @@
 
 ## 2. 30 秒上手（评审现场）
 
-```powershell
-# 0) 先停掉正在运行的后端（重置数据库前必须停）
-#    pkill -f "uvicorn aegisbank_api.main"
+以下命令在 WSL / Linux 仓库根目录执行；源码改动后先组装，再在 `.runtime/` 启动：
 
-# 1) 重置演示数据（含 3000 元虚拟卡 ACC-3003 / CARD-9001）
+```bash
 cd /home/lqz5885/aegisbank/dev/aegisbank
-bash scripts/seed-demo.sh
-
-# 2) 启动后端：必须显式指向 dogfood.db
-#    （scripts/dev.sh 默认使用 backend/data/aegisbank.db，看不到 3000 元虚拟卡）
-cd backend
-AEGIS_DATABASE_PATH=/home/lqz5885/aegisbank/dev/aegisbank/backend/data/dogfood.db \
-  uv run uvicorn aegisbank_api.main:app --host 127.0.0.1 --port 8000
-
-# 3) 另开一个终端启动前端
-cd /home/lqz5885/aegisbank/dev/aegisbank/frontend && pnpm dev
-# UI: http://127.0.0.1:5173   API: http://127.0.0.1:8000/docs
+python3 scripts/assemble.py
+cd .runtime
+bash scripts/bootstrap.sh
+bash scripts/dev.sh
 ```
 
-演示账号与凭据：用户 `demo-user`；红色操作 OTP `246810`；模拟生物识别 `FACE-888888`；
-角色 `USER / OPERATOR / AUDITOR`（演示用 `X-Aegis-Role` 请求头，不是真实认证）。
+UI: <http://127.0.0.1:5173/#/console>；API: <http://127.0.0.1:8000/docs>。
 
----
+演示账号与凭据：用户 `demo-user`；红色操作 OTP `246810`；模拟生物识别 `FACE-888888`；角色 `USER / OPERATOR / AUDITOR`（演示用 `X-Aegis-Role` 请求头，不是真实认证）。
 
 ## 3. 评审可验证的数字
 
-| 指标 | 数值 | 验证方式 |
-|---|---|---|
-| 后端测试 | **187 passed**（16 个测试文件） | `cd backend && uv run pytest -p no:warnings` |
-| 前端测试 | **53 passed**（7 个文件） | `cd frontend && pnpm test` |
-| 六场景端到端回归 | **29/29 PASS** | `cd backend && uv run python ../scripts/scenario-check.py` |
-| 工具 / 接口 | **50 个工具 / 49 个 HTTP 接口** | `GET /api/tools`、`GET /api/planner/info`、`/docs` |
-| 审计链 | `{"valid": true, "checked": N}` | `GET /api/audit/verify` |
-| 门禁 | encoding / lint / build / test / security **五阶段 PASS** | `gate.ps1 -Repo <repo>` |
+| 指标 | 当前实际值 | 验证方式 |
+|---|---:|---|
+| 后端测试 | **652 passed**（36 个测试文件；0 failed / 0 skipped / 0 xfail） | Lead 2026-10-30 最终全量复跑；唯一 warning 为 Starlette/httpx 弃用警告 |
+| U4 独立回归 | **6 passed** | `backend/backend/tests/test_u4_delivery_regression.py` |
+| 前端测试 | **144 passed**（12 个测试文件） | Lead 2026-10-30 复跑；jsdom/契约级，不是浏览器 E2E |
+| 根组装器 | **18 passed** | Lead 2026-10-30 复跑 |
+| 六场景端到端回归 | **30/30 passed** | `scripts/scenario-check.py`，Lead 2026-10-30 复跑 |
+| 工具 / HTTP 路径 | **51 个工具 / 49 个 HTTP `/api` 路径** | `/api/planner/info`、backend OpenAPI |
+| 前端 API 契约 | **39 个路径全部存在** | 前端 `/api` 调用与 backend OpenAPI 对照 |
+| 真实浏览器联调 | 一笔 `-30000` 分转账；旧确认 409；历史回执妈妈/300.00 元 | Edge 156 headless CDP + Vite 代理 + FastAPI + 全新 SQLite，见 [U4 报告](../docs/U4-DELIVERY-2026-10-30.md) |
+| lint / build | 后端 `ruff check` 通过；前端 `tsc --noEmit && vite build` 成功 | 2026-10-30 文档收尾实测；不是完整生产发布门禁 |
 
----
+> 旧数字 `187/53/29`、`252/73/29`、U2 收尾的 `646` 均为历史快照，不是当前基线。当前完整命令、API 冻结与截图见 [U4 交付报告](../docs/U4-DELIVERY-2026-10-30.md)。
 
 ## 4. 与赛题要求对照
 
@@ -101,6 +93,6 @@ deliverables/
 - 全部为 Mock Bank Core 模拟数据，不连接真实银行、不产生真实资金；理财不构成投资建议。
 - 无真实登录/身份认证；`X-Aegis-Role` 为演示请求头；OTP 与生物识别为演示实现。
 - 工具沙箱为进程内守卫（超时/网络/体积/白名单），不是 OS 级隔离。
-- SQLite 单机；幂等键与 nonce 无 TTL；熔断计数为系统级。
-- 六场景为「典型能力完整覆盖」，不等于生产业务完整性；已支持限时单次澄清续问；通用指代消解仍未实现。
-- 阶段 2.5 人工体验测试已推迟；界面截图与演示视频需在 2.5 / 录制阶段更新。
+- SQLite 单机；草稿默认 TTL 900 秒且仅本机；幂等键/nonce 清理和分布式幂等仍未完成；熔断已按用户分桶，但不是生产级隔离。
+- 六场景为「典型能力完整覆盖」，不等于生产业务完整性；已支持联系人转账最小多轮补槽/修订与限时单次澄清续问；U3 习惯学习/推荐、U5 组合与条件规划、通用指代消解仍未实现。
+- 阶段 2.5 完整人工体验测试与演示视频仍待完成；U4 已补两张真实浏览器截图，其余界面仍可能在录制阶段更新。

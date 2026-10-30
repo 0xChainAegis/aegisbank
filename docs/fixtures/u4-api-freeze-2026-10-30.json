@@ -1,0 +1,650 @@
+{
+  "schema": "aegisbank-u4-api-freeze/v1",
+  "captured_at": "2026-10-30T04:09:58+00:00",
+  "source_commit": "309e43d0ee3a1127f0ae77dd15775c4604df4583",
+  "scope": "U2联系人转账最小多轮闭环的U4交付冻结样例",
+  "note": "真实TestClient运行捕获后的关键字段快照，不是完整HTTP响应；ID、时间、哈希均为本次运行的真实值。前端Mock联调可直接复用字段形状与错误码。",
+  "contract": {
+    "run_request_optional_fields": {
+      "session_id": "string? <=64",
+      "draft_id": "string? <=64, must pair with draft_version",
+      "draft_version": "integer? >=1, must pair with draft_id"
+    },
+    "confirmation_request_optional_fields": {
+      "user_id": "string <=64",
+      "session_id": "string? <=64",
+      "draft_id": "string? <=64, must pair with draft_version",
+      "draft_version": "integer? >=1, must pair with draft_id",
+      "pairing": "both absent = legacy confirmation; exactly one present = HTTP 422 before handler"
+    },
+    "stable_error_codes": [
+      {
+        "code": "missing_amount",
+        "http": [
+          200,
+          422
+        ]
+      },
+      {
+        "code": "context_expired",
+        "http": [
+          409
+        ]
+      },
+      {
+        "code": "unsupported_amendment",
+        "http": [
+          409
+        ]
+      },
+      {
+        "code": "draft_version_conflict",
+        "http": [
+          409
+        ]
+      }
+    ]
+  },
+  "interactions": [
+    {
+      "name": "initial_missing_amount",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "给妈妈转钱",
+          "user_id": "demo-user"
+        }
+      },
+      "status_code": 200,
+      "response": {
+        "status": "needs_clarification",
+        "run_id": "cd71b0a090ae45b8b5fc431a8c189e77",
+        "session_id": "sess_8e986dcf554447bab5715df345860c49",
+        "reason_code": "missing_amount",
+        "reason": "请补充金额，系统不会猜测关键参数",
+        "risk_level": "green",
+        "plan": {
+          "intent": "transfer_to_contact",
+          "needs_clarification": true,
+          "clarification": "请补充金额，系统不会猜测关键参数",
+          "steps": []
+        },
+        "draft": {
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "version": 1,
+          "status": "awaiting_amount",
+          "reason_code": "missing_amount",
+          "missing_slots": [
+            "amount"
+          ],
+          "plan_hash": "",
+          "pending_action_id": null,
+          "expires_at": "2026-10-30T04:24:58+00:00",
+          "last_run_id": "cd71b0a090ae45b8b5fc431a8c189e77",
+          "amount_cny": null,
+          "changed_fields": null
+        }
+      }
+    },
+    {
+      "name": "unsupported_amendment",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "给爸爸转300",
+          "user_id": "demo-user",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "draft_version": 1
+        }
+      },
+      "status_code": 409,
+      "response": {
+        "detail": {
+          "code": "unsupported_amendment",
+          "message": "当前草稿只缺金额；补充回复只能提供一个金额（例如：五百）。新增收款人、动作或条件请重新发起任务。"
+        }
+      }
+    },
+    {
+      "name": "context_expired_cross_user",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "五百",
+          "user_id": "user-b",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "draft_version": 1
+        }
+      },
+      "status_code": 409,
+      "response": {
+        "detail": {
+          "code": "context_expired",
+          "message": "草稿不存在或不属于当前用户，请重新发起任务。"
+        }
+      }
+    },
+    {
+      "name": "draft_version_conflict",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "五百",
+          "user_id": "demo-user",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "draft_version": 99
+        }
+      },
+      "status_code": 409,
+      "response": {
+        "detail": {
+          "code": "draft_version_conflict",
+          "message": "草稿版本已变化，请刷新最新草稿后再试。"
+        }
+      }
+    },
+    {
+      "name": "fill_missing_amount",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "五百",
+          "user_id": "demo-user",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "draft_version": 1
+        }
+      },
+      "status_code": 200,
+      "response": {
+        "status": "awaiting_confirmation",
+        "run_id": "cfm_3faea6476b5d4a76a912dca23b3d7e6f",
+        "session_id": "sess_8e986dcf554447bab5715df345860c49",
+        "reason_code": "awaiting_confirmation",
+        "risk_level": "yellow",
+        "plan": {
+          "intent": "transfer_to_contact",
+          "planner": "rule",
+          "plan_hash": "4243be9b5563bb9a1fe46aec1d09ec5e023e3bfc693c1baa2f60d98753992864",
+          "steps": [
+            {
+              "id": "step-1",
+              "tool_name": "transfer_to_contact",
+              "arguments": {
+                "to_name": "妈妈",
+                "to_phone": "13900001111",
+                "amount_cny": 500.0,
+                "note": "给13900001111转账500元"
+              },
+              "risk_level": "yellow",
+              "permission": "transfer:execute"
+            }
+          ]
+        },
+        "confirmation": {
+          "id": "cfm_3faea6476b5d4a76a912dca23b3d7e6f",
+          "requires_reauth": false,
+          "expires_at": "2026-10-30T04:14:58+00:00",
+          "state": "AWAITING_CONFIRMATION"
+        },
+        "draft": {
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "version": 2,
+          "status": "awaiting_confirmation",
+          "reason_code": "awaiting_confirmation",
+          "missing_slots": [],
+          "plan_hash": "4243be9b5563bb9a1fe46aec1d09ec5e023e3bfc693c1baa2f60d98753992864",
+          "pending_action_id": "cfm_3faea6476b5d4a76a912dca23b3d7e6f",
+          "expires_at": "2026-10-30T04:14:58+00:00",
+          "last_run_id": "cfm_3faea6476b5d4a76a912dca23b3d7e6f",
+          "amount_cny": 500.0,
+          "changed_fields": [
+            "amount"
+          ]
+        }
+      }
+    },
+    {
+      "name": "amend_amount",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "不是500，改成300",
+          "user_id": "demo-user",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "draft_version": 2
+        }
+      },
+      "status_code": 200,
+      "response": {
+        "status": "awaiting_confirmation",
+        "run_id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+        "session_id": "sess_8e986dcf554447bab5715df345860c49",
+        "reason_code": "awaiting_confirmation",
+        "risk_level": "yellow",
+        "plan": {
+          "intent": "transfer_to_contact",
+          "planner": "rule",
+          "plan_hash": "95820d9b1cfc6a2196f48e506b13e55426e117a996146162798f5cf1360ff881",
+          "steps": [
+            {
+              "id": "step-1",
+              "tool_name": "transfer_to_contact",
+              "arguments": {
+                "to_name": "妈妈",
+                "to_phone": "13900001111",
+                "amount_cny": 300.0,
+                "note": "给13900001111转账300元"
+              },
+              "risk_level": "yellow",
+              "permission": "transfer:execute"
+            }
+          ]
+        },
+        "confirmation": {
+          "id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+          "requires_reauth": false,
+          "expires_at": "2026-10-30T04:14:58+00:00",
+          "state": "AWAITING_CONFIRMATION"
+        },
+        "draft": {
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "version": 3,
+          "status": "awaiting_confirmation",
+          "reason_code": "awaiting_confirmation",
+          "missing_slots": [],
+          "plan_hash": "95820d9b1cfc6a2196f48e506b13e55426e117a996146162798f5cf1360ff881",
+          "pending_action_id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+          "expires_at": "2026-10-30T04:14:58+00:00",
+          "last_run_id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+          "amount_cny": 300.0,
+          "changed_fields": [
+            "amount"
+          ]
+        }
+      }
+    },
+    {
+      "name": "old_confirmation_conflict",
+      "request": {
+        "method": "POST",
+        "path": "/api/confirmations/cfm_3faea6476b5d4a76a912dca23b3d7e6f",
+        "body": {
+          "approved": true,
+          "user_id": "demo-user"
+        }
+      },
+      "status_code": 409,
+      "response": {
+        "detail": {
+          "code": "draft_version_conflict",
+          "message": "该确认已被新的草稿金额替代，旧确认不可执行。"
+        }
+      }
+    },
+    {
+      "name": "reconfirmed_execution",
+      "request": {
+        "method": "POST",
+        "path": "/api/confirmations/cfm_87b0da4d034b408b9ae06c10a82e19b0",
+        "body": {
+          "approved": true,
+          "user_id": "demo-user",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "draft_version": 3
+        }
+      },
+      "status_code": 200,
+      "response": {
+        "status": "completed",
+        "run_id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+        "session_id": "sess_8e986dcf554447bab5715df345860c49",
+        "reason_code": "completed",
+        "reason": "确认通过，任务已执行。",
+        "risk_level": "yellow",
+        "draft": {
+          "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+          "session_id": "sess_8e986dcf554447bab5715df345860c49",
+          "version": 4,
+          "status": "completed",
+          "reason_code": "completed",
+          "missing_slots": [],
+          "plan_hash": "95820d9b1cfc6a2196f48e506b13e55426e117a996146162798f5cf1360ff881",
+          "pending_action_id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+          "expires_at": "2026-10-30T04:14:58+00:00",
+          "last_run_id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+          "amount_cny": 300.0,
+          "changed_fields": null
+        },
+        "results": [
+          {
+            "tool_name": "transfer_to_contact",
+            "message": "已向联系人 妈妈 完成模拟转账（演示数据）。",
+            "data": {
+              "transfer": {
+                "transaction_id": "TX-3335183246E3",
+                "from_account": "ACC-1001",
+                "to_account": "ACC-9001",
+                "amount_cny": 300.0,
+                "daily_transfer_total_cny": 300.0,
+                "status": "simulated_success",
+                "executed_at": "2026-10-30T04:09:58+00:00",
+                "simulated": true
+              },
+              "contact": {
+                "contact_id": "CT-9001",
+                "name": "妈妈",
+                "alias": "妈妈",
+                "phone": "139****1111",
+                "account_id": "ACC-****01",
+                "birthday": "1990-11-18",
+                "relation": "mother",
+                "status": "active"
+              },
+              "simulated": true
+            }
+          }
+        ],
+        "evidence_list": [
+          {
+            "source": "human_confirmation",
+            "verified": true,
+            "verification_kind": "approval",
+            "detail": "用户明确批准"
+          },
+          {
+            "source": "policy_engine",
+            "verified": true,
+            "verification_kind": "policy_decision",
+            "detail": "确认前复检通过"
+          },
+          {
+            "source": "human_confirmation",
+            "verified": true,
+            "verification_kind": "approval",
+            "detail": "用户明确批准并完成确认复检"
+          },
+          {
+            "source": "mock_bank",
+            "verified": true,
+            "verification_kind": "tool_result",
+            "detail": "Mock 银行工具返回模拟数据（simulated=True）"
+          },
+          {
+            "source": "policy_engine",
+            "verified": true,
+            "verification_kind": "policy_decision",
+            "detail": "请求已通过统一权限网关"
+          },
+          {
+            "source": "audit_chain",
+            "verified": true,
+            "verification_kind": "hash_chain",
+            "detail": "哈希链校验通过，共 17 条"
+          }
+        ]
+      }
+    },
+    {
+      "name": "recent_transfer_history",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "我刚才转了多少",
+          "user_id": "demo-user"
+        }
+      },
+      "status_code": 200,
+      "response": {
+        "status": "completed",
+        "run_id": "6a2a907703ed4715ac5a0f20f13d4046",
+        "session_id": "sess_4842505a1e184e799e585e7c2756cb41",
+        "reason_code": null,
+        "reason": "全部节点通过权限网关。",
+        "risk_level": "green",
+        "results": [
+          {
+            "tool_name": "query_recent_transfer",
+            "message": "最近一次转账：向妈妈转账 300.00 元（模拟数据）。",
+            "data": {
+              "found": true,
+              "transaction_id": "TX-3335183246E3",
+              "direction": "outgoing",
+              "amount_cny": 300.0,
+              "executed_at": "2026-10-30T04:09:58+00:00",
+              "contact_name": "妈妈",
+              "contact_phone": "139****1111",
+              "to_account_masked": "ACC-****01",
+              "from_account": "ACC-1001",
+              "status": "posted",
+              "source": "mock_bank_core.bank_transactions",
+              "simulated": true
+            }
+          }
+        ],
+        "evidence_list": [
+          {
+            "source": "mock_bank",
+            "verified": true,
+            "verification_kind": "tool_result",
+            "detail": "Mock 银行工具返回模拟数据（simulated=True）"
+          },
+          {
+            "source": "policy_engine",
+            "verified": true,
+            "verification_kind": "policy_decision",
+            "detail": "请求已通过统一权限网关"
+          },
+          {
+            "source": "audit_chain",
+            "verified": true,
+            "verification_kind": "hash_chain",
+            "detail": "哈希链校验通过，共 19 条"
+          }
+        ]
+      }
+    },
+    {
+      "name": "recent_transfer_contact",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "我刚才转给谁",
+          "user_id": "demo-user"
+        }
+      },
+      "status_code": 200,
+      "response": {
+        "status": "completed",
+        "run_id": "4bc078b38c134cbda8821d736f794dde",
+        "session_id": "sess_79b3a9eae7a14fc39263b93a98fd0ac5",
+        "reason_code": null,
+        "reason": "全部节点通过权限网关。",
+        "risk_level": "green",
+        "results": [
+          {
+            "tool_name": "query_recent_transfer",
+            "message": "最近一次转账：向妈妈转账 300.00 元（模拟数据）。",
+            "data": {
+              "found": true,
+              "transaction_id": "TX-3335183246E3",
+              "direction": "outgoing",
+              "amount_cny": 300.0,
+              "executed_at": "2026-10-30T04:09:58+00:00",
+              "contact_name": "妈妈",
+              "contact_phone": "139****1111",
+              "to_account_masked": "ACC-****01",
+              "from_account": "ACC-1001",
+              "status": "posted",
+              "source": "mock_bank_core.bank_transactions",
+              "simulated": true
+            }
+          }
+        ],
+        "evidence_list": [
+          {
+            "source": "mock_bank",
+            "verified": true,
+            "verification_kind": "tool_result",
+            "detail": "Mock 银行工具返回模拟数据（simulated=True）"
+          },
+          {
+            "source": "policy_engine",
+            "verified": true,
+            "verification_kind": "policy_decision",
+            "detail": "请求已通过统一权限网关"
+          },
+          {
+            "source": "audit_chain",
+            "verified": true,
+            "verification_kind": "hash_chain",
+            "detail": "哈希链校验通过，共 20 条"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmation_missing_draft_id",
+      "request": {
+        "method": "POST",
+        "path": "/api/confirmations/cfm_f26d94daa15348b7a009ab2f2aa4ab36",
+        "body": {
+          "approved": true,
+          "user_id": "demo-user",
+          "draft_version": 2
+        }
+      },
+      "status_code": 422,
+      "response": {
+        "detail": [
+          {
+            "type": "value_error",
+            "loc": [
+              "body"
+            ],
+            "msg": "Value error, 提供 draft_version 时必须同时提供 draft_id。",
+            "input": {
+              "approved": true,
+              "user_id": "demo-user",
+              "draft_version": 2
+            },
+            "ctx": {
+              "error": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmation_missing_draft_version",
+      "request": {
+        "method": "POST",
+        "path": "/api/confirmations/cfm_f26d94daa15348b7a009ab2f2aa4ab36",
+        "body": {
+          "approved": true,
+          "user_id": "demo-user",
+          "draft_id": "drf_fa5177e809564ad6881d02346b5c006b"
+        }
+      },
+      "status_code": 422,
+      "response": {
+        "detail": [
+          {
+            "type": "value_error",
+            "loc": [
+              "body"
+            ],
+            "msg": "Value error, 使用 draft_id 时必须同时提供 draft_version。",
+            "input": {
+              "approved": true,
+              "user_id": "demo-user",
+              "draft_id": "drf_fa5177e809564ad6881d02346b5c006b"
+            },
+            "ctx": {
+              "error": {}
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "business_state": {
+    "transfer_rows": [
+      {
+        "transaction_id": "TX-3335183246E3",
+        "user_id": "demo-user",
+        "account_id": "ACC-1001",
+        "merchant": "ACC-9001",
+        "category": "transfer",
+        "amount_cents": -30000,
+        "occurred_at": "2026-10-30T04:09:58+00:00",
+        "status": "posted",
+        "note": "给13900001111转账300元"
+      }
+    ],
+    "pending_actions": [
+      {
+        "id": "cfm_3faea6476b5d4a76a912dca23b3d7e6f",
+        "user_id": "demo-user",
+        "instruction": "给13900001111转账500元",
+        "risk_level": "yellow",
+        "status": "superseded",
+        "state": "EXPIRED",
+        "result_json": ""
+      },
+      {
+        "id": "cfm_87b0da4d034b408b9ae06c10a82e19b0",
+        "user_id": "demo-user",
+        "instruction": "给13900001111转账300元",
+        "risk_level": "yellow",
+        "status": "completed",
+        "state": "COMPLETED",
+        "result_json": "{\"audit_id\": 14, \"evidence\": [{\"detail\": \"用户明确批准\", \"source\": \"human_confirmation\", \"verification_kind\": \"approval\", \"verified\": true}, {\"detail\": \"确认前复检通过\", \"source\": \"policy_engine\", \"verification_kind\": \"policy_decision\", \"verified\": true}, {\"detail\": \"用户明确批准并完成确认复检\", \"source\": \"human_confirmation\", \"verification_kind\": \"approval\", \"verified\": true}, {\"detail\": \"Mock 银行工具返回模拟数据（simulated=True）\", \"source\": \"mock_bank\", \"verification_kind\": \"tool_result\", \"verified\": true}, {\"detail\": \"请求已通过统一权限网关\", \"source\": \"policy_engine\", \"verification_kind\": \"policy_decision\", \"verified\": true}, {\"detail\": \"哈希链校验通过，共 17 条\", \"source\": \"audit_chain\", \"verification_kind\": \"hash_chain\", \"verified\": true}], \"evidence_list\": [{\"detail\": \"用户明确批准\", \"source\": \"human_confirmation\", \"verification_kind\": \"approval\", \"verified\": true}, {\"detail\": \"确认前复检通过\", \"source\": \"policy_engine\", \"verification_kind\": \"policy_decision\", \"verified\": true}, {\"detail\": \"用户明确批准并完成确认复检\", \"source\": \"human_confirmation\", \"verification_kind\": \"approval\", \"verified\": true}, {\"detail\": \"Mock 银行工具返回模拟数据（simulated=True）\", \"source\": \"mock_bank\", \"verification_kind\": \"tool_result\", \"verified\": true}, {\"detail\": \"请求已通过统一权限网关\", \"source\": \"policy_engine\", \"verification_kind\": \"policy_decision\", \"verified\": true}, {\"detail\": \"哈希链校验通过，共 17 条\", \"source\": \"audit_chain\", \"verification_kind\": \"hash_chain\", \"verified\": true}], \"plan\": {\"assumptions\": [\"按联系人簿解析「13900001111」→ 妈妈（ACC-****01）。\", \"未指定转出账户，默认使用本人工资卡 ACC-1001。\", \"金额来源：原文[14:17]「300」 = 300 CNY。\", \"语义与槽位已验证；实体目录仅用于解析，权限与风险仍须执行链复核。\"], \"authorization\": {\"expires_at\": \"2026-10-30T04:14:58+00:00\", \"mfa_verified\": false, \"risk_level\": \"yellow\", \"user_id\": \"demo-user\"}, \"confidence\": 0.92, \"dag_path\": \"step-1:transfer_to_contact\", \"intent\": \"transfer_to_contact\", \"plan_hash\": \"95820d9b1cfc6a2196f48e506b13e55426e117a996146162798f5cf1360ff881\", \"planner\": \"rule\", \"semantic\": {\"frame\": {\"clarification\": null, \"conditions\": [], \"intents\": [{\"id\": \"i1\", \"kind\": \"contact_transfer\", \"polarity\": \"affirmative\", \"slots\": {\"amount\": {\"end\": 17, \"start\": 14, \"text\": \"300\"}, \"contact\": {\"end\": 12, \"start\": 1, \"text\": \"13900001111\"}}, \"span\": {\"end\": 18, \"start\": 0, \"text\": \"给13900001111转账300元\"}}], \"missing_slots\": [], \"needs_clarification\": false, \"ordering\": [], \"schema_version\": \"SemanticFrame/v1\", \"uncovered\": []}, \"instruction_hash\": \"48c42692cbc8e049ff7e0bd4348dda4997057ea70b6c43457bbb971d386afe19\", \"reason\": null, \"reference_date\": \"2026-10-30\", \"schema_version\": \"SemanticAnalysis/v1\", \"slots\": [{\"candidates\": [], \"intent_id\": \"i1\", \"slot\": \"contact\", \"source\": \"mock_entity_catalog\", \"span\": {\"end\": 12, \"start\": 1, \"text\": \"13900001111\"}, \"value\": \"13900001111\", \"verification_kind\": \"user_scoped_exact_entity\", \"verified\": true}, {\"candidates\": [], \"intent_id\": \"i1\", \"slot\": \"amount\", \"source\": \"user_text\", \"span\": {\"end\": 17, \"start\": 14, \"text\": \"300\"}, \"value\": \"300\", \"verification_kind\": \"decimal_whole_token\", \"verified\": true}], \"status\": \"verified\", \"timezone\": \"Asia/Shanghai\"}, \"steps\": [{\"arguments\": {\"amount_cny\": 300.0, \"note\": \"给13900001111转账300元\", \"to_name\": \"妈妈\", \"to_phone\": \"13900001111\"}, \"depends_on\": [], \"description\": \"向联系人 妈妈 转账 300.00 元。\", \"id\": \"step-1\", \"permission\": \"transfer:execute\", \"requires_reauth\": false, \"risk_level\": \"yellow\", \"risk_reasons\": [\"本次联系人转账 300.00 元。\", \"已低于 1000 元日累计阈值，今日累计预计 300.00 元。\", \"需要黄色轻量确认。\"], \"risk_score\": 40, \"title\": \"联系人转账\", \"tool_name\": \"transfer_to_contact\"}]}, \"reason\": \"确认通过，任务已执行。\", \"results\": [{\"data\": {\"amount_cny\": 300.0, \"contact\": {\"account_id\": \"ACC-****01\", \"alias\": \"妈妈\", \"birthday\": \"1990-11-18\", \"contact_id\": \"CT-9001\", \"name\": \"妈妈\", \"phone\": \"139****1111\", \"relation\": \"mother\", \"status\": \"active\"}, \"simulated\": true, \"transfer\": {\"amount_cny\": 300.0, \"daily_transfer_total_cny\": 300.0, \"executed_at\": \"2026-10-30T04:09:58+00:00\", \"from_account\": \"ACC-1001\", \"simulated\": true, \"status\": \"simulated_success\", \"to_account\": \"ACC-9001\", \"transaction_id\": \"TX-3335183246E3\"}}, \"message\": \"已向联系人 妈妈 完成模拟转账（演示数据）。\", \"risk\": {\"base_risk\": \"yellow\", \"level\": \"yellow\", \"reasons\": [\"本次联系人转账 300.00 元。\", \"已低于 1000 元日累计阈值，今日累计预计 300.00 元。\", \"需要黄色轻量确认。\"], \"requires_reauth\": false, \"score\": 40}, \"tool_name\": \"transfer_to_contact\"}], \"risk\": {\"level\": \"yellow\", \"reasons\": [\"本次联系人转账 300.00 元。\", \"已低于 1000 元日累计阈值，今日累计预计 300.00 元。\", \"需要黄色轻量确认。\"], \"requires_reauth\": false}, \"risk_level\": \"yellow\", \"run_id\": \"cfm_87b0da4d034b408b9ae06c10a82e19b0\", \"status\": \"completed\"}"
+      }
+    ],
+    "drafts": [
+      {
+        "draft_id": "drf_cde0d02d29db47d5b1df70c8448c3400",
+        "version": 4,
+        "status": "completed",
+        "reason_code": "completed",
+        "plan_hash": "95820d9b1cfc6a2196f48e506b13e55426e117a996146162798f5cf1360ff881"
+      }
+    ],
+    "audit_verify": {
+      "valid": true,
+      "checked": 20
+    }
+  },
+  "pair_validation": {
+    "captured_at": "2026-10-30T04:49:58+00:00",
+    "note": "真实TestClient捕获；两种单向缺字段均由Pydantic返回422，未进入确认executor。",
+    "action_id": "cfm_f26d94daa15348b7a009ab2f2aa4ab36",
+    "draft_version": 2,
+    "business_state_after_both_rejections": {
+      "pending_action_status": "pending",
+      "pending_action_result_json": "",
+      "transfer_count": 0
+    },
+    "interaction_names": [
+      "confirmation_missing_draft_id",
+      "confirmation_missing_draft_version"
+    ]
+  }
+}
