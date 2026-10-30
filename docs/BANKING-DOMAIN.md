@@ -69,9 +69,9 @@
 | | `budget_goals` | 预算目标：目标金额、已锁定金额、状态 |
 | | `gift_orders` | 生日礼物订单：鲜花/蛋糕、模拟金额、到期时间、状态 |
 
-## 3. 全量工具清单（50 个）
+## 3. 全量工具清单（51 个）
 
-工具必须继承 `BaseTool`、声明风险等级与最小权限，并统一经权限网关与执行器调用。核心 10 个 + 场景 26 个 + 阶段 2A 扩展 14 个（8 个反向工具 + 6 个演示工具）。其中 **15 个**声明 `compensable=true`，**13 个**在补偿规格中声明不可逆。
+工具必须继承 `BaseTool`、声明风险等级与最小权限，并统一经权限网关与执行器调用。核心 10 个 + 场景 27 个 + 阶段 2A 扩展 14 个（8 个反向工具 + 6 个演示工具）。其中 **15 个**声明 `compensable=true`，**13 个**在补偿规格中声明不可逆。
 
 ### 3.1 核心工具（`tools/finance.py`，10 个）
 
@@ -88,7 +88,7 @@
 | `list_subscriptions` | 订阅查询 | 绿 | `subscription:read` |
 | `cancel_subscription` | 取消订阅 | 黄 | `subscription:manage` |
 
-### 3.2 场景工具（`scenarios/`，26 个）
+### 3.2 场景工具（`scenarios/`，27 个）
 
 | 模块 | 工具 | 标题 | 基线风险 | 最小权限 |
 |---|---|---|---|---|
@@ -100,6 +100,7 @@
 | transfers | `list_contacts` | 查看联系人 | 绿 | `contact:read` |
 | transfers | `add_contact` | 新增联系人 | 黄 | `contact:manage` |
 | transfers | `transfer_to_contact` | 联系人转账 | 黄 | `transfer:execute` |
+| transfers | `query_recent_transfer` | 最近一次转账查询 | 绿 | `transfer:read` |
 | bills | `bill_report` | 账单报告 | 绿 | `billing:read` |
 | bills | `detect_bill_anomalies` | 账单异常检测 | 绿 | `billing:read` |
 | bills | `identify_subscription_charges` | 订阅扣费识别 | 绿 | `subscription:read` |

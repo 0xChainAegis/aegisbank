@@ -40,6 +40,20 @@ export interface Confirmation {
   envelopes?: ActionEnvelopeView[];
 }
 
+export interface AgentDraft {
+  draft_id: string;
+  session_id: string;
+  version: number;
+  status: string;
+  reason_code?: string | null;
+  missing_slots?: string[];
+  plan_hash?: string | null;
+  pending_action_id?: string | null;
+  expires_at?: string | null;
+  changed_fields?: string[];
+  amount_cny?: number;
+}
+
 export interface PlanStep {
   id: string;
   tool_name: string;
@@ -108,6 +122,9 @@ export interface EvidenceItem {
 export interface RunResponse {
   status: RunStatus | string;
   run_id: string;
+  session_id?: string;
+  reason_code?: string;
+  draft?: AgentDraft;
   risk_level?: RiskLevel;
   risk?: RiskAssessment | null;
   risk_reasons?: string[];
@@ -217,6 +234,9 @@ export interface AgentRunInput {
   tool_name?: string;
   arguments?: Record<string, unknown>;
   user_id?: string;
+  session_id?: string;
+  draft_id?: string;
+  draft_version?: number;
 }
 
 export interface BankingAccount {

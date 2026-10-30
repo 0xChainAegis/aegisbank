@@ -338,6 +338,85 @@ class ListContactsTool(BaseTool):
         )
 
 
+class QueryRecentTransferArgs(BaseModel):
+    """No caller-supplied filters: the query is always scoped to the user."""
+
+
+class QueryRecentTransferTool(BaseTool):
+    metadata = ToolMetadata(
+        name="query_recent_transfer",
+        read_only=True,
+        title="最近一次转账查询",
+        description=(
+            "从当前用户自己的 Mock Bank Core 流水中读取最近一次已完成的转账，"
+            "仅用于本人历史回读，不接受全局审计或跨用户查询。"
+        ),
+        risk_level=RiskLevel.GREEN,
+        permission="transfer:read",
+        input_schema=QueryRecentTransferArgs.model_json_schema(),
+        output_schema={},
+    )
+    arguments_model = QueryRecentTransferArgs
+
+    def __init__(self, repository: BankingRepository) -> None:
+        self.repository = repository
+
+    def execute(self, arguments: dict[str, Any], context: ExecutionContext) -> ToolResult:
+        QueryRecentTransferArgs.model_validate(arguments)
+        with self.repository.db.transaction() as conn:
+            row = conn.execute(
+                """
+                SELECT transaction_id, account_id, merchant, amount_cents, occurred_at, note
+                FROM bank_transactions
+                WHERE user_id = ? AND category = 'transfer' AND amount_cents < 0
+                  AND status = 'posted'
+                ORDER BY occurred_at DESC, transaction_id DESC
+                LIMIT 1
+                """,
+                (context.user_id,),
+            ).fetchone()
+            contact = None
+            if row is not None:
+                contact = conn.execute(
+                    "SELECT name, alias, phone, account_id FROM contacts "
+                    "WHERE user_id = ? AND account_id = ? LIMIT 1",
+                    (context.user_id, row["merchant"]),
+                ).fetchone()
+        if row is None:
+            return ToolResult(
+                tool_name=self.metadata.name,
+                message="没有找到当前用户已完成的转账记录（模拟数据）。",
+                data={
+                    "found": False,
+                    "simulated": True,
+                    "source": "mock_bank_core.bank_transactions",
+                },
+            )
+        contact_name = str(contact["name"]) if contact is not None else None
+        label = contact_name or _mask_account(str(row["merchant"]))
+        amount_cny = to_cny(abs(int(row["amount_cents"])))
+        return ToolResult(
+            tool_name=self.metadata.name,
+            message=f"最近一次转账：向{label}转账 {amount_cny:.2f} 元（模拟数据）。",
+            data={
+                "found": True,
+                "transaction_id": str(row["transaction_id"]),
+                "direction": "outgoing",
+                "amount_cny": amount_cny,
+                "executed_at": str(row["occurred_at"]),
+                "contact_name": contact_name,
+                "contact_phone": _mask_phone(
+                    None if contact is None else contact["phone"]
+                ),
+                "to_account_masked": _mask_account(str(row["merchant"])),
+                "from_account": str(row["account_id"]),
+                "status": "posted",
+                "source": "mock_bank_core.bank_transactions",
+                "simulated": True,
+            },
+        )
+
+
 class AddContactArgs(BaseModel):
     name: str = Field(min_length=1, max_length=32)
     phone: str = Field(min_length=11, max_length=11)
@@ -612,6 +691,47 @@ def _aa_people_count(instruction: str) -> int | None:
     return None if match is None else int(match.group(1))
 
 
+_RECENT_TRANSFER_PATTERNS = (
+    r"(?:我)?(?:刚才|刚刚|最近)(?:一次)?(?:转(?:账)?(?:了)?(?:多少(?:钱)?|给谁(?:了)?))",
+    r"(?:我)?(?:刚才|刚刚|最近)(?:的)?(?:那笔)?转账(?:记录)?(?:是)?(?:多少|转给谁)?",
+    r"(?:查询|查看|看看)(?:我的)?(?:最近一次|上一次|刚才的?)(?:转出记录|转账记录|转账)",
+)
+
+
+class RecentTransferIntent:
+    """只读回读当前用户最近一次已完成的 Mock 转账。"""
+
+    name = "transfers.query_recent_transfer"
+    priority = 5
+
+    def build(self, ctx: IntentContext) -> ExecutionPlan | None:
+        if not ctx.has_tool("query_recent_transfer"):
+            return None
+        text = re.sub(r"\s+", "", ctx.instruction)
+        if not any(
+            re.fullmatch(pattern, text, re.I)
+            for pattern in _RECENT_TRANSFER_PATTERNS
+        ):
+            return None
+        return ExecutionPlan(
+            intent="query_recent_transfer",
+            planner="rule",
+            confidence=0.92,
+            assumptions=[
+                "仅读取当前用户自己的 Mock Bank Core 转账流水，最近一次按执行时间排序。",
+                "历史结果来自真实模拟执行记录，不由模型生成或补全。",
+            ],
+            steps=[
+                PlanStep(
+                    id="step-1",
+                    tool_name="query_recent_transfer",
+                    arguments={},
+                    description="读取本人最近一次已完成的转账记录。",
+                )
+            ],
+        )
+
+
 class AASplitIntent:
     """AA 拆分：总金额 ÷ 人数，为每位参与者生成一笔转账款（可并行）。"""
 
@@ -870,6 +990,7 @@ class ListContactsIntent:
 def tools(services: CoreServices) -> list[BaseTool]:
     repository = services.repository
     return [
+        QueryRecentTransferTool(repository),
         ListContactsTool(repository),
         AddContactTool(repository),
         TransferToContactTool(repository),
@@ -882,7 +1003,7 @@ def risk_rules() -> list[ContactTransferRiskRule]:
 
 def intents() -> list[AASplitIntent | ContactTransferIntent | ListContactsIntent]:
     # 顺序即优先级：AA 先于普通转账，联系人查询最后兜底。
-    return [AASplitIntent(), ContactTransferIntent(), ListContactsIntent()]
+    return [RecentTransferIntent(), AASplitIntent(), ContactTransferIntent(), ListContactsIntent()]
 
 
 def router(services: CoreServices) -> APIRouter:
@@ -925,7 +1046,20 @@ def semantic_intents():
             {"contact": "contact", "amount": "money"},
             tools=("transfer_to_contact",),
             bindings={"contact": (0, ("to_phone", "to_name")), "amount": (0, "amount_cny")},
-        )
+        ),
+        SemanticSpec(
+            "recent_transfer_query",
+            (
+                r"(?:我)?(?:刚才|刚刚|最近)(?:一次)?(?:转(?:账)?(?:了)?(?:多少(?:钱)?|给谁(?:了)?))",
+                r"(?:我)?(?:刚才|刚刚|最近)(?:的)?(?:那笔)?转账(?:记录)?(?:是)?(?:多少|转给谁)?",
+                r"(?:查询|查看|看看)(?:我的)?(?:最近一次|上一次|刚才的?)(?:转出记录|转账记录|转账)",
+            ),
+            "查询最近一次转出记录",
+            {},
+            read_anchor="最近转账查询",
+            tools=("query_recent_transfer",),
+            bindings={},
+        ),
     ]
 
 

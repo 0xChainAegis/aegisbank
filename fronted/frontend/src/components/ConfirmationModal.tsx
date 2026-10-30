@@ -23,6 +23,18 @@ const YELLOW_GATEWAY_REASON = '黄色操作涉及资金变动或账户设置，�
 const LEGACY_YELLOW_GATEWAY_REASON = '黄色操作会修改账户设置，需要在 5 分钟内完成一次轻量确认。';
 const RED_GATEWAY_REASON = '红色操作涉及资金变动，需要二次身份校验并明确确认。';
 
+function currentTransferAmount(pending: RunResponse): string {
+  for (const step of pending.plan?.steps ?? []) {
+    if (step.tool_name !== 'transfer' && step.tool_name !== 'transfer_to_contact') continue;
+    const amount = step.arguments?.amount_cny;
+    if (typeof amount === 'number' && Number.isFinite(amount)) return String(amount);
+    if (typeof amount === 'string' && amount.trim()) return amount.trim();
+  }
+  const draftAmount = pending.draft?.amount_cny;
+  if (typeof draftAmount === 'number' && Number.isFinite(draftAmount)) return String(draftAmount);
+  return '';
+}
+
 interface Props {
   pending: RunResponse;
   busy: boolean;
@@ -35,6 +47,8 @@ interface Props {
   mfaProvidersError: string;
   onRefreshMfaProviders: () => void;
   onDecision: (approved: boolean, provider?: string) => void;
+  /** 金额修订通过新的 Agent run 重新生成草稿，绝不直接执行旧确认。 */
+  onAmend?: (instruction: string) => void;
   /** 稍后处理：关闭弹窗但保留待确认快照（UX-11）。 */
   onClose: () => void;
   error?: string;
@@ -55,6 +69,7 @@ export default function ConfirmationModal({
   mfaProvidersError,
   onRefreshMfaProviders,
   onDecision,
+  onAmend,
   onClose,
   error,
   writesBlocked,
@@ -86,6 +101,17 @@ export default function ConfirmationModal({
     summary: confirmationSummary(step, accountLabels),
     risk: stepRiskLevel(step.risk_level, pending),
   })), [pending, accountLabels]);
+  const [amendOpen, setAmendOpen] = useState(false);
+  const [newAmount, setNewAmount] = useState('');
+  const [amendError, setAmendError] = useState('');
+  const currentAmount = currentTransferAmount(pending);
+  const canAmend = pending.draft?.status === 'awaiting_confirmation' && Boolean(onAmend);
+
+  useEffect(() => {
+    setAmendOpen(false);
+    setNewAmount('');
+    setAmendError('');
+  }, [pending.confirmation?.id, pending.draft?.version]);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -153,6 +179,21 @@ export default function ConfirmationModal({
   }, []);
 
   const decisionDisabled = busy || writesBlocked || expired;
+
+  function submitAmendment() {
+    if (!canAmend || !onAmend || busy || writesBlocked || expired) return;
+    const normalized = newAmount.trim().replace(/,/g, '').replace(/元$/, '').trim();
+    if (!currentAmount) {
+      setAmendError('未返回当前金额，无法安全生成修改指令。');
+      return;
+    }
+    if (!/^\d+(?:\.\d{1,2})?$/.test(normalized) || Number(normalized) <= 0) {
+      setAmendError('请输入大于 0 的有效金额。');
+      return;
+    }
+    setAmendError('');
+    onAmend(`不是${currentAmount}，改成${normalized}`);
+  }
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -224,6 +265,62 @@ export default function ConfirmationModal({
           </div>
         )}
 
+        {canAmend && (
+          <div className={'alert alert-info amend-panel'}>
+            <div className={'amend-panel-head'}>
+              <div>
+                <span className={'eyebrow'}>修改金额</span>
+                <strong>调整金额会生成新的待确认草稿</strong>
+              </div>
+              <button
+                type={'button'}
+                className={'ghost-button small-button'}
+                onClick={() => {
+                  setAmendOpen((open) => !open);
+                  setAmendError('');
+                }}
+                disabled={busy || writesBlocked || expired}
+              >
+                {amendOpen ? '收起金额修改' : '修改金额'}
+              </button>
+            </div>
+            {amendOpen && (
+              <div className={'amend-form'}>
+                <p>当前这笔旧确认不会执行。提交修改后会重新校验并生成新的确认，请核对后再次确认。</p>
+                {!currentAmount ? (
+                  <p className={'receipt-business-notice'}>未返回当前金额，无法安全生成修改指令。</p>
+                ) : (
+                  <>
+                    <label className={'amend-field'}>
+                      <span>新金额（元）</span>
+                      <input
+                        type={'text'}
+                        inputMode={'decimal'}
+                        aria-label={'新金额（元）'}
+                        value={newAmount}
+                        placeholder={'请输入新金额'}
+                        onChange={(event) => {
+                          setNewAmount(event.target.value);
+                          setAmendError('');
+                        }}
+                        disabled={busy || writesBlocked || expired}
+                      />
+                    </label>
+                    <button
+                      type={'button'}
+                      className={'primary-button small-button'}
+                      onClick={submitAmendment}
+                      disabled={busy || writesBlocked || expired || !newAmount.trim()}
+                    >
+                      提交修改
+                    </button>
+                  </>
+                )}
+                {amendError && <div className={'alert alert-error modal-alert'} role={'alert'}>{amendError}</div>}
+              </div>
+            )}
+          </div>
+        )}
         <div className={`mfa-banner mfa-${risk}`}>
           <strong>{needsOtp ? '需要二次身份验证' : '一次明确确认即可'}</strong>
           <span>

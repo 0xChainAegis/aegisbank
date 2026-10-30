@@ -70,6 +70,14 @@ export function describeError(error: unknown, context: ErrorContext = 'run'): Er
     return { message: '原请求仍在处理中，请保留当前操作并查询原结果。', action: 'retry', detail: raw };
   }
 
+  if (code.toLowerCase() === 'draft_version_conflict') {
+    return {
+      message: `旧确认已被新草稿替代（${code}），请改用最新确认或重新发起任务。`,
+      action: 'reconfirm',
+      detail: raw.includes(code) ? raw : `${raw}（${code}）`,
+    };
+  }
+
   if (status === 403 && /验证|OTP|token|生物识别|二次身份/i.test(raw)) {
     return { message: `验证未通过：${raw}`, action: 'retry', detail: raw };
   }

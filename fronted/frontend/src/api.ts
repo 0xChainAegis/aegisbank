@@ -219,20 +219,37 @@ export async function runAgent(
   });
 }
 
+export interface ResolveConfirmationOptions {
+  idempotencyKey?: string;
+  sessionId?: string;
+  draftId?: string;
+  draftVersion?: number;
+  session_id?: string;
+  draft_id?: string;
+  draft_version?: number;
+}
+
 export async function resolveConfirmation(
   actionId: string,
   approved: boolean,
   reauthToken?: string,
   mfaProvider?: string | null,
-  options: { idempotencyKey?: string } = {},
+  options: ResolveConfirmationOptions = {},
 ): Promise<RunResponse> {
+  const sessionId = options.sessionId ?? options.session_id;
+  const draftId = options.draftId ?? options.draft_id;
+  const draftVersion = options.draftVersion ?? options.draft_version;
   return request<RunResponse>(`/confirmations/${encodeURIComponent(actionId)}`, {
     method: 'POST',
     idempotencyKey: options.idempotencyKey,
     body: JSON.stringify({
+      user_id: 'demo-user',
       approved,
       reauth_token: reauthToken || null,
       mfa_provider: mfaProvider || null,
+      ...(sessionId ? { session_id: sessionId } : {}),
+      ...(draftId ? { draft_id: draftId } : {}),
+      ...(draftVersion !== undefined && draftVersion !== null ? { draft_version: draftVersion } : {}),
     }),
   });
 }

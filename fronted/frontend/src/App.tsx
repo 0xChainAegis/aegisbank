@@ -45,6 +45,7 @@ import {
 import { defaultMfaProvider, describeMfaFailure } from './twoA';
 import type {
   ActionJournal,
+  AgentDraft,
   AgentRunInput,
   AuditEntry,
   BankingOverview,
@@ -133,6 +134,8 @@ export default function App() {
   const [instruction, setInstruction] = useState('');
   const [lastInstruction, setLastInstruction] = useState('');
   const [lastRun, setLastRun] = useState<RunResponse | null>(null);
+  const [conversationSessionId, setConversationSessionId] = useState<string | null>(null);
+  const [conversationDraft, setConversationDraft] = useState<AgentDraft | null>(null);
   const [pending, setPending] = useState<RunResponse | null>(null);
   const [lastActionId, setLastActionId] = useState<string | null>(null);
   const [trustActionId, setTrustActionId] = useState<string | null>(null);
@@ -418,7 +421,13 @@ export default function App() {
         risk_level: canonical.risk_level,
         confirmation: { id: actionId, requires_reauth: canonical.requires_reauth,
           expires_at: canonical.expires_at },
+        session_id: restoredPending.pending.session_id ?? restoredPending.pending.draft?.session_id,
+        draft: restoredPending.pending.draft,
       };
+      setConversationSessionId(
+        restoredPending.pending.session_id ?? restoredPending.pending.draft?.session_id ?? null,
+      );
+      setConversationDraft(restoredPending.pending.draft ?? null);
       setPending(restored);
       setLastRun(restored);
       setLastActionId(actionId);
@@ -505,6 +514,8 @@ export default function App() {
       submissionRef.current = null;
       setUnresolvedSubmission(null);
       clearSubmission();
+      setConversationSessionId(result.session_id ?? result.draft?.session_id ?? null);
+      setConversationDraft(result.draft ?? null);
       setLastRun(result);
       setLastActionId(result.confirmation?.id ?? result.run_id ?? null);
       setTrustActionId(result.confirmation?.id ?? null);
@@ -541,6 +552,7 @@ export default function App() {
   async function decide(approved: boolean, providerOverride?: string) {
     if (!pending?.confirmation || busy || writesBlocked || !canExecuteTools(role)) return;
     const actionId = pending.confirmation.id;
+    const draftContext = pending.draft ?? conversationDraft;
     const needsMfa = pending.confirmation.requires_reauth || pending.risk_level === 'red';
     const provider = providerOverride ?? mfaProvider;
     const fingerprint = JSON.stringify([approved, needsMfa ? mfaToken : null, needsMfa ? provider : null]);
@@ -557,12 +569,30 @@ export default function App() {
         approved,
         needsMfa ? mfaToken : undefined,
         needsMfa ? provider : null,
-        { idempotencyKey },
+        {
+          idempotencyKey,
+          ...(pending.session_id ?? draftContext?.session_id
+            ? { session_id: pending.session_id ?? draftContext?.session_id }
+            : {}),
+          ...(draftContext
+            ? { draft_id: draftContext.draft_id, draft_version: draftContext.version }
+            : {}),
+        },
       );
       confirmKeyRef.current = null;
       removePendingSnapshot(actionId);
       setRestoredPending(loadPendingSnapshot());
-      setLastRun(result);
+      const confirmedDraft = result.draft ?? (
+        draftContext && result.status === 'completed'
+          ? { ...draftContext, status: 'completed' }
+          : null
+      );
+      const nextResult = confirmedDraft ? { ...result, draft: confirmedDraft } : result;
+      setConversationSessionId(
+        result.session_id ?? pending.session_id ?? draftContext?.session_id ?? conversationSessionId,
+      );
+      setConversationDraft(confirmedDraft);
+      setLastRun(nextResult);
       setLastActionId(actionId);
       setTrustActionId(actionId);
       setPending(null);
@@ -590,9 +620,11 @@ export default function App() {
         setLastRun(null);
         setLastActionId(null);
         setTrustActionId(null);
+        setConversationSessionId(null);
+        setConversationDraft(null);
         setActionError('');
         setNotice(
-          explanation.action === 'reconfirm'
+          explanation.action === 'reconfirm' && !explanation.message.includes('重新发起')
             ? `${explanation.message} 请重新发起任务。`
             : explanation.message,
         );
@@ -601,6 +633,27 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function amendConfirmation(instruction: string) {
+    if (!pending?.draft || pending.draft.status !== 'awaiting_confirmation' ||
+        busy || writesBlocked || !canExecuteTools(role)) return;
+    const draft = pending.draft;
+    const actionId = pending.confirmation?.id;
+    const sessionId = pending.session_id ?? draft.session_id;
+    if (actionId) {
+      confirmKeyRef.current = null;
+      removePendingSnapshot(actionId);
+    }
+    setPending(null);
+    setRestoredPending(loadPendingSnapshot());
+    setMfaToken('');
+    await execute({
+      instruction,
+      ...(sessionId ? { session_id: sessionId } : {}),
+      draft_id: draft.draft_id,
+      draft_version: draft.version,
+    });
   }
 
   async function inspectTrustAction() {
@@ -920,6 +973,7 @@ export default function App() {
           mfaProvidersError={mfaProvidersError}
           onRefreshMfaProviders={() => void loadMfaProviders()}
           onDecision={(approved, provider) => void decide(approved, provider)}
+          onAmend={(instruction) => void amendConfirmation(instruction)}
           onClose={laterConfirmation}
           error={actionError}
           writesBlocked={writesBlocked || !canExecuteTools(role)}

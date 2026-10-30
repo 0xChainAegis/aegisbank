@@ -82,6 +82,7 @@ DEMO_PREGRANTED_TOOLS = frozenset(
         "purchase_wealth",
         "query_balance",
         "query_bill",
+        "query_recent_transfer",
         "query_contact_birthday",
         "query_wealth_holdings",
         "redeem_wealth",

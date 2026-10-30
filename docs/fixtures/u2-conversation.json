@@ -1,0 +1,228 @@
+{
+  "schema": "aegisbank-u2-fixtures/v1",
+  "generated_from": "docs/U2-CONVERSATION-2026-10-30.md",
+  "note": "前端契约联调样例；数值来自确定性 Mock Bank Core，占位 ID 可替换为真实响应值。",
+  "fixtures": [
+    {
+      "name": "initial_missing_amount",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {
+          "instruction": "给妈妈转钱",
+          "user_id": "demo-user"
+        }
+      },
+      "response": {
+        "status": "needs_clarification",
+        "run_id": "run-draft-1",
+        "session_id": "sess_demo_u2",
+        "reason": "请补充金额，系统不会猜测关键参数",
+        "reason_code": "missing_amount",
+        "risk_level": "green",
+        "plan": {
+          "intent": "transfer_to_contact",
+          "planner": "rule",
+          "confidence": 0.0,
+          "needs_clarification": true,
+          "clarification": "请补充金额，系统不会猜测关键参数",
+          "steps": []
+        },
+        "draft": {
+          "draft_id": "drf_demo_u2",
+          "session_id": "sess_demo_u2",
+          "version": 1,
+          "status": "awaiting_amount",
+          "reason_code": "missing_amount",
+          "missing_slots": ["amount"],
+          "plan_hash": "",
+          "pending_action_id": null,
+          "expires_at": "2026-10-30T02:45:00+00:00",
+          "last_run_id": "run-draft-1"
+        }
+      }
+    },    {
+      "name": "fill_missing_amount",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "idempotency_key": "fixture-fill-500",
+        "body": {
+          "instruction": "五百",
+          "user_id": "demo-user",
+          "session_id": "sess_demo_u2",
+          "draft_id": "drf_demo_u2",
+          "draft_version": 1
+        }
+      },
+      "response": {
+        "status": "awaiting_confirmation",
+        "run_id": "cfm_demo_500",
+        "session_id": "sess_demo_u2",
+        "reason": "黄色操作涉及资金变动或账户设置，需要在 5 分钟内完成一次轻量确认。",
+        "risk_level": "yellow",
+        "risk": {
+          "level": "yellow",
+          "requires_reauth": false,
+          "reasons": ["本次联系人转账 500.00 元。", "需要黄色轻量确认。"]
+        },
+        "plan": {
+          "intent": "transfer_to_contact",
+          "planner": "rule",
+          "confidence": 0.92,
+          "plan_hash": "hash-fill-500",
+          "steps": [{
+            "id": "step-1",
+            "tool_name": "transfer_to_contact",
+            "depends_on": [],
+            "arguments": {"to_name": "妈妈", "to_phone": "13900001111", "amount_cny": 500.0}
+          }]
+        },
+        "confirmation": {
+          "id": "cfm_demo_500",
+          "requires_reauth": false,
+          "expires_at": "2026-10-30T02:45:00+00:00"
+        },
+        "draft": {
+          "draft_id": "drf_demo_u2",
+          "session_id": "sess_demo_u2",
+          "version": 2,
+          "status": "awaiting_confirmation",
+          "reason_code": "awaiting_confirmation",
+          "missing_slots": [],
+          "plan_hash": "hash-fill-500",
+          "pending_action_id": "cfm_demo_500",
+          "expires_at": "2026-10-30T02:45:00+00:00",
+          "last_run_id": "cfm_demo_500",
+          "amount_cny": 500.0,
+          "changed_fields": ["amount"]
+        }
+      }
+    },    {
+      "name": "amend_amount",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "idempotency_key": "fixture-amend-300",
+        "body": {
+          "instruction": "不是500，改成300",
+          "user_id": "demo-user",
+          "session_id": "sess_demo_u2",
+          "draft_id": "drf_demo_u2",
+          "draft_version": 2
+        }
+      },
+      "response": {
+        "status": "awaiting_confirmation",
+        "run_id": "cfm_demo_300",
+        "session_id": "sess_demo_u2",
+        "reason": "黄色操作涉及资金变动或账户设置，需要在 5 分钟内完成一次轻量确认。",
+        "risk_level": "yellow",
+        "risk": {
+          "level": "yellow",
+          "requires_reauth": false,
+          "reasons": ["本次联系人转账 300.00 元。", "需要黄色轻量确认。"]
+        },
+        "plan": {
+          "intent": "transfer_to_contact",
+          "planner": "rule",
+          "confidence": 0.92,
+          "plan_hash": "hash-amend-300",
+          "steps": [{
+            "id": "step-1",
+            "tool_name": "transfer_to_contact",
+            "depends_on": [],
+            "arguments": {"to_name": "妈妈", "to_phone": "13900001111", "amount_cny": 300.0}
+          }]
+        },
+        "confirmation": {
+          "id": "cfm_demo_300",
+          "requires_reauth": false,
+          "expires_at": "2026-10-30T02:45:00+00:00"
+        },
+        "draft": {
+          "draft_id": "drf_demo_u2",
+          "session_id": "sess_demo_u2",
+          "version": 3,
+          "status": "awaiting_confirmation",
+          "reason_code": "awaiting_confirmation",
+          "missing_slots": [],
+          "plan_hash": "hash-amend-300",
+          "pending_action_id": "cfm_demo_300",
+          "expires_at": "2026-10-30T02:45:00+00:00",
+          "last_run_id": "cfm_demo_300",
+          "amount_cny": 300.0,
+          "changed_fields": ["amount"]
+        }
+      }
+    },    {
+      "name": "old_confirmation_conflict",
+      "request": {
+        "method": "POST",
+        "path": "/api/confirmations/cfm_demo_500",
+        "body": {"approved": true, "user_id": "demo-user"}
+      },
+      "response_status": 409,
+      "response": {
+        "detail": {
+          "code": "draft_version_conflict",
+          "message": "该确认已被新的草稿金额替代，旧确认不可执行。"
+        }
+      }
+    },
+    {
+      "name": "recent_transfer_history",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {"instruction": "我刚才转了多少", "user_id": "demo-user"}
+      },
+      "response": {
+        "status": "completed",
+        "run_id": "run-history-1",
+        "reason": "全部节点通过权限网关。",
+        "risk_level": "green",
+        "results": [{
+          "tool_name": "query_recent_transfer",
+          "message": "最近一次转账：向妈妈转账 300.00 元（模拟数据）。",
+          "data": {
+            "found": true,
+            "transaction_id": "TX-DEMO-U2-300",
+            "direction": "outgoing",
+            "amount_cny": 300.0,
+            "executed_at": "2026-10-30T02:31:00+00:00",
+            "contact_name": "妈妈",
+            "contact_phone": "139****1111",
+            "to_account_masked": "ACC-****01",
+            "from_account": "ACC-1001",
+            "status": "posted",
+            "source": "mock_bank_core.bank_transactions",
+            "simulated": true
+          }
+        }]
+      }
+    },
+    {
+      "name": "recent_transfer_history_empty",
+      "request": {
+        "method": "POST",
+        "path": "/api/agent/run",
+        "body": {"instruction": "我刚才转给谁", "user_id": "user-b"}
+      },
+      "response": {
+        "status": "completed",
+        "run_id": "run-history-empty",
+        "reason": "全部节点通过权限网关。",
+        "results": [{
+          "tool_name": "query_recent_transfer",
+          "message": "没有找到当前用户已完成的转账记录（模拟数据）。",
+          "data": {
+            "found": false,
+            "source": "mock_bank_core.bank_transactions",
+            "simulated": true
+          }
+        }]
+      }
+    }
+  ]
+}

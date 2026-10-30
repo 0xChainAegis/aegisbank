@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     database_path: Path = Path(__file__).resolve().parent.parent / "data" / "aegisbank.db"
     demo_otp: str = "246810"
     confirmation_ttl_seconds: int = 300
+    conversation_draft_ttl_seconds: int = 900
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     planner_mode: Literal["rule", "llm", "auto"] = "rule"
     semantic_enabled: bool = True

@@ -30,6 +30,7 @@ class CoreServices:
     gateway: PermissionGateway | None = None
     audit: AuditService | None = None
     scheduler: Any = None
+    drafts: Any = None
     executor: Any = None
     mfa: Any = None
     authz: Any = None

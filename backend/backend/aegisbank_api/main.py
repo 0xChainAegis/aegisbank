@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +49,7 @@ from .tools.finance import build_registry
 from .trust.action_envelope import EnvelopeError
 from .trust.authz import AuthzError, AuthzService
 from .trust.clarification import ClarificationError, ClarificationStore
+from .trust.drafts import ConversationDraftService, DraftError
 from .trust.idempotency import (
     IdempotencyError,
     IdempotencyOutcome,
@@ -104,6 +106,13 @@ def create_app(
     risk_engine = DynamicRiskEngine(bank_repository)
     audit = AuditService(db)
     services.audit = audit
+    drafts = ConversationDraftService(
+        db,
+        audit,
+        repository=bank_repository,
+        ttl_seconds=config.conversation_draft_ttl_seconds,
+    )
+    services.drafts = drafts
     planner = build_planner(config, registry, bank_repository)
     scheduler = DagScheduler(
         planner=planner,
@@ -174,6 +183,53 @@ def create_app(
         if key:
             idempotency.complete(scope=scope, key=key, response=response)
 
+    def session_id_for(requested: str | None) -> str:
+        return requested or f"sess_{uuid4().hex}"
+
+    def draft_error(exc: DraftError) -> HTTPException:
+        return HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+
+    def attach_draft(
+        result: dict[str, Any],
+        *,
+        session_id: str,
+        draft: dict[str, Any] | None,
+        changed_fields: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if session_id:
+            result["session_id"] = session_id
+        if draft is not None:
+            result["draft"] = drafts.public(draft, changed_fields=changed_fields)
+            result["reason_code"] = draft.get("reason_code") or result.get("reason_code")
+        return result
+
+    def supersede_session_drafts(user_id: str, session_id: str) -> None:
+        """New task in the same session invalidates the old draft and confirmation."""
+        for stale in drafts.active_for_session(user_id, session_id):
+            pending_id = stale.get("pending_action_id")
+            if pending_id:
+                try:
+                    scheduler.supersede_confirmation(
+                        action_id=str(pending_id),
+                        user_id=user_id,
+                        reason="同一会话开始了新的任务，旧确认已失效",
+                    )
+                except EnvelopeError as exc:
+                    pending = db.get_pending(str(pending_id))
+                    if pending is not None and pending["status"] == "pending":
+                        raise DraftError(
+                            "draft_version_conflict",
+                            "旧确认仍在处理，尚未被替代；请稍后重试或使用最新草稿。",
+                        ) from exc
+            drafts.mark_superseded(
+                str(stale["draft_id"]),
+                user_id=user_id,
+                reason="同一会话开始了新的任务，旧草稿已失效",
+                reason_code="context_expired",
+            )
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         start_scenario_background(services, scenario_modules)
@@ -195,6 +251,7 @@ def create_app(
     app.state.services = services
     app.state.readiness = readiness
     app.state.idempotency = idempotency
+    app.state.drafts = drafts
     app.state.authz = authz
     app.state.mfa = mfa
     app.state.executor = executor
@@ -339,6 +396,7 @@ def create_app(
     ) -> dict[str, Any]:
         ensure_ready()
         role = resolve_role(x_aegis_role)
+        session_id = session_id_for(body.session_id)
         scope = "agent.run"
         request_hash = IdempotencyStore.request_hash(
             {"endpoint": "agent.run", "body": body.model_dump(), "role": role}
@@ -346,8 +404,93 @@ def create_app(
         outcome = begin_idempotent(idempotency_key, scope=scope, request_hash=request_hash)
         if outcome is not None and outcome.state == "replay":
             return outcome.response or {}
+        prepared: dict[str, Any] | None = None
+
+        def abort_reserved(reason: str, code: str) -> None:
+            if prepared is None:
+                return
+            current = drafts.get_for_user(
+                str(prepared["draft"]["draft_id"]), body.user_id
+            )
+            if current is not None and current["status"] == "processing":
+                drafts.abort_followup(
+                    draft_id=str(prepared["draft"]["draft_id"]),
+                    user_id=body.user_id,
+                    expected_version=int(prepared["version"]),
+                    reason=reason,
+                    status="failed",
+                    reason_code=code,
+                )
+
         try:
-            instruction = body.instruction
+            if body.draft_id is not None:
+                require_capability(role, "tool:execute")
+                if body.tool_name or body.arguments:
+                    raise DraftError(
+                        "unsupported_amendment",
+                        "草稿补充与修订只接受补充文本，不接受客户端直接指定工具或参数。",
+                    )
+                if body.clarification_run_id:
+                    raise DraftError(
+                        "unsupported_amendment",
+                        "草稿补充不能同时使用 clarification_run_id。",
+                    )
+                prepared = drafts.reserve_followup(
+                    user_id=body.user_id,
+                    session_id=body.session_id,
+                    draft_id=body.draft_id,
+                    draft_version=int(body.draft_version or 0),
+                    answer=body.instruction,
+                )
+                old_pending = prepared.get("old_pending_action_id")
+                if prepared["action"] == "amend" and old_pending:
+                    try:
+                        scheduler.supersede_confirmation(
+                            action_id=str(old_pending),
+                            user_id=body.user_id,
+                            reason="草稿金额已修订，旧确认失效",
+                        )
+                    except EnvelopeError as exc:
+                        if exc.code == "ACTION_IN_PROGRESS":
+                            drafts.restore_after_retryable_error(
+                                draft_id=str(prepared["draft"]["draft_id"]),
+                                user_id=body.user_id,
+                                expected_version=int(prepared["version"]),
+                            )
+                        else:
+                            drafts.abort_followup(
+                                draft_id=str(prepared["draft"]["draft_id"]),
+                                user_id=body.user_id,
+                                expected_version=int(prepared["version"]),
+                                reason=str(exc),
+                                status="superseded",
+                                reason_code="draft_version_conflict",
+                            )
+                        raise DraftError("draft_version_conflict", str(exc)) from exc
+                result = scheduler.run(
+                    user_id=body.user_id,
+                    instruction=str(prepared["instruction"]),
+                    role=role,
+                )
+                draft = drafts.finalize_followup(
+                    user_id=body.user_id,
+                    session_id=session_id,
+                    prepared=prepared,
+                    result=result,
+                )
+                result = attach_draft(
+                    result,
+                    session_id=session_id,
+                    draft=draft,
+                    changed_fields=(
+                        prepared["changed_fields"]
+                        if result.get("status") == "awaiting_confirmation"
+                        else None
+                    ),
+                )
+                complete_idempotent(idempotency_key, scope=scope, response=result)
+                return result
+
             if body.clarification_run_id:
                 require_capability(role, "tool:execute")
                 if body.tool_name or body.arguments:
@@ -358,6 +501,11 @@ def create_app(
                     role=role,
                     answer=body.instruction,
                 )
+            else:
+                instruction = body.instruction
+                if body.session_id:
+                    supersede_session_drafts(body.user_id, session_id)
+
             result = scheduler.run(
                 user_id=body.user_id,
                 instruction=instruction,
@@ -365,7 +513,32 @@ def create_app(
                 arguments=body.arguments,
                 role=role,
             )
+            draft: dict[str, Any] | None = None
+            if result.get("status") == "awaiting_confirmation":
+                draft = drafts.create_awaiting_confirmation(
+                    user_id=body.user_id,
+                    session_id=session_id,
+                    instruction=instruction,
+                    plan_payload=result.get("plan") or {},
+                    result=result,
+                )
+            elif result.get("status") == "needs_clarification":
+                draft = drafts.create_awaiting_amount(
+                    user_id=body.user_id,
+                    session_id=session_id,
+                    instruction=instruction,
+                    plan_payload=result.get("plan") or {},
+                    run_id=str(result.get("run_id") or ""),
+                )
+            result = attach_draft(result, session_id=session_id, draft=draft)
+            complete_idempotent(idempotency_key, scope=scope, response=result)
+            return result
+        except DraftError as exc:
+            abort_reserved(str(exc), exc.code)
+            release_idempotent(idempotency_key, scope=scope)
+            raise draft_error(exc) from exc
         except ClarificationError as exc:
+            abort_reserved(str(exc), "context_expired")
             release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(
                 status_code=409,
@@ -374,14 +547,24 @@ def create_app(
                     "message": str(exc),
                 },
             ) from exc
+        except EnvelopeError as exc:
+            abort_reserved(str(exc), exc.code)
+            release_idempotent(idempotency_key, scope=scope)
+            raise HTTPException(
+                status_code=409, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
         except IntentError as exc:
+            abort_reserved(str(exc), "context_expired")
             release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:
+            abort_reserved(str(exc), "context_expired")
             release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        complete_idempotent(idempotency_key, scope=scope, response=result)
-        return result
+        except Exception:
+            abort_reserved("follow-up unexpected error", "context_expired")
+            release_idempotent(idempotency_key, scope=scope)
+            raise
 
     @app.post(f"{config.api_prefix}/confirmations/{{action_id}}")
     def resolve_confirmation(
@@ -400,21 +583,66 @@ def create_app(
                 "action_id": action_id,
                 "approved": body.approved,
                 "mfa_provider": body.mfa_provider,
+                "user_id": body.user_id,
+                "session_id": body.session_id,
+                "draft_id": body.draft_id,
+                "draft_version": body.draft_version,
                 "role": role,
             }
         )
         outcome = begin_idempotent(idempotency_key, scope=scope, request_hash=request_hash)
         if outcome is not None and outcome.state == "replay":
             return outcome.response or {}
+        draft: dict[str, Any] | None = None
         try:
+            if body.draft_id:
+                if body.draft_version is None:
+                    raise DraftError(
+                        "draft_version_conflict",
+                        "确认草稿时必须同时提供 draft_version。",
+                    )
+                draft = drafts.get_for_user(body.draft_id, body.user_id)
+                if draft is None or (
+                    body.session_id and draft["session_id"] != body.session_id
+                ):
+                    raise DraftError(
+                        "context_expired",
+                        "该草稿不存在、不属于当前用户或会话已失效。",
+                    )
+                if (
+                    int(draft["version"]) != int(body.draft_version)
+                    or draft.get("pending_action_id") != action_id
+                ):
+                    raise DraftError(
+                        "draft_version_conflict",
+                        "该确认已被金额修订或更新的草稿替代，请使用最新确认。",
+                    )
+                if draft["status"] != "awaiting_confirmation":
+                    raise DraftError(
+                        "context_expired",
+                        "该草稿已结束，不能再次确认，请重新发起任务。",
+                    )
             result = scheduler.confirm(
-                user_id=DEMO_USER,
+                user_id=body.user_id,
                 action_id=action_id,
                 approved=body.approved,
                 reauth_token=body.reauth_token,
                 role=role,
                 mfa_provider=body.mfa_provider,
             )
+            updated = drafts.on_confirmation_result(
+                pending_action_id=action_id,
+                user_id=body.user_id,
+                result=result,
+            )
+            result = attach_draft(
+                result,
+                session_id=(updated or draft or {}).get("session_id") or body.session_id or "",
+                draft=updated,
+            )
+        except DraftError as exc:
+            release_idempotent(idempotency_key, scope=scope)
+            raise draft_error(exc) from exc
         except EnvelopeError as exc:
             release_idempotent(idempotency_key, scope=scope)
             raise HTTPException(
@@ -431,7 +659,6 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         complete_idempotent(idempotency_key, scope=scope, response=result)
         return result
-
     @app.get(f"{config.api_prefix}/trust/circuit-breaker")
     def circuit_breaker_status(
         x_aegis_role: str | None = Header(default=None, alias=ROLE_HEADER),

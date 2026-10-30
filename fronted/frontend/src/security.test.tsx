@@ -248,6 +248,36 @@ describe('submission and confirmation security', () => {
     await click('补充上一条任务信息'); await submit('100元');
     expect(vi.mocked(runAgent).mock.calls[1][0]).toEqual({ instruction: '100元', clarification_run_id: 'clarify-one' });
   });
+  it('sends draft context on confirmation and surfaces stale draft conflict code', async () => {
+    const stale = pending('stale-confirmation');
+    stale.session_id = 'session-1';
+    stale.draft = {
+      draft_id: 'draft-1',
+      session_id: 'session-1',
+      version: 2,
+      status: 'awaiting_confirmation',
+      pending_action_id: 'stale-confirmation',
+      expires_at: stale.confirmation!.expires_at,
+    };
+    vi.mocked(runAgent).mockResolvedValue(stale);
+    vi.mocked(resolveConfirmation).mockRejectedValue(
+      new ApiError('旧确认已被替代', 409, 'draft_version_conflict'),
+    );
+    await mount(); await submit('给妈妈转500元');
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain('修改金额');
+    await click('确认执行');
+    await act(async () => { await Promise.resolve(); });
+
+    const call = vi.mocked(resolveConfirmation).mock.calls[0];
+    expect(call[4]).toEqual(expect.objectContaining({
+      session_id: 'session-1',
+      draft_id: 'draft-1',
+      draft_version: 2,
+    }));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.textContent).toContain('draft_version_conflict');
+    expect(container.textContent).toContain('最新确认');
+  });
   it('shows an unevaluated risk for clarification instead of the default green execution badge', async () => {
     vi.mocked(runAgent).mockResolvedValueOnce({
       status: 'needs_clarification', run_id: 'clarify-card', reason: '请补充要挂失的卡号',

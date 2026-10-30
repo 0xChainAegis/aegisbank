@@ -301,6 +301,15 @@ export default function TaskConsolePage({
   const overallRisk = lastRun ? runRiskLevel(lastRun) : 'green';
   const riskPending = lastRun?.status === 'needs_clarification';
   const reference = lastRun ? receiptReference(lastRun) : { label: '审计编号' as const, value: '—' };
+  const draft = lastRun?.draft;
+  const missingSlots = draft?.missing_slots ?? [];
+  const missingSlotText = missingSlots.length > 0
+    ? missingSlots.map((slot) => {
+        const label = argumentLabels[slot] ?? slot;
+        return label === slot ? slot : `${label}（${slot}）`;
+      }).join('、')
+    : '未返回';
+  const draftExpiry = draft?.expires_at ? formatDateTime(draft.expires_at) : '未返回';
   const canExecute = canExecuteTools(role);
   const roleBlockReason = roleTaskBlockReason(role);
   const taskBlocked = !canExecute || writesBlocked;
@@ -341,8 +350,17 @@ export default function TaskConsolePage({
     event.preventDefault();
     const value = instruction.trim();
     if (!value || busy || taskBlocked) return;
-    onExecute({ instruction: value, ...(followUp && lastRun?.status === 'needs_clarification'
-      ? { clarification_run_id: lastRun.run_id } : {}) });
+    const followUpContext: Partial<AgentRunInput> =
+      followUp && lastRun?.status === 'needs_clarification'
+        ? lastRun.draft
+          ? {
+              session_id: lastRun.session_id ?? lastRun.draft.session_id,
+              draft_id: lastRun.draft.draft_id,
+              draft_version: lastRun.draft.version,
+            }
+          : { clarification_run_id: lastRun.run_id }
+        : {};
+    onExecute({ instruction: value, ...followUpContext });
   }
 
   function prepare(action: ScenarioAction) {
@@ -578,8 +596,27 @@ export default function TaskConsolePage({
           )}
 
           {lastRun.status === 'needs_clarification' && (
-            <div className="clarification-panel">
-              {lastRun.plan?.clarification || lastRun.reason || '请补充更多任务信息。'}
+            <div className={'clarification-panel'}>
+              <p>{lastRun.plan?.clarification || lastRun.reason || '请补充更多任务信息。'}</p>
+              {lastRun.draft && (
+                <dl className={'clarification-draft-facts'}>
+                  <div>
+                    <dt>草稿版本</dt>
+                    <dd>v{lastRun.draft.version}</dd>
+                  </div>
+                  <div>
+                    <dt>缺失金额</dt>
+                    <dd>{missingSlotText}</dd>
+                  </div>
+                  <div>
+                    <dt>有效期</dt>
+                    <dd title={lastRun.draft.expires_at ?? undefined}>{draftExpiry}</dd>
+                  </div>
+                </dl>
+              )}
+              {lastRun.reason_code && (
+                <p>原因代码：<code>{lastRun.reason_code}</code></p>
+              )}
             </div>
           )}
 

@@ -2,6 +2,9 @@
 
 - [U1 独立评测、有界语义补强与未完成边界](U1-NLP-EVALUATION-2026-10-30.md)
 
+- [U2 最小多轮闭环验收（联系人转账）](U2-CONVERSATION-2026-10-30.md)
+- [下一步问题修复与升级计划](next-steps/AegisBank-问题修复与升级计划.md)
+
 - [P1补缺、安全回退与最新验收](NLP-P1-COMPLETION-2026-10-28.md)
 
 - [NLP P1 实现、验收与未完成边界](NLP-P1-2026-10-27.md)

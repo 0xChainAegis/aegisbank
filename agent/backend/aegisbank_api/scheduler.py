@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import Any
@@ -362,6 +363,59 @@ class DagScheduler:
             action_id, json.dumps(response, ensure_ascii=False, sort_keys=True)
         )
         self.db.resolve_pending(action_id, status)
+
+    @audit_scope
+    @serialized_action
+    def supersede_confirmation(
+        self, *, action_id: str, user_id: str, reason: str
+    ) -> dict[str, Any]:
+        """Invalidate an unexecuted confirmation after a draft amount revision.
+
+        No result_json is written: a later confirmation attempt must observe the
+        terminal ``superseded`` status and receive 409, not an idempotent replay
+        of a successful execution.
+        """
+        pending = self.db.get_pending(action_id)
+        if pending is None or pending["user_id"] != user_id:
+            raise EnvelopeError(
+                "该确认不存在或不属于当前用户。", code="context_expired"
+            )
+        if pending["status"] != "pending":
+            raise EnvelopeError(
+                "该确认已处理，不能被新的草稿替代。", code="draft_version_conflict"
+            )
+        nodes = [PlanNode.from_dict(item) for item in json.loads(pending["dag_json"])]
+        dag_path = self._dag_path(nodes)
+        tool_name = nodes[0].tool_name if nodes else "confirmation"
+        arguments = nodes[0].arguments if nodes else {}
+        machine = self._load_machine(
+            pending,
+            dag_path=dag_path,
+            tool_name=tool_name,
+            arguments=arguments,
+        )
+        # The status guard above already proves the action is unexecuted; a
+        # terminal state can only be an earlier expiry/transition race.
+        with suppress(IllegalTransition):
+            machine.transition(ActionState.EXPIRED, reason=reason)
+        self.db.resolve_pending(action_id, "superseded")
+        self.audit.record(
+            event="confirmation_superseded",
+            user_id=user_id,
+            instruction=pending["instruction"],
+            dag_path=dag_path,
+            tool_name=tool_name,
+            arguments=arguments,
+            result={
+                "action_id": action_id,
+                "reason": reason,
+                "plan_hash": json.loads(pending.get("plan_json") or "{}").get("plan_hash"),
+                "execute": False,
+            },
+            confirmation_state="superseded",
+            risk_level=str(pending["risk_level"]),
+        )
+        return {"action_id": action_id, "status": "superseded", "execute": False}
 
     # ---------- preview ----------
     def preview(
@@ -980,6 +1034,15 @@ class DagScheduler:
             raise IntentError("确认请求不属于当前用户。")
         if self.gateway.authz is not None:
             self.gateway.authz.require(role, "tool:execute")
+        if pending["status"] == "superseded":
+            raise EnvelopeError(
+                "该确认已被新的草稿金额替代，旧确认不可执行。",
+                code="draft_version_conflict",
+            )
+        if pending["status"] == "expired":
+            raise EnvelopeExpired(
+                "确认请求已过期，请重新发起操作。", code="context_expired"
+            )
         replay = self._stored_result(pending)
         if replay is not None:
             return replay

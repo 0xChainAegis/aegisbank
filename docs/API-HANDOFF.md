@@ -1244,3 +1244,102 @@ docs-only 变更按快速通道跳过测试，因此标记 unverified；提交�
 未指定tool_name时，arguments仍可用于与完整指令一致的已支持参数（例如账单account_id）；未知字段、冲突值或不完整指令返回needs_clarification，不能用arguments切换为显式工具模式。已识别业务但对象未知时，澄清继续保留对应intent并给出当前用户的有效卡片候选。
 
 新语义报告的timezone为Asia/Shanghai，日期和月份按该业务日期规范化；旧UTC报告保持可读。默认定时时刻为 Asia/Shanghai 09:00（UTC 01:00），未加入任意时分理解。完整回退、无副作用反例及评测口径见 [P1补缺验收](NLP-P1-COMPLETION-2026-10-28.md)。
+
+## U2 增量：联系人转账多轮闭环（2026-10-30）
+
+本增量只扩展联系人转账的一条最小多轮链路，不新开通用会话平台。完整范围和验收见 [U2 报告](U2-CONVERSATION-2026-10-30.md)，前端 Mock 样例见 [`fixtures/u2-conversation.json`](fixtures/u2-conversation.json)。
+
+### 请求字段
+
+`POST /api/agent/run` 新增可选字段：`session_id`、`draft_id`、`draft_version`。`draft_id` 与 `draft_version` 必须成对出现。
+
+`POST /api/confirmations/{action_id}` 新增可选字段：`user_id`、`session_id`、`draft_id`、`draft_version`。确认当前草稿时应原样回传；旧确认或版本不一致返回 409。
+
+### 首轮缺金额
+
+```json
+// POST /api/agent/run
+{"instruction": "给妈妈转钱", "user_id": "demo-user"}
+```
+
+响应关键字段：
+
+```json
+{
+  "status": "needs_clarification",
+  "run_id": "run-draft-1",
+  "session_id": "sess_demo_u2",
+  "reason_code": "missing_amount",
+  "plan": {"intent": "transfer_to_contact", "steps": [], "needs_clarification": true},
+  "draft": {
+    "draft_id": "drf_demo_u2",
+    "session_id": "sess_demo_u2",
+    "version": 1,
+    "status": "awaiting_amount",
+    "reason_code": "missing_amount",
+    "missing_slots": ["amount"],
+    "plan_hash": "",
+    "pending_action_id": null,
+    "expires_at": "2026-10-30T02:45:00+00:00"
+  }
+}
+```
+
+### 补槽与修订
+
+```json
+// POST /api/agent/run
+{"instruction": "五百", "user_id": "demo-user",
+ "session_id": "sess_demo_u2", "draft_id": "drf_demo_u2", "draft_version": 1}
+```
+
+返回 `awaiting_confirmation`，草稿 `version=2`，计划金额 `500.0`。此后可提交：
+
+```json
+// POST /api/agent/run
+{"instruction": "不是500，改成300", "user_id": "demo-user",
+ "session_id": "sess_demo_u2", "draft_id": "drf_demo_u2", "draft_version": 2}
+```
+
+返回新的 `awaiting_confirmation`、新 `confirmation.id`、新 `plan_hash` 和草稿 `version=3`。旧确认再次提交必须返回：
+
+```json
+{"detail": {"code": "draft_version_conflict",
+            "message": "该确认已被新的草稿金额替代，旧确认不可执行。"}}
+```
+### 稳定错误码
+
+| code | HTTP | 说明 |
+|---|---|---|
+| `missing_amount` | 200（首轮澄清）/ 422（金额无效） | 草稿缺金额或补充金额不可解析 |
+| `context_expired` | 409 | 草稿不存在、跨用户、会话不匹配、过期或已结束 |
+| `unsupported_amendment` | 409 | 回复含金额以外的收款人、动作、条件或多金额 |
+| `draft_version_conflict` | 409 | 版本过旧、并发更新、旧确认执行新草稿 |
+
+补充/修订失败时不得生成可执行计划，不得产生待确认动作，也不得扣款。
+
+### 最近转账查询
+
+`POST /api/agent/run` 输入：
+
+```json
+{"instruction": "我刚才转了多少", "user_id": "demo-user"}
+```
+
+返回 `completed`，`results[0].tool_name` 为 `query_recent_transfer`，真实 Mock 流水字段包括：
+
+```json
+{"found": true, "transaction_id": "TX-...", "amount_cny": 300.0,
+ "executed_at": "2026-10-30T02:31:00+00:00", "contact_name": "妈妈",
+ "contact_phone": "139****1111", "to_account_masked": "ACC-****01",
+ "source": "mock_bank_core.bank_transactions", "simulated": true}
+```
+
+无记录时 `found=false`，前端必须显示无记录，不得补造联系人、金额或交易号。该工具只读当前用户、不创建草稿、不执行写操作。
+
+### 边界
+
+- `user_id` 仍为本地演示身份，不是生产认证；
+- 补槽/修订不继承旧授权、旧 MFA、旧 nonce 或旧确认；
+- 只支持联系人转账金额补槽与金额修订；U3 习惯学习/推荐、U5 组合与条件规划、通用跨轮指代均未实施；
+- 草稿默认 TTL 900 秒，每用户最多保留 20 个终态草稿；过期或已结束草稿不继续执行。

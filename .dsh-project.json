@@ -6,7 +6,7 @@
   "stages": {
     "lint": "bash scripts/check.sh lint",
     "build": "bash scripts/check.sh build",
-    "test": "bash scripts/check.sh test"
+    "test": "bash scripts/check.sh test && bash scripts/check.sh scenarios"
   },
   "skipTestFor": ["docs", "text"]
 }

@@ -1,4 +1,5 @@
 import { formatCny } from '../risk';
+import { formatDateTime } from '../viewModel';
 import type { RunResponse } from '../types';
 
 const categoryLabels: Record<string, string> = {
@@ -27,13 +28,20 @@ function cardStatus(value: unknown): string {
   return `未识别状态（${text(value, '')}）`;
 }
 
+function dataSource(value: unknown): string {
+  if (value === true) return '模拟银行回读（simulated=true）';
+  if (value === false) return '银行回读（simulated=false）';
+  return '数据来源未返回';
+}
+
 export default function BusinessReceipt({ run }: { run: RunResponse }) {
   if (run.status !== 'completed') return null;
   const results = run.results?.filter((item) =>
-    ['query_bill', 'bill_report', 'transfer', 'transfer_to_contact', 'report_card_lost', 'unlock_card'].includes(item.tool_name));
+    ['query_bill', 'bill_report', 'transfer', 'transfer_to_contact', 'query_recent_transfer',
+      'report_card_lost', 'unlock_card'].includes(item.tool_name));
   if (!results?.length) return null;
   return (
-    <div className="business-receipts">
+    <div className={'business-receipts'}>
       {results.map((result, index) => {
         const data = result.data ?? {};
         if (result.tool_name === 'query_bill' || result.tool_name === 'bill_report') {
@@ -43,22 +51,64 @@ export default function BusinessReceipt({ run }: { run: RunResponse }) {
           const notes = Array.isArray(anomalies)
             ? anomalies.filter((item): item is string => typeof item === 'string' && Boolean(item.trim())) : [];
           return (
-            <section className="business-receipt business-receipt-bill" aria-label="账单查询结果" key={index}>
+            <section className={'business-receipt business-receipt-bill'} aria-label={'账单查询结果'} key={index}>
               <h3>账单查询结果</h3>
               <p>账期：{text(month, text(label, '账期未返回'))}</p>
-              <p>支出合计 <strong className="receipt-business-amount">{money(total)}</strong></p>
+              <p>支出合计 <strong className={'receipt-business-amount'}>{money(total)}</strong></p>
               {typeof conclusion === 'string' && conclusion.trim() && <p>{conclusion}</p>}
               {entries.length > 0 ? (
-                <dl className="bill-categories">
+                <dl className={'bill-categories'}>
                   {entries.map(([category, amount]) => (
                     <div key={category}><dt>{categoryLabels[category] ?? category}</dt><dd>{money(amount)}</dd></div>
                   ))}
                 </dl>
-              ) : <p className="receipt-business-notice">{hasCategories ? '该账期暂无分类支出。' : '分类明细未返回。'}</p>}
+              ) : <p className={'receipt-business-notice'}>{hasCategories ? '该账期暂无分类支出。' : '分类明细未返回。'}</p>}
               {notes.length > 0 ? <ul>{notes.map((note, noteIndex) => <li key={noteIndex}>{note}</li>)}</ul>
-                : <p className="receipt-business-notice">{Array.isArray(anomalies) && anomalies.length === 0
+                : <p className={'receipt-business-notice'}>{Array.isArray(anomalies) && anomalies.length === 0
                   ? '本次查询未返回异常提示。' : '异常分析未返回。'}</p>}
               <small>来源：本次模拟银行查询回执</small>
+            </section>
+          );
+        }
+        if (result.tool_name === 'query_recent_transfer') {
+          if (data.found !== true) {
+            return (
+              <section className={'business-receipt business-receipt-recent'} aria-label={'最近转账查询结果'} key={index}>
+                <h3>最近转账查询结果</h3>
+                <p className={'receipt-business-notice'}>
+                  {data.found === false
+                    ? '无记录：未查询到最近的转账记录。'
+                    : '查询结果未返回 found 字段，无法判断是否有记录。'}
+                </p>
+                <dl className={'receipt-business-facts'}>
+                  <div><dt>数据来源</dt><dd>{dataSource(data.simulated)}</dd></div>
+                </dl>
+              </section>
+            );
+          }
+          const executedAt = text(data.executed_at, '');
+          return (
+            <section className={'business-receipt business-receipt-recent'} aria-label={'最近转账查询结果'} key={index}>
+              <h3>最近转账查询结果</h3>
+              <p>
+                向 <strong>{text(data.contact_name, '联系人未返回')}</strong> 转账{' '}
+                <strong className={'receipt-business-amount'}>{money(data.amount_cny)}</strong>
+              </p>
+              <dl className={'receipt-business-facts'}>
+                <div><dt>向谁转账</dt><dd>{text(data.contact_name, '联系人未返回')}</dd></div>
+                <div><dt>转账金额</dt><dd>{money(data.amount_cny)}</dd></div>
+                <div>
+                  <dt>执行时间</dt>
+                  <dd>
+                    {executedAt
+                      ? <><time dateTime={executedAt}>{formatDateTime(executedAt)}</time><span className={'receipt-raw-time'}>{`（${executedAt}）`}</span></>
+                      : '执行时间未返回'}
+                  </dd>
+                </div>
+                <div><dt>交易编号</dt><dd>{text(data.transaction_id, '交易编号未返回')}</dd></div>
+                <div><dt>数据来源</dt><dd>{dataSource(data.simulated)}</dd></div>
+              </dl>
+              <small>来源：最近一笔已完成的模拟转账回读；不涉及真实资金。</small>
             </section>
           );
         }
@@ -68,10 +118,10 @@ export default function BusinessReceipt({ run }: { run: RunResponse }) {
           const contact = record(data.contact);
           const status = text(transfer.status, '状态未返回');
           return (
-            <section className="business-receipt business-receipt-transfer" aria-label="转账回执" key={index}>
+            <section className={'business-receipt business-receipt-transfer'} aria-label={'转账回执'} key={index}>
               <h3>转账回执</h3>
-              <p>转账金额 <strong className="receipt-business-amount">{money(transfer.amount_cny)}</strong></p>
-              <dl className="receipt-business-facts">
+              <p>转账金额 <strong className={'receipt-business-amount'}>{money(transfer.amount_cny)}</strong></p>
+              <dl className={'receipt-business-facts'}>
                 {isContactTransfer && <div><dt>收款联系人</dt><dd>{text(contact.name, '联系人未返回')}</dd></div>}
                 <div><dt>转出账户</dt><dd>{text(transfer.from_account, '转出账户未返回')}</dd></div>
                 <div><dt>收款账户</dt><dd>{text(transfer.to_account, '收款账户未返回')}</dd></div>
@@ -84,9 +134,9 @@ export default function BusinessReceipt({ run }: { run: RunResponse }) {
         }
         const title = result.tool_name === 'report_card_lost' ? '卡片挂失回执' : '卡片解挂回执';
         return (
-          <section className="business-receipt business-receipt-card" aria-label={title} key={index}>
+          <section className={'business-receipt business-receipt-card'} aria-label={title} key={index}>
             <h3>{title}</h3>
-            <dl className="receipt-business-facts">
+            <dl className={'receipt-business-facts'}>
               <div><dt>操作卡片</dt><dd>{text(data.card_id, '卡片编号未返回')}</dd></div>
               <div><dt>返回状态</dt><dd>{cardStatus(data.status)}</dd></div>
             </dl>
