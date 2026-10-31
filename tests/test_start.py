@@ -158,7 +158,7 @@ class StartTests(unittest.TestCase):
                 status.read_text().split()[2], "Z", "owned descendant is still running"
             )
 
-    def test_help_and_invalid_timeout_do_not_require_dependencies_or_launch_services(self):
+    def test_help_timeout_and_platform_helpers_do_not_launch_services(self):
         help_result = subprocess.run(
             [sys.executable, str(SCRIPT), "--help"],
             cwd=self.root,
@@ -167,6 +167,33 @@ class StartTests(unittest.TestCase):
         )
         self.assertEqual(help_result.returncode, 0)
         self.assertIn("--no-browser", help_result.stdout)
+        self.assertIn("linux", LAUNCH.SUPPORTED_PLATFORMS)
+        self.assertNotIn("darwin", LAUNCH.SUPPORTED_PLATFORMS)
+
+        def opener(name):
+            return {
+                "xdg-open": "/usr/bin/xdg-open",
+                "powershell.exe": "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+            }.get(name)
+
+        with patch.object(LAUNCH.shutil, "which", side_effect=opener):
+            self.assertEqual(
+                LAUNCH.browser_argv("http://127.0.0.1:5173/", platform="linux", env={}),
+                ["/usr/bin/xdg-open", "http://127.0.0.1:5173/"],
+            )
+            self.assertIsNone(
+                LAUNCH.browser_argv("http://127.0.0.1:5173/", platform="darwin", env={})
+            )
+            wsl_opener = LAUNCH.browser_argv(
+                "http://127.0.0.1:5173/",
+                platform="linux",
+                env={"WSL_DISTRO_NAME": "Ubuntu-24.04"},
+            )
+            self.assertIsNotNone(wsl_opener)
+            self.assertEqual(wsl_opener[-2:], ["Start-Process", "http://127.0.0.1:5173/"])
+            self.assertIsNone(
+                LAUNCH.browser_argv("http://127.0.0.1:5173/", platform="win32", env={})
+            )
         invalid = subprocess.run(
             [sys.executable, str(SCRIPT), "--startup-timeout", "nan"],
             cwd=self.root,

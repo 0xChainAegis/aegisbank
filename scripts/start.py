@@ -1,4 +1,4 @@
-"""One-command local launcher; only Python and Node.js must be preinstalled."""
+"""One-command local launcher for Linux/WSL; only Python and Node.js must be preinstalled."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ UI_URL = "http://127.0.0.1:5173/#/console"
 PORTS = (8000, 5173)
 UV_VERSION = "0.13.5"
 PNPM_VERSION = "10.11.0"
+SUPPORTED_PLATFORMS = frozenset({"linux"})
 
 
 class LaunchError(RuntimeError):
@@ -51,6 +52,24 @@ def node_supported(version: str, engines: str) -> bool:
         if actual >= minimum and (rule[1] == ">=" or actual[0] == minimum[0]):
             return True
     return False
+
+
+def browser_argv(
+    url: str,
+    *,
+    platform: str | None = None,
+    env: dict[str, str] | None = None,
+) -> list[str] | None:
+    """Return a deterministic browser opener for the current desktop platform."""
+    platform = platform or sys.platform
+    env = os.environ if env is None else env
+    if env.get("WSL_DISTRO_NAME"):
+        browser = shutil.which("powershell.exe")
+        return [browser, "-NoProfile", "-Command", "Start-Process", url] if browser else None
+    if platform.startswith("linux"):
+        browser = shutil.which("xdg-open")
+        return [browser, url] if browser else None
+    return None
 
 
 @contextmanager
@@ -284,17 +303,10 @@ class Launcher:
             "按 Ctrl+C 同时停止前后端，演示数据会保留。"
         )
         if not no_browser:
-            browser = (
-                shutil.which("powershell.exe")
-                if os.environ.get("WSL_DISTRO_NAME")
-                else shutil.which("xdg-open")
-            )
-            if browser:
-                argv = (
-                    [browser, "-NoProfile", "-Command", "Start-Process", UI_URL]
-                    if browser.endswith(".exe")
-                    else [browser, UI_URL]
-                )
+            argv = browser_argv(UI_URL)
+            if argv is None:
+                say("未找到浏览器启动器，请手动访问上面的银行助手地址。")
+            else:
                 try:
                     subprocess.run(
                         argv,
@@ -329,8 +341,11 @@ def main() -> int:
         "--startup-timeout", type=float, default=90, help="服务就绪超时秒数，默认90"
     )
     args = parser.parse_args()
-    if sys.platform != "linux":
-        say("请在 Linux 或 WSL 中执行 bash start.sh；原生 Windows Python 不受支持。")
+    if sys.platform not in SUPPORTED_PLATFORMS:
+        say(
+            "请在 Linux 或 WSL 中执行 bash start.sh；原生 Windows Python 不受支持，"
+            "Windows 请从 PowerShell/CMD 运行 start.ps1 或 start.cmd。"
+        )
         return 1
     if not math.isfinite(args.startup_timeout) or not 0 < args.startup_timeout <= 300:
         parser.error("--startup-timeout 必须在 0 到 300 秒之间")
