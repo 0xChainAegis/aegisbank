@@ -16,7 +16,7 @@
       "host_waited_for_services": true,
       "exit_code": 0,
       "signal_stop_released_ports": true,
-      "stdout": "#< CLIXML\n[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n日志：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/launcher-logs/20261031-221232-31298\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\"><Obj S=\"progress\" RefId=\"0\"><TN RefId=\"0\"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N=\"SourceId\">1</I64><PR N=\"Record\"><AV>����׼���״�ʹ��ģ�顣</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>"
+      "stdout": "#< CLIXML\n[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：~/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：~/aegisbank/.runtime/backend/data/quickstart.db\n日志：~/aegisbank/.runtime/launcher-logs/20261031-221232-31298\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\"><Obj S=\"progress\" RefId=\"0\"><TN RefId=\"0\"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N=\"SourceId\">1</I64><PR N=\"Record\"><AV>����׼���״�ʹ��ģ�顣</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>"
     },
     {
       "name": "README CMD exact line",
@@ -28,7 +28,7 @@
         "-d",
         "Ubuntu-24.04",
         "--cd",
-        "/home/lqz5885/aegisbank/dev/aegisbank",
+        "~/aegisbank",
         "--exec",
         "bash",
         "./start.sh"
@@ -40,7 +40,7 @@
       "host_waited_for_services": true,
       "exit_code": 0,
       "signal_stop_released_ports": true,
-      "stdout": "[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n"
+      "stdout": "[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：~/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n"
     },
     {
       "name": "PowerShell UNC wrapper",
@@ -50,7 +50,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "\\\\wsl.localhost\\Ubuntu-24.04\\home\\lqz5885\\aegisbank\\dev\\aegisbank\\start.ps1",
+        "\\\\wsl.localhost\\Ubuntu-24.04\\home\\<user>\\aegisbank\\dev\\aegisbank\\start.ps1",
         "-Distro",
         "Ubuntu-24.04",
         "-NoBrowser"
@@ -62,7 +62,7 @@
       "host_waited_for_services": true,
       "exit_code": 0,
       "signal_stop_released_ports": true,
-      "stdout": "[AegisBank] WSL distro: Ubuntu-24.04\n[AegisBank] Repository: /home/lqz5885/aegisbank/dev/aegisbank\n[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n日志：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/launcher-logs/20261031-221241-31563\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n"
+      "stdout": "[AegisBank] WSL distro: Ubuntu-24.04\n[AegisBank] Repository: ~/aegisbank\n[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：~/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：~/aegisbank/.runtime/backend/data/quickstart.db\n日志：~/aegisbank/.runtime/launcher-logs/20261031-221241-31563\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n"
     },
     {
       "name": "CMD UNC wrapper",
@@ -71,7 +71,7 @@
         "/d",
         "/c",
         "call",
-        "\\\\wsl.localhost\\Ubuntu-24.04\\home\\lqz5885\\aegisbank\\dev\\aegisbank\\start.cmd",
+        "\\\\wsl.localhost\\Ubuntu-24.04\\home\\<user>\\aegisbank\\dev\\aegisbank\\start.cmd",
         "-Distro",
         "Ubuntu-24.04",
         "--no-browser"
@@ -83,7 +83,7 @@
       "host_waited_for_services": true,
       "exit_code": 0,
       "signal_stop_released_ports": true,
-      "stdout": "[AegisBank] WSL distro: Ubuntu-24.04\n[AegisBank] Repository: /home/lqz5885/aegisbank/dev/aegisbank\n[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n日志：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/launcher-logs/20261031-221245-31711\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n"
+      "stdout": "[AegisBank] WSL distro: Ubuntu-24.04\n[AegisBank] Repository: ~/aegisbank\n[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：~/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：~/aegisbank/.runtime/backend/data/quickstart.db\n日志：~/aegisbank/.runtime/launcher-logs/20261031-221245-31711\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n"
     }
   ],
   "source_hashes": {

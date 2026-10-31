@@ -8,10 +8,10 @@
 
 | 位置 | 角色 | 状态 |
 |---|---|---|
-| `/home/lqz5885/aegisbank/dev/aegisbank`（WSL2 ext4） | **开发主线**，所有开发、测试与提交在此完成 | 活跃 |
-| `D:\开发交流\mia03-ether\aegisbank智能体`（Windows 11） | 最初原型 / 历史副本 | **已冻结**，不再开发，仅作展示与单向备份 |
-| `/home/lqz5885/aegisbank/backup/` | Windows 文档备份与 SHA-256 校验清单 | 2026-10-22 建立 |
-| `/home/lqz5885/aegisbank/upstream/aegis-agent/` | 上游参考仓库（只读） | 参考 |
+| `~/aegisbank`（WSL2 ext4） | **开发主线**，所有开发、测试与提交在此完成 | 活跃 |
+| `<workspace>\aegisbank智能体`（Windows 11） | 最初原型 / 历史副本 | **已冻结**，不再开发，仅作展示与单向备份 |
+| `~/aegisbank-backup/` | Windows 文档备份与 SHA-256 校验清单 | 2026-10-22 建立 |
+| `~/aegis-agent/` | 上游参考仓库（只读） | 参考 |
 
 迁移说明：2026-10-22 起项目从「Windows 目录 + `/mnt/d`」迁到 WSL 原生 ext4 分区，原因是 `/mnt` 挂载 I/O 较慢、Windows 与 Linux 在换行符与权限上存在差异、两套环境容易漂移。Windows 侧现在只保留展示与推送用途。
 
@@ -22,8 +22,8 @@
 | Windows 驾驶舱 | Git、Node.js v24、Python 3.14（用于驱动 WSL、运行工作流脚本与 GitHub 推送） |
 | WSL 发行版 | Ubuntu 24.04（WSL2） |
 | Linux 工具链 | git、Node v22.23.3、pnpm 12.10.1、Python 3.12.3、uv 0.12.24、ruff 0.16.10、pytest 9.1.1、jq、gitleaks、shellcheck |
-| 工作流目录（WSL 可见） | `/mnt/d/开发交流/mia03-ether/.dsh-workflow` |
-| 分区挂载 | ext4 loop 镜像 `~/aegisbank.ext4` → `/home/lqz5885/aegisbank`（20 GB，已写入 `/etc/fstab`） |
+| 工作流目录（WSL 可见） | `<workspace>/.dsh-workflow` |
+| 分区挂载 | ext4 loop 镜像 `~/aegisbank.ext4` → `~/aegisbank`（20 GB，已写入 `/etc/fstab`） |
 
 ## 3. 项目依赖（锁定）
 
@@ -63,7 +63,7 @@ pnpm lock: frontend/pnpm-lock.yaml
 ## 5. 本地启动
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/aegisbank
+cd ~/aegisbank
 bash scripts/bootstrap.sh   # 首次安装依赖
 bash scripts/dev.sh         # 同时启动后端与前端
 ```
@@ -88,22 +88,22 @@ bash scripts/smoke.sh
 门禁（在 WSL Ubuntu 中执行）：
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/aegisbank
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/aegisbank -Verbose
+cd ~/aegisbank
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/gate.ps1 \
+  -Repo ~/aegisbank -Verbose
 ```
 
 提交：
 
 ```bash
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/checkpoint.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/aegisbank -Message "docs: ..."
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/checkpoint.ps1 \
+  -Repo ~/aegisbank -Message "docs: ..."
 ```
 
 推送（WSL 内没有配置凭据，使用 Windows 侧 git 访问同一目录）：
 
 ```powershell
-$unc = '\\wsl.localhost\Ubuntu-24.04\home\lqz5885\aegisbank\dev\aegisbank'
+$unc = '\\wsl.localhost\Ubuntu-24.04\home\<user>\aegisbank\dev\aegisbank'
 git -C $unc push origin main
 ```
 
@@ -112,5 +112,5 @@ git -C $unc push origin main
 - `pytest(win)`：Windows 侧没有 pytest 属于预期，项目门禁使用 WSL runner；
 - `security/credential-file`：`.env.example` 因文件名启发式被标记，只包含本地演示变量，无真实凭据；
 - 纯文档改动时门禁 test 阶段会走快速通道并给出 `unverified` 结论，提交会带 `Note: 纯文档改动`，需在交付前补跑一次完整测试；
-- WSL 分区为 loop 镜像，宿主机异常关机后如未自动挂载，需执行 `sudo mount /home/lqz5885/aegisbank`；
+- WSL 分区为 loop 镜像，宿主机异常关机后如未自动挂载，需执行 `sudo mount ~/aegisbank`；
 - 演示数据固定在 SQLite 中，重复演示前建议删除 `backend/data/aegisbank.db` 后重启以恢复种子数据（六场景种子均幂等）。

@@ -136,8 +136,8 @@
       "group": "backend",
       "path": "backend/tests/test_automation.py",
       "runtime_path": "backend/tests/test_automation.py",
-      "bytes": 22940,
-      "sha256": "f8c38991a31e0a1559a57f3baa006ddb03d21f287e7e8d482fd20ab30eb85bf4"
+      "bytes": 22913,
+      "sha256": "caa5223b40fc3f4fc98f7838f3b6139dcb35f01de636accb581499ce470eb51e"
     },
     {
       "group": "backend",
@@ -150,8 +150,8 @@
       "group": "backend",
       "path": "backend/tests/test_bills.py",
       "runtime_path": "backend/tests/test_bills.py",
-      "bytes": 9256,
-      "sha256": "e808d37b7e667900791f4affe2bd4b82493333b5b9de36aea0e87b9e9fd2651d"
+      "bytes": 9325,
+      "sha256": "1f6d548d664785b34ce2ea25509fb7e153e56d80455dd9fd02d2cc8f2c8fe5ef"
     },
     {
       "group": "backend",
@@ -220,8 +220,8 @@
       "group": "backend",
       "path": "backend/tests/test_nlp_safety.py",
       "runtime_path": "backend/tests/test_nlp_safety.py",
-      "bytes": 13713,
-      "sha256": "1940a0e6e671cf7115787ac494b225f3f43bfee43b136db6040099bd1325da4d"
+      "bytes": 13704,
+      "sha256": "0d07851213db05e8015169a32df22cca696e1130ddeb7f8a523e842fd70df812"
     },
     {
       "group": "backend",
@@ -374,8 +374,8 @@
       "group": "backend",
       "path": "docs/DEVELOPMENT-ENVIRONMENT.md",
       "runtime_path": "docs/DEVELOPMENT-ENVIRONMENT.md",
-      "bytes": 5375,
-      "sha256": "5b2c119a9b93efae94767bcd40ffca38be7b5dfc3ba63421e462c15496301c9e"
+      "bytes": 5101,
+      "sha256": "b0c2e809927f468d999c1f7a80dabb2d112f3548be7b0d738a2b5c1a78af0bb5"
     },
     {
       "group": "backend",
@@ -409,8 +409,8 @@
       "group": "backend",
       "path": "scripts/scenario-check.py",
       "runtime_path": "scripts/scenario-check.py",
-      "bytes": 20222,
-      "sha256": "65b4c8c9e67aa74a676175911e17f900e119402271361fb6cd8332849f89c8da"
+      "bytes": 20213,
+      "sha256": "347ec25e289fb6a9ebcee81c55a7d7b0b467c57e0f9b24851b5ac382c11512f5"
     },
     {
       "group": "backend",

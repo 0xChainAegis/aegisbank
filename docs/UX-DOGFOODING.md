@@ -19,7 +19,7 @@
 ## 2. 测试环境
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/aegisbank
+cd ~/aegisbank
 bash scripts/bootstrap.sh
 bash scripts/dev.sh
 ```

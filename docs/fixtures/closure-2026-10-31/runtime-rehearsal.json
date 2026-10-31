@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-10-31T02:58:41.499833+00:00",
-  "root": "/home/lqz5885/aegisbank/dev/aegisbank",
+  "root": "~/aegisbank",
   "checks": {
     "repeat_seed_same_accounts": true,
     "offline_query_preserved_accounts": true,

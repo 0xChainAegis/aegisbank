@@ -308,7 +308,7 @@ def scenario_cross(agent: Agent) -> None:
         f"{len(results)} 步",
     )
 
-    body, final = agent.run_and_complete("帮我准备下个月妈妈的生日，预算 1000 元")
+    body, final = agent.run_and_complete("帮我准备妈妈的生日，预算 1000 元")
     steps = agent.plan_steps(body)
     check(
         "跨场景联动",

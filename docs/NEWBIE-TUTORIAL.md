@@ -32,7 +32,7 @@
 
 ```powershell
 # Windows PowerShell（推荐）：在 WSL 里启动前后端
-wsl -d Ubuntu-24.04 -- bash -lc 'cd /home/lqz5885/aegisbank/dev/aegisbank && bash scripts/dev.sh'
+wsl -d Ubuntu-24.04 -- bash -lc 'cd ~/aegisbank && bash scripts/dev.sh'
 ```
 
 > 注意：`scripts/dev.sh` 默认使用 `backend/data/aegisbank.db`，**不含** 3000 元虚拟卡。
@@ -43,9 +43,9 @@ wsl -d Ubuntu-24.04 -- bash -lc 'cd /home/lqz5885/aegisbank/dev/aegisbank && bas
 
 ```bash
 # 终端 1：后端 API（8000）
-cd /home/lqz5885/aegisbank/dev/aegisbank/backend && uv run uvicorn aegisbank_api.main:app --reload --host 0.0.0.0 --port 8000
+cd ~/aegisbank/backend && uv run uvicorn aegisbank_api.main:app --reload --host 0.0.0.0 --port 8000
 # 终端 2：前端控制台（5173）
-cd /home/lqz5885/aegisbank/dev/aegisbank/frontend && pnpm dev
+cd ~/aegisbank/frontend && pnpm dev
 ```
 
 - 控制台：<http://127.0.0.1:5173>
@@ -56,7 +56,7 @@ cd /home/lqz5885/aegisbank/dev/aegisbank/frontend && pnpm dev
 **先停掉正在运行的后端**（重置数据库时要释放文件），然后执行：
 
 ```powershell
-wsl -d Ubuntu-24.04 -- bash -lc 'cd /home/lqz5885/aegisbank/dev/aegisbank && bash scripts/seed-demo.sh'
+wsl -d Ubuntu-24.04 -- bash -lc 'cd ~/aegisbank && bash scripts/seed-demo.sh'
 ```
 
 脚本会：删除旧的 `backend/data/dogfood.db` → 重建基础演示数据 → 植入：

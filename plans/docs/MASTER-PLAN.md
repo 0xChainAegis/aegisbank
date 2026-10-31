@@ -22,7 +22,7 @@
 | 一句话 | AegisBank 是一个把「自然语言银行指令」编译成可审核 DAG、并在执行前经过动态风险与统一权限网关、执行前用 ActionEnvelope 绑定确认、执行后写入 SHA-256 审计链的银行 AI 智能体原型。 |
 | 赛题 | 人工智能赛道 · 银行 AI 智能体（至少 3 个核心场景 + 权限分级 + 安全机制 + 意图规划 + 五类交付物） |
 | 产品主线 | <https://github.com/LQZ5885/aegisbank>（Public / MIT / `main`） |
-| 开发主线 | WSL Ubuntu 24.04 ext4：`/home/lqz5885/aegisbank/dev/aegisbank` |
+| 开发主线 | WSL Ubuntu 24.04 ext4：`~/aegisbank` |
 | 当前阶段 | 阶段 0 ✅ → 阶段 1 ✅ → 阶段 2B ✅（六场景 6/6）→ 阶段 2A ✅（六项硬要求）→ **阶段 3 交付材料 ✅**（`deliverables/`，视频待人工录制）→ **阶段 2.5 人工体验 🔄 第一轮完成**（`docs/UX-RECORD.md`，前端修复 `25027d8`） |
 | 已完成能力 | 动态风险（金额/日累计/产品等级/操作类型）、**50 个银行工具**（核心 10 + 场景 26 + 2A 扩展 14）、跨场景 DAG、绿/黄/红分级、统一权限网关、ActionEnvelope 确认绑定、幂等键、任务状态机（含 `UNKNOWN / PAUSED / ROLLED_BACK`）、readiness fail-closed、证据分层、注入整条拒绝、模型候选白名单、三类规则熔断、**步骤级暂停/回退/补偿、可疑行为熔断、演示 MFA Provider、IM 渠道、进程内工具沙箱、多角色与撤权**、七页 React 控制台、阶段 3 交付包（简介/技术文档/PPT/视频脚本/安全自评/部署/测试复现） |
 | 六场景覆盖 | **6/6**：账单分析 ✅ / 卡片管理 ✅ / 智能转账 ✅ / 订阅代扣 ✅ / 跨场景联动 ✅ / 理财操作 ✅ |
@@ -85,7 +85,7 @@ AegisBank 不把大模型直接接上几个银行函数，而是给 Agent 增加
 
 | 对象 | 定位 | 仓库/位置 | 状态 |
 |---|---|---|---|
-| 原 Windows 本地 AegisBank | 最初方向验证骨架，3 个工具 | `D:\开发交流\mia03-ether\aegisbank智能体` | **已冻结**，仅作历史与展示，不再开发 |
+| 原 Windows 本地 AegisBank | 最初方向验证骨架，3 个工具 | `<workspace>\aegisbank智能体` | **已冻结**，仅作历史与展示，不再开发 |
 | 新库 AegisBank | **比赛产品主线**，48 工具 + 信任层 + 六场景 + 2A 横切能力 + 五页前端 | <https://github.com/LQZ5885/aegisbank> | 活跃开发 |
 | 上游 AegisAgent | 钱包/支付安全工程参考库 | <https://github.com/0xChainAegis/aegis-agent> | 只读参考，不并入产品链路 |
 
@@ -700,9 +700,9 @@ detail:            人类可读说明
 
 | 位置 | 用途 |
 |---|---|
-| `/home/lqz5885/aegisbank/dev/aegisbank`（WSL ext4） | **唯一开发主线** |
-| `D:\开发交流\mia03-ether\aegisbank智能体`（Windows） | 历史副本，冻结；仅作展示/备份 |
-| `/home/lqz5885/aegisbank/backup/` | Windows 文档备份与校验清单 |
+| `~/aegisbank`（WSL ext4） | **唯一开发主线** |
+| `<workspace>\aegisbank智能体`（Windows） | 历史副本，冻结；仅作展示/备份 |
+| `~/aegisbank-backup/` | Windows 文档备份与校验清单 |
 
 ### 11.2 分支与提交
 

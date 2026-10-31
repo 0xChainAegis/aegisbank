@@ -2,7 +2,7 @@
 
 > **阶段**：阶段 2.5（人工体验 / Dogfooding）第一轮
 > **版本**：v1.0 · 2026-10-23
-> **审计基线**：`702c27f`（2026-10-23，WSL 主线 `/home/lqz5885/aegisbank/dev/aegisbank`）
+> **审计基线**：`702c27f`（2026-10-23，WSL 主线 `~/aegisbank`）
 > **文档性质**：问题记录 + 修复方案；**本报告不含代码改动**
 > **关联文档**：[UX-DOGFOODING.md](UX-DOGFOODING.md) · [ROADMAP.md](ROADMAP.md) §2.5 · [MASTER-PLAN.md](MASTER-PLAN.md)
 
@@ -44,7 +44,7 @@
 
 ```bash
 # 1) 干净数据启动
-cd /home/lqz5885/aegisbank/dev/aegisbank
+cd ~/aegisbank
 bash scripts/seed-demo.sh /tmp/ux-audit.db
 cd backend && AEGIS_DATABASE_PATH=/tmp/ux-audit.db uv run uvicorn aegisbank_api.main:app --host 0.0.0.0 --port 8000
 # 2) 另开终端

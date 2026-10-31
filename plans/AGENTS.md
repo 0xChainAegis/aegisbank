@@ -40,8 +40,8 @@
 | 项 | 值 |
 |---|---|
 | 产品主线仓库 | <https://github.com/LQZ5885/aegisbank>（Public / MIT / 默认分支 `main`） |
-| 开发主线目录 | WSL Ubuntu 24.04 ext4：`/home/lqz5885/aegisbank/dev/aegisbank` |
-| 展示与备份 | Windows `D:\开发交流\mia03-ether\aegisbank智能体`（历史副本，**已冻结，不再开发**） |
+| 开发主线目录 | WSL Ubuntu 24.04 ext4：`~/aegisbank` |
+| 展示与备份 | Windows `<workspace>\aegisbank智能体`（历史副本，**已冻结，不再开发**） |
 | 归档分支 | `archive/upstream-plan-provenance`（历史上游 PR 材料，只读） |
 
 不要在 Windows 历史副本上继续开发；需要展示时从 Linux 主线单向复制。
@@ -66,23 +66,23 @@
 
 ## 门禁与提交
 
-开发主线在 WSL 内，脚本来自工作流目录 `/mnt/d/开发交流/mia03-ether/.dsh-workflow`。
+开发主线在 WSL 内，脚本来自工作流目录 `<workspace>/.dsh-workflow`。
 
 ```bash
 # 门禁（在 WSL Ubuntu 中执行）
-cd /home/lqz5885/aegisbank/dev/aegisbank
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/aegisbank
+cd ~/aegisbank
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/gate.ps1 \
+  -Repo ~/aegisbank
 
 # 提交
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/checkpoint.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/aegisbank -Message "feat: ..."
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/checkpoint.ps1 \
+  -Repo ~/aegisbank -Message "feat: ..."
 ```
 
 推送使用 Windows 侧 git（WSL 内没有配置凭据）：
 
 ```powershell
-$unc = '\\wsl.localhost\Ubuntu-24.04\home\lqz5885\aegisbank\dev\aegisbank'
+$unc = '\\wsl.localhost\Ubuntu-24.04\home\<user>\aegisbank\dev\aegisbank'
 git -C $unc push origin main
 ```
 

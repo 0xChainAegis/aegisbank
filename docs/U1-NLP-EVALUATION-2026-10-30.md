@@ -76,7 +76,7 @@
 复现命令：
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/chainaegis
+cd ~/aegisbank
 python3 scripts/build-u1-corpus.py
 python3 scripts/assemble.py
 

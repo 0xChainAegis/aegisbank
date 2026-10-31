@@ -39,7 +39,7 @@
 相关既有回归已通过：
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/aegisbank/backend
+cd ~/aegisbank/backend
 uv run pytest -q tests/test_planner.py tests/test_subscription_cancel.py tests/test_transfers.py tests/test_security_regressions.py
 ```
 
@@ -146,10 +146,10 @@ uv run pytest -q tests/test_planner.py tests/test_subscription_cancel.py tests/t
 拒绝路径比较所有业务表和待确认动作表的前后快照，并允许必要审计和幂等/续问记录变化；正向路径确认风险分级、实际 Mock 扣款、幂等回放、原指令审计与哈希链。全量后端收集为 252 项 / 17 个文件；前端保持 53 项。
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/aegisbank
+cd ~/aegisbank
 (cd backend && uv run pytest tests/test_nlp_safety.py)
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/aegisbank
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/gate.ps1 \
+  -Repo ~/aegisbank
 (cd backend && uv run python ../scripts/scenario-check.py)
 ```
 

@@ -131,12 +131,12 @@ pnpm dev
 
 ## 5. Stage 1 已验证基线
 
-以下结果来自 2026-10-26 在 `/home/lqz5885/work/aegisbank-day1` 的实际运行：
+以下结果来自 2026-10-26 在 `~/work/aegisbank-day1` 的实际运行：
 
 ### 5.1 组装
 
 ```text
-Assembled 141 files into /home/lqz5885/work/aegisbank-day1/.runtime (141 written, 0 removed).
+Assembled 141 files into ~/work/aegisbank-day1/.runtime (141 written, 0 removed).
 ```
 
 ### 5.2 组装器测试

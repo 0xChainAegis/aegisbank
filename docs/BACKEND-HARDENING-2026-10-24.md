@@ -27,7 +27,7 @@ H01、H02 的业务流程反例和 H03、H04 的故障注入反例均在修复�
 新增 13 项回归：后续设置覆盖及同值变更、交易限额与风险偏好冲突、信用额度冲突、两类恢复风险、红色恢复阻断、复检 MFA、授权/撤权审计故障，以及正常逆序回滚和不同资源隔离。当前后端统计与最终门禁记录见 README 和提交中的 Verified-By / Gate 信息。
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/aegisbank
+cd ~/aegisbank
 export AEGIS_DATABASE_PATH=/tmp/aegisbank-hardening-import.db
 (cd backend && uv run pytest -q)
 (cd backend && uv run python ../scripts/scenario-check.py)
@@ -35,8 +35,8 @@ bash scripts/smoke.sh
 (cd backend && uv export --no-dev --no-hashes --format requirements-txt \
   --output-file /tmp/aegisbank-hardening-requirements.txt)
 uvx pip-audit -r /tmp/aegisbank-hardening-requirements.txt
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/aegisbank
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/gate.ps1 \
+  -Repo ~/aegisbank
 ```
 
 本轮完整后端 200 项通过（16 个测试文件，其中安全回归 56 项）；六场景检查 29/29 通过；真实 HTTP smoke 通过且审计链 valid=true；生产依赖 pip-audit 未发现已知漏洞。门禁包含 Ruff、TypeScript、Python/Vite 构建、后端/前端全量测试和静态安全扫描。依赖零命中只表示扫描时未报告公告，不证明不存在未知漏洞。
