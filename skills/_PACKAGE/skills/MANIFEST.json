@@ -38,8 +38,8 @@
       "group": "skills",
       "path": "backend/aegisbank_api/scenarios/automation.py",
       "runtime_path": "backend/aegisbank_api/scenarios/automation.py",
-      "bytes": 90367,
-      "sha256": "6f9ca73c6403aca339ab41fbc467558c0ee44d3ca76f5fd8ca80ef1219cb128f"
+      "bytes": 90358,
+      "sha256": "c80bad36818f9648feec6beba5b745b92c32041df929076d4bdb4899c09a8ade"
     },
     {
       "group": "skills",

@@ -180,7 +180,7 @@ def test_birthday_flow_is_four_step_dag_and_locks_budget(tmp_path):
         available_before = account(client)["available_cny"]
         balance_before = account(client)["balance_cny"]
 
-        body = run_agent(client, "帮我准备下个月妈妈的生日，预算 1000 元")
+        body = run_agent(client, "帮我准备妈妈的生日，预算 1000 元")
         assert body["status"] == "awaiting_confirmation"
         assert body["risk_level"] == "yellow"
         assert body["plan"]["intent"] == "birthday_plan"
@@ -254,7 +254,7 @@ def test_time_fast_forward_marks_gift_orders_ordered(tmp_path):
     with make_client(tmp_path) as client:
         available_before = account(client)["available_cny"]
         balance_before = account(client)["balance_cny"]
-        _, executed, orders = confirm_birthday(client, "帮我准备下个月妈妈的生日，预算 1000 元")
+        _, executed, orders = confirm_birthday(client, "帮我准备妈妈的生日，预算 1000 元")
         goal = executed["results"][1]["data"]
         due_at = orders[0]["due_at"]
 
@@ -404,7 +404,7 @@ def test_unlock_budget_funds_compensates_and_cancels_pending_gifts(tmp_path):
     with make_client(tmp_path) as client:
         available_before = account(client)["available_cny"]
         balance_before = account(client)["balance_cny"]
-        _, executed, orders = confirm_birthday(client, "帮我准备下个月妈妈的生日，预算 1000 元")
+        _, executed, orders = confirm_birthday(client, "帮我准备妈妈的生日，预算 1000 元")
         goal_id = executed["results"][1]["data"]["goal_id"]
         assert account(client)["available_cny"] == available_before - 1000.0
 

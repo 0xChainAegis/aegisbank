@@ -113,7 +113,7 @@ AegisBank 不把大模型直接接上几个银行函数，而是给 Agent 增加
 
 | 对象 | 定位 | 仓库/位置 | 状态 |
 |---|---|---|---|
-| 原 Windows 本地 AegisBank | 最初方向验证骨架，3 个工具 | `D:\开发交流\mia03-ether\aegisbank智能体` | **已冻结**，仅作历史与展示，不再开发 |
+| 原 Windows 本地 AegisBank | 最初方向验证骨架，3 个工具 | `<workspace>\aegisbank智能体` | **已冻结**，仅作历史与展示，不再开发 |
 | 新库 AegisBank | **比赛产品主线**，51 工具 + 信任层 + 六场景 + 2A 横切能力 + 七页 React 控制台 | <https://github.com/0xChainAegis/aegisbank> | 活跃开发 |
 | 上游 AegisAgent | 钱包/支付安全工程参考库 | <https://github.com/0xChainAegis/aegis-agent> | 只读参考，不并入产品链路 |
 
@@ -728,9 +728,9 @@ detail:            人类可读说明
 
 | 位置 | 用途 |
 |---|---|
-| `/home/lqz5885/aegisbank/dev/aegisbank`（WSL ext4） | **唯一开发主线** |
-| `D:\开发交流\mia03-ether\aegisbank智能体`（Windows） | 历史副本，冻结；仅作展示/备份 |
-| `/home/lqz5885/aegisbank/backup/` | Windows 文档备份与校验清单 |
+| `~/aegisbank`（WSL ext4） | **唯一开发主线** |
+| `<workspace>\aegisbank智能体`（Windows） | 历史副本，冻结；仅作展示/备份 |
+| `~/aegisbank-backup/` | Windows 文档备份与校验清单 |
 
 ### 11.2 分支与提交
 

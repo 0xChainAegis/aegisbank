@@ -3,7 +3,7 @@
   "title": "AegisBank U4 real browser + real FastAPI/Vite/SQLite integration evidence",
   "generated_at": "2026-10-31T02:58:56.905Z",
   "source": {
-    "repository": "/home/lqz5885/aegisbank/dev/aegisbank",
+    "repository": "~/aegisbank",
     "commit": "b33ebe80e10fee4025a2260ac7f4eaa5a4b2fa86",
     "working_tree_dirty": true,
     "working_tree_status": [
@@ -91,7 +91,7 @@
     },
     "services": {
       "backend": {
-        "cwd": "/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend",
+        "cwd": "~/aegisbank/.runtime/backend",
         "command": "PATH=\"$HOME/.local/bin:$PATH\" AEGIS_DATABASE_PATH=/tmp/u4-browser-e2e-20261031025849-8106.db uv run uvicorn aegisbank_api.main:app --host 0.0.0.0 --port 8000",
         "argv": [
           "uv",
@@ -137,7 +137,7 @@
         }
       },
       "frontend": {
-        "cwd": "/home/lqz5885/aegisbank/dev/aegisbank/.runtime/frontend",
+        "cwd": "~/aegisbank/.runtime/frontend",
         "command": "pnpm dev --host 0.0.0.0 --port 5173 --strictPort",
         "argv": [
           "pnpm",

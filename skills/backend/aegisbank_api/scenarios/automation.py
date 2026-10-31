@@ -1921,7 +1921,7 @@ class BirthdayPlanIntent:
         budget = _budget_amount_from(instruction)
         if budget is None or budget <= 0:
             return _clarification(
-                "请补充生日预算，例如：帮我准备下个月妈妈的生日，预算 1000 元。",
+                "请补充生日预算，例如：帮我准备妈妈的生日，预算 1000 元。",
                 "birthday_plan",
             )
         if budget < FLOWER_AMOUNT_CNY + CAKE_AMOUNT_CNY:

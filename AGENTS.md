@@ -32,4 +32,4 @@ NLP P0 与 P1 有界语义模块已落地；原定开放表达泛化验收仍待
 
 ## 作者 Linux 检出的 DSH 门禁
 
-本机检出为 `/home/lqz5885/aegisbank/dev/chainaegis`，Windows 历史副本冻结。`bash scripts/check.sh lint|build|test|scenarios` 在统一 `.runtime` 流程中安装冻结依赖并检查；test 同时覆盖根组装器测试，lint 包含 API 契约核验。本机提交继续使用 `/mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1` 和 `checkpoint.ps1`，`-Repo` 指向该检出。不得在门禁通过后修改源文件而沿用旧结论；Lead 综合自审的提交尾注保留 `Verifier: self`。
+本机检出为 `~/aegisbank`，Windows 历史副本冻结。`bash scripts/check.sh lint|build|test|scenarios` 在统一 `.runtime` 流程中安装冻结依赖并检查；test 同时覆盖根组装器测试，lint 包含 API 契约核验。本机提交继续使用 `<workspace>/.dsh-workflow/scripts/gate.ps1` 和 `checkpoint.ps1`，`-Repo` 指向该检出。不得在门禁通过后修改源文件而沿用旧结论；Lead 综合自审的提交尾注保留 `Verifier: self`。

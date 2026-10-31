@@ -137,7 +137,7 @@
 在 Linux 主线执行，测试只使用隔离的 Mock 库；可以给进程设置临时 AEGIS_DATABASE_PATH，避免模块导入初始化开发用演示库。
 
 ```bash
-cd /home/lqz5885/aegisbank/dev/aegisbank
+cd ~/aegisbank
 export AEGIS_DATABASE_PATH=/tmp/aegisbank-review-import.db
 (cd backend && uv run pytest -q)
 (cd frontend && pnpm test)
@@ -148,8 +148,8 @@ bash scripts/smoke.sh
 (cd frontend && pnpm audit)
 (cd backend && uv export --no-dev --no-hashes --format requirements-txt > /tmp/aegis-req.txt)
 uvx pip-audit -r /tmp/aegis-req.txt
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/aegisbank
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/gate.ps1 \
+  -Repo ~/aegisbank
 ```
 
 验证记录：

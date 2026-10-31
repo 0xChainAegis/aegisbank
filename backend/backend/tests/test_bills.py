@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 
@@ -37,7 +38,7 @@ def test_bill_report_month_green_with_merchants_and_comparison(tmp_path):
         data = run_tool(client, "bill_report", {"account_id": "ACC-1001", "period": "month"})
         assert data["simulated"] is True
         assert data["period"] == "month"
-        assert data["label"] == datetime.now(UTC).strftime("%Y-%m")
+        assert data["label"] == datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m")
         assert data["total_spend_cny"] > 0
         assert data["transaction_count"] > 0
         assert 1 <= len(data["top_merchants"]) <= 5
@@ -57,7 +58,7 @@ def test_bill_report_year_period_uses_annual_window(tmp_path):
         data = run_tool(client, "bill_report", {"account_id": "ACC-1001", "period": "year"})
         assert data["period"] == "year"
         assert data["month"] is None
-        assert data["year"] == datetime.now(UTC).year
+        assert data["year"] == datetime.now(ZoneInfo("Asia/Shanghai")).year
         assert data["total_spend_cny"] > 0
         assert data["categories"]
         assert data["comparison"]["baseline"] == "去年"

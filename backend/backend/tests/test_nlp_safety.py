@@ -228,7 +228,7 @@ def test_supported_compositions_and_schedule_survive(system):
     cases = [
         ("分析我的本月账单并取消异常订阅", ["query_bill", "cancel_subscription"]),
         (
-            "帮我准备下个月妈妈的生日，预算一千元",
+            "帮我准备妈妈的生日，预算一千元",
             [
                 "query_contact_birthday",
                 "lock_budget_funds",

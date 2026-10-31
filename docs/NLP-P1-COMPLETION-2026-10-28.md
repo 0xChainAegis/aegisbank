@@ -2,7 +2,7 @@
 
 本轮在2026-10-29完成收尾验收。
 
-基线：组织主线 `bd6c2b6`，包含 PR #6 的 P1 模块及后续 P0 集成修复。开发位于 Linux `/home/lqz5885/aegisbank/dev/chainaegis`；源码仍由六分类目录组装到 `.runtime`。
+基线：组织主线 `bd6c2b6`，包含 PR #6 的 P1 模块及后续 P0 集成修复。开发位于 Linux `~/aegisbank`；源码仍由六分类目录组装到 `.runtime`。
 
 ## 是否完全实现
 
@@ -46,8 +46,8 @@
 ```bash
 python3 scripts/update_manifests.py --check
 bash scripts/check.sh scenarios
-pwsh -NoProfile -File /mnt/d/开发交流/mia03-ether/.dsh-workflow/scripts/gate.ps1 \
-  -Repo /home/lqz5885/aegisbank/dev/chainaegis
+pwsh -NoProfile -File <workspace>/.dsh-workflow/scripts/gate.ps1 \
+  -Repo ~/aegisbank
 .runtime/backend/.venv/bin/python scripts/evaluate-nlp.py \
   --corpus NLP/backend/evals/nlp/p1-acceptance-dev.json --require-verified
 .runtime/backend/.venv/bin/python scripts/evaluate-nlp.py \
