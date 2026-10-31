@@ -96,25 +96,86 @@ SHA-256 哈希链用于检测日志改动，不等同于数字签名或独立存
 
 ## 快速开始
 
-**在 Linux / WSL 中，进入仓库目录后只需一条命令：**
+`start.sh` 会自动组装源码、安装冻结依赖，并在缺少 `uv/pnpm` 时将工具安装到本项目的 `.runtime/.launcher-tools/`，无需全局安装或管理员权限。首次运行需要联网下载依赖。
+
+只需预装 **Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）**。Windows PowerShell、CMD 与 Linux/WSL 入口使用同一套环境要求，不新增运行时依赖；Windows 两个入口支持仓库位于 Windows 盘符或 WSL 文件系统。macOS 原生入口暂不在本轮验证范围。
+
+### Windows PowerShell
+
+Windows 后端仍在 WSL 中运行，但不需要手动打开 WSL 终端。`start.ps1` 会自动把当前仓库路径转换为 WSL 路径，再执行同一份 `bash start.sh`。
+
+```powershell
+git clone https://github.com/0xChainAegis/aegisbank.git
+cd aegisbank
+.\start.ps1
+```
+
+如果 PowerShell 执行策略阻止脚本，可改用：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+### Windows CMD
+
+在 CMD 中同样不需要进入 WSL 终端。`start.cmd` 会把当前仓库路径转换为 WSL 路径，并调用同一份 `bash start.sh`：
+
+```bat
+git clone https://github.com/0xChainAegis/aegisbank.git
+cd aegisbank
+start.cmd
+```
+
+不自动打开浏览器时：
+
+```bat
+start.cmd --no-browser
+```
+
+### Linux / WSL 终端
 
 ```bash
+git clone https://github.com/0xChainAegis/aegisbank.git
+cd aegisbank
 bash start.sh
 ```
 
-只需预装 **Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）**。脚本自动组装源码、安装冻结依赖，并在缺少 `uv/pnpm` 时将工具安装到本项目的 `.runtime/.launcher-tools/`，无需全局安装或管理员权限。首次运行需要联网下载依赖。
+已经克隆过源码时，进入仓库目录后执行对应入口即可：
 
-服务与审计检查通过后，自动打开[银行助手](http://127.0.0.1:5173/#/console)。默认使用离线规则 Planner 和独立模拟库 `.runtime/backend/data/quickstart.db`，**无需模型密钥，重复启动保留数据**。按 **Ctrl+C** 同时停止前后端；端口占用、重复启动或未就绪会明确报错，不复用未知服务。演示 OTP 为 `246810`。
-
-还没有源码时，可在 Linux / WSL 终端直接运行：
-
-```bash
-git clone https://github.com/0xChainAegis/aegisbank.git && cd aegisbank && bash start.sh
+```powershell
+# Windows PowerShell
+.\start.ps1
 ```
 
-不自动打开浏览器时使用 `bash start.sh --no-browser`。启动失败可查看终端输出的日志目录；高级开发、模型配置和手动启动见[贡献指南](CONTRIBUTING.md)与 [API 交接文档](docs/API-HANDOFF.md)。[API 文档](http://127.0.0.1:8000/docs)和[就绪检查](http://127.0.0.1:8000/api/health/ready)在启动后可用。
+```bat
+# Windows CMD
+start.cmd
+```
 
-首次试用可先查询本月账单，再按页面提示转账或挂失卡片；所有写操作仍须经过风险分级、确认/MFA 与审计，金融结果均为模拟。此入口用于本机演示，原生 Windows Python 不能直接运行后端。
+```bash
+# Linux / WSL
+bash start.sh
+```
+
+启动脚本会在服务与审计检查通过后自动打开[银行助手](http://127.0.0.1:5173/#/console)。默认使用离线规则 Planner 和独立模拟库 `.runtime/backend/data/quickstart.db`，**无需模型密钥，重复启动保留数据**。按 **Ctrl+C** 同时停止前后端；端口占用、重复启动或未就绪会明确报错，不复用未知服务。演示 OTP 为 `246810`。
+
+不自动打开浏览器时，在对应命令末尾加 `--no-browser`：
+
+```powershell
+.\start.ps1 -NoBrowser
+```
+
+```bat
+start.cmd --no-browser
+```
+
+```bash
+bash start.sh --no-browser
+```
+
+启动失败可查看终端输出的日志目录；高级开发、模型配置和手动启动见[贡献指南](CONTRIBUTING.md)与 [API 交接文档](docs/API-HANDOFF.md)。[API 文档](http://127.0.0.1:8000/docs)和[就绪检查](http://127.0.0.1:8000/api/health/ready)在启动后可用。
+
+首次试用可先查询本月账单，再按页面提示转账或挂失卡片；所有写操作仍须经过风险分级、确认/MFA 与审计，金融结果均为模拟。此入口用于本机演示；Windows PowerShell 和 CMD 都通过 WSL 运行后端，原生 Windows Python 不能直接运行后端。
 
 ## 团队协作
 

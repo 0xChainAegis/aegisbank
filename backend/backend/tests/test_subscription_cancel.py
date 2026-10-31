@@ -9,6 +9,7 @@ abnormal-subscription hint, and asks for clarification instead of guessing.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from aegisbank_api.main import create_app
@@ -78,12 +79,51 @@ def test_cancel_executes_end_to_end_and_is_audited(tmp_path):
         assert client.get("/api/audit/verify").json()["valid"] is True
 
 
-def test_generic_subscription_query_is_still_read_only(tmp_path):
+@pytest.mark.parametrize("phrase", [
+    "查看我的订阅",
+    "查看订阅",
+    "查询我的订阅",
+    "看看我的订阅",
+    "看下我的订阅清单",
+    "请帮我查看一下我的订阅列表。",
+    "我的订阅有哪些",
+    "查询订阅列表",
+    "看看订阅",
+])
+def test_generic_subscription_query_is_still_read_only(tmp_path, phrase):
     with make_client(tmp_path) as client:
-        for phrase in ("我的订阅有哪些", "查询订阅列表", "看看订阅"):
-            body = client.post("/api/agent/run", json={"instruction": phrase}).json()
-            assert body["status"] == "completed", (phrase, body)
-            assert plan_steps(body) == ["list_subscriptions"], (phrase, body)
+        before = client.get("/api/banking/overview").json()
+        response = client.post("/api/agent/run", json={"instruction": phrase})
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] == "completed", (phrase, body)
+        assert plan_steps(body) == ["list_subscriptions"], (phrase, body)
+        assert body["risk_level"] == "green"
+        assert body.get("confirmation") is None
+        data = body["results"][0]["data"]
+        assert data["simulated"] is True
+        assert data["subscriptions"] == [
+            item for item in before["subscriptions"] if item["status"] == "active"
+        ]
+        assert client.get("/api/banking/overview").json() == before
+        audit = client.get("/api/audit").json()["entries"]
+        assert any(item["tool_name"] == "list_subscriptions" for item in audit)
+        assert client.get("/api/audit/verify").json()["valid"] is True
+
+
+@pytest.mark.parametrize("phrase", [
+    "查看我的订阅并做个未知操作",
+    "查看我的订阅，只看下个月到期的",
+    "查看其他用户的订阅",
+])
+def test_subscription_query_does_not_ignore_unrecognized_parts(tmp_path, phrase):
+    with make_client(tmp_path) as client:
+        before = client.get("/api/banking/overview").json()
+        body = client.post("/api/agent/run", json={"instruction": phrase}).json()
+        assert body["status"] == "needs_clarification", body
+        assert plan_steps(body) == []
+        assert not body.get("results")
+        assert client.get("/api/banking/overview").json() == before
 
 
 def test_bare_cancel_without_target_asks_for_clarification(tmp_path):

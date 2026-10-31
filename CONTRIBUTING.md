@@ -12,13 +12,24 @@ AegisBank 是面向「银行 AI 智能体」赛题的**可运行原型**。我�
 
 ## 2. 开发环境
 
-后端需要 Linux 或 WSL，因为数据库锁依赖 fcntl。预装 Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）后，仓库根目录运行：
+后端运行在 Linux/WSL，因为数据库锁依赖 fcntl；原生 Windows Python 不受支持。预装 Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）后，在仓库根目录选择对应入口：
+
+```powershell
+# Windows PowerShell：自动转换路径并委托 WSL
+.\start.ps1
+```
+
+```bat
+REM Windows CMD：自动转换路径并委托 WSL
+start.cmd
+```
 
 ```bash
+# Linux / WSL
 bash start.sh
 ```
 
-入口自动准备缺失的项目内 uv/pnpm、组装并安装冻结依赖，首次初始化独立模拟库；重复启动保留数据，Ctrl+C 关闭本次启动的前后端。该入口固定离线规则 Planner、关闭后台自动任务并开启沙箱。`--no-browser` 仅输出地址，`--database /绝对路径/demo.db` 选择已有或新的模拟库，不会重置。
+三个入口都自动准备缺失的项目内 uv/pnpm、组装并安装冻结依赖，首次初始化独立模拟库；重复启动保留数据，Ctrl+C 关闭本次启动的前后端。该入口固定离线规则 Planner、关闭后台自动任务并开启沙箱。`--no-browser` 仅输出地址，`--database /绝对路径/demo.db` 选择已有或新的模拟库，不会重置。macOS 原生入口暂不在本轮验证范围。
 
 开发热重载或使用 .env 中的可选模型配置时，保留手动流程（需要已安装的 uv/pnpm）。每人使用独立检出目录，作者机器上的绝对路径不是前置条件。
 

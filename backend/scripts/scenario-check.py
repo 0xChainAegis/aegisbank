@@ -250,6 +250,19 @@ def scenario_transfers(agent: Agent) -> None:
 
 
 def scenario_subscriptions(agent: Agent) -> None:
+    body = agent.run("查看我的订阅")
+    data = (body.get("results") or [{}])[0].get("data", {})
+    check(
+        "订阅代扣",
+        "页面示例查看我的订阅",
+        body.get("status") == "completed"
+        and agent.plan_steps(body) == ["list_subscriptions"]
+        and body.get("risk_level") == "green"
+        and not body.get("confirmation")
+        and bool(data.get("subscriptions")),
+        f"{len(data.get('subscriptions') or [])} 条订阅",
+    )
+
     body, final = agent.run_and_complete("我的订阅还有哪些要续费")
     data = (final.get("results") or [{}])[0].get("data", {})
     check(
