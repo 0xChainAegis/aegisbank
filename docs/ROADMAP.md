@@ -193,7 +193,7 @@
 |---|---|---|
 | 200 字作品简介 | ✅ 完成 | `deliverables/01-作品简介.md` |
 | 技术文档（架构/算法/安全） | ✅ 完成 | `deliverables/02-技术文档.md` |
-| 10 分钟答辩 PPT | ✅ 已生成（14 页） | `deliverables/03-AegisBank-答辩PPT.pptx` |
+| 10 分钟答辩 PPT | ✅ 已生成（12 页） | `deliverables/current/03-AegisBank-答辩材料.pptx` |
 | 5 分钟演示视频 | ⏳ 脚本完成，待人工录制 | `deliverables/04-演示视频脚本.md` |
 | 安全自评报告 | ✅ 完成 | `deliverables/05-安全自评报告.md` |
 | 部署说明 | ✅ 完成 | `deliverables/06-部署说明.md` |

@@ -8,7 +8,7 @@
 
 > 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
 > 最近更新：2026-10-24（补偿设置冲突、风险/MFA 复检与权限审计事务）。
-> 文中数字与实现一致：50 个工具、49 个 `/api` 接口、5 个场景模块 + 6 个 2A 扩展模块、后端 252 项 pytest（17 个测试文件）。
+> 文中数字与实现一致：51 个工具、49 个 `/api` 接口、5 个场景模块 + 6 个扩展模块、后端 671 项 pytest（36 个测试文件）。
 
 ## 1. 设计目标
 
@@ -166,7 +166,7 @@ AEGIS_LLM_TIMEOUT_SECONDS=20
 
 ### 5.1 Tool SDK
 
-`registry.py` 定义 `BaseTool` 与 `ToolRegistry`。每个工具声明 `name / title / description / risk_level / permission / input_schema / output_schema / arguments_model`，阶段 2A 增加 `compensable / compensation_tool`。当前注册 **50** 个工具：核心 10 + 五个场景模块 26 + 2A 扩展 14（8 个反向工具 + 6 个演示工具）。权限仅预置 demo-user 的显式工具白名单；新用户与新工具默认拒绝，GET 不隐式授予权限。
+`registry.py` 定义 `BaseTool` 与 `ToolRegistry`。每个工具声明 `name / title / description / risk_level / permission / input_schema / output_schema / arguments_model`，阶段 2A 增加 `compensable / compensation_tool`。当前注册 **51** 个工具：核心 10 + 五个场景模块 27 + 扩展 14（8 个反向工具 + 6 个演示工具）。权限仅预置 demo-user 的显式工具白名单；新用户与新工具默认拒绝，GET 不隐式授予权限。
 
 ### 5.2 ToolExecutor / ExecutionGuard 执行链
 
@@ -439,7 +439,7 @@ React 控制台（`frontend/src/`）七个页面：
 - ✅ 证据分层与审计哈希链
 - ✅ 注入整条拒绝、模型候选白名单
 - ✅ 连续失败熔断与运维接口
-- ✅ 场景模块自动发现 + 六场景 6/6（26 个场景工具）
+- ✅ 场景模块自动发现 + 六场景 6/6（27 个场景工具）
 - ✅ 时间维度（任务表 + run-due + 可选后台线程；readiness 503 门禁）
 - ✅ 步骤级暂停/恢复、执行 journal、逆序补偿与人工回退（15 可补偿 / 13 不可逆）
 - ✅ 可疑行为熔断（短时多次红色、注入命中累计）与 operator 解锁

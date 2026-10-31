@@ -150,7 +150,7 @@ bash scripts/dev.sh
 
 ## 参赛材料
 
-- [作品简介](deliverables/01-作品简介.md) · [技术文档](deliverables/02-技术文档.md) · [答辩 PPT](deliverables/03-AegisBank-答辩PPT.pptx)
+- [作品简介](deliverables/01-作品简介.md) · [技术文档](deliverables/02-技术文档.md) · [答辩 PPT](deliverables/current/03-AegisBank-答辩材料.pptx)
 - [演示视频脚本](deliverables/04-演示视频脚本.md)（成片待录制）
 - [安全自评报告](deliverables/05-安全自评报告.md) · [部署说明](deliverables/06-部署说明.md) · [测试与复现](deliverables/07-测试与复现.md)
 
