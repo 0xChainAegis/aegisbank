@@ -1,0 +1,5 @@
+[AegisBank] 保留已有演示数据：/tmp/aegis-start-test-sd6fd1y7/.runtime/backend/data/quickstart.db
+----------------------------------------------------------------------
+Ran 28 tests in 1.157s
+
+OK

@@ -13,6 +13,8 @@ case "${1:-test}" in
       "$ROOT/scripts/evaluate-nlp.py" \
       "$ROOT/scripts/build-u1-corpus.py" \
       "$ROOT/scripts/evaluate-u1.py"
+    "$APP/backend/.venv/bin/ruff" check --config "$ROOT/backend/backend/pyproject.toml" \
+      "$ROOT/scripts/start.py" "$ROOT/tests/test_start.py"
     (cd "$APP/backend" && uv run python "$ROOT/scripts/check_api_contract.py")
     ;;
   build) bash "$APP/scripts/build.sh" ;;

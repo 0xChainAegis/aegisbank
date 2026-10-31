@@ -96,24 +96,25 @@ SHA-256 哈希链用于检测日志改动，不等同于数字签名或独立存
 
 ## 快速开始
 
-**后端需要 Linux 或 WSL**，数据库锁使用 `fcntl`，原生 Windows Python 不能直接运行。安装 Python 3.11+、`uv`、`pnpm`，Node.js 满足 `^22.22.2 || ^24.15.0 || >=26.0.0`。
-
-本仓库保留六个职责包，通过组装脚本生成可运行目录：
+**在 Linux / WSL 中，进入仓库目录后只需一条命令：**
 
 ```bash
-git clone https://github.com/0xChainAegis/aegisbank.git
-cd aegisbank
-python3 scripts/assemble.py
-cd .runtime
-bash scripts/bootstrap.sh
-bash scripts/dev.sh
+bash start.sh
 ```
 
-打开 [银行助手](http://127.0.0.1:5173/#/console)、[API 文档](http://127.0.0.1:8000/docs) 或 [就绪检查](http://127.0.0.1:8000/api/health/ready)。完整的组装、启动与接口请求/返回示例见 [API 交接文档](docs/API-HANDOFF.md)。默认规则 Planner 无需模型密钥；可选 LLM 配置见组装后的 `.runtime/backend/.env.example`，需要覆盖时复制为同目录 `.env`。演示 OTP 为 `246810`。
+只需预装 **Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）**。脚本自动组装源码、安装冻结依赖，并在缺少 `uv/pnpm` 时将工具安装到本项目的 `.runtime/.launcher-tools/`，无需全局安装或管理员权限。首次运行需要联网下载依赖。
 
-首次试用可从首页的账单、880 元转账、卡片挂失三个入口填入指令。入口仅预填，提交和风险确认仍需用户操作；同机演示准备、新模拟库及固定任务卡见 [前端联调与试用交接](docs/DAY1-FRONTEND-HANDOFF-2026-10-26.md)。`localhost` 地址仅用于运行服务的电脑，异地试用由开发者提供可访问环境或共享屏幕。
+服务与审计检查通过后，自动打开[银行助手](http://127.0.0.1:5173/#/console)。默认使用离线规则 Planner 和独立模拟库 `.runtime/backend/data/quickstart.db`，**无需模型密钥，重复启动保留数据**。按 **Ctrl+C** 同时停止前后端；端口占用、重复启动或未就绪会明确报错，不复用未知服务。演示 OTP 为 `246810`。
 
-建议先查询本月账单，再发起 880 元转账并核对确认内容，最后查看审计哈希链。写操作会改变本地模拟状态，重复演示前应核对余额、累计转账和订阅状态。
+还没有源码时，可在 Linux / WSL 终端直接运行：
+
+```bash
+git clone https://github.com/0xChainAegis/aegisbank.git && cd aegisbank && bash start.sh
+```
+
+不自动打开浏览器时使用 `bash start.sh --no-browser`。启动失败可查看终端输出的日志目录；高级开发、模型配置和手动启动见[贡献指南](CONTRIBUTING.md)与 [API 交接文档](docs/API-HANDOFF.md)。[API 文档](http://127.0.0.1:8000/docs)和[就绪检查](http://127.0.0.1:8000/api/health/ready)在启动后可用。
+
+首次试用可先查询本月账单，再按页面提示转账或挂失卡片；所有写操作仍须经过风险分级、确认/MFA 与审计，金融结果均为模拟。此入口用于本机演示，原生 Windows Python 不能直接运行后端。
 
 ## 团队协作
 
@@ -130,7 +131,9 @@ bash scripts/dev.sh
 
 ## 验证记录
 
-### 当前验证基线（2026-10-30 U4 收尾）
+最新的一键启动实现与实测结果见[启动记录（2026-10-31）](docs/ONE-COMMAND-START-2026-10-31.md)，完整门禁状态见本次提交尾注。下表保留 U4 的历史输出。
+
+### 历史验证基线（2026-10-30 U4 收尾）
 
 | 检查项 | 当前实际输出 | 证据 |
 |---|---:|---|
@@ -143,7 +146,7 @@ bash scripts/dev.sh
 | HTTP `/api` 路径 | **49 个** | backend OpenAPI |
 | 前端 `/api` 路径契约 | **39 个全部存在** | 前端路径与 backend OpenAPI 对照 |
 
-当前口径只代表上述已知用例通过，不代表生产安全认证。真实浏览器联调的边界、截图和原始证据见 [U4 交付报告](docs/U4-DELIVERY-2026-10-30.md)。U1 正式人工复核仍为 `pending`、真实模型对照仍为 `not_run`；U3/U5 未实施。
+该次验证口径只代表上述已知用例通过，不代表生产安全认证。真实浏览器联调的边界、截图和原始证据见 [U4 交付报告](docs/U4-DELIVERY-2026-10-30.md)。U1 正式人工复核仍为 `pending`、真实模型对照仍为 `not_run`；U3/U5 未实施。
 
 ### 历史验证快照
 
