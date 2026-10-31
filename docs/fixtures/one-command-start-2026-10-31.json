@@ -1,0 +1,103 @@
+{
+  "database": "/tmp/aegisbank-one-command-q4wqysob/demo.db",
+  "source_base": "177457bdd9888691b6785c1f535eee4b470d7cd4",
+  "cases": [
+    {
+      "iteration": 1,
+      "ready": true,
+      "existing_transfers": [],
+      "stdout": "[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 初始化独立模拟演示库…\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：/tmp/aegisbank-one-command-q4wqysob/demo.db\n日志：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/launcher-logs/20261031-195533-5406\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n",
+      "argv": [
+        "bash",
+        "/home/lqz5885/aegisbank/dev/aegisbank/start.sh",
+        "--no-browser",
+        "--database",
+        "/tmp/aegisbank-one-command-q4wqysob/demo.db"
+      ],
+      "duplicate_refused_without_stopping_first": true,
+      "services_stopped_and_ports_released": true,
+      "final_transfers": [
+        [
+          "ACC-1001",
+          -30000,
+          "posted"
+        ]
+      ]
+    },
+    {
+      "iteration": 2,
+      "ready": true,
+      "existing_transfers": [
+        [
+          "ACC-1001",
+          -30000,
+          "posted"
+        ]
+      ],
+      "stdout": "[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：/tmp/aegisbank-one-command-q4wqysob/demo.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：/tmp/aegisbank-one-command-q4wqysob/demo.db\n日志：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/launcher-logs/20261031-195536-5527\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n",
+      "argv": [
+        "bash",
+        "/home/lqz5885/aegisbank/dev/aegisbank/start.sh",
+        "--no-browser",
+        "--database",
+        "/tmp/aegisbank-one-command-q4wqysob/demo.db"
+      ],
+      "prior_transfer_preserved": true,
+      "services_stopped_and_ports_released": true,
+      "final_transfers": [
+        [
+          "ACC-1001",
+          -30000,
+          "posted"
+        ]
+      ]
+    },
+    {
+      "iteration": 3,
+      "ready": true,
+      "existing_transfers": [
+        [
+          "ACC-1001",
+          -30000,
+          "posted"
+        ]
+      ],
+      "stdout": "[AegisBank] 组装当前源码…\n[AegisBank] 准备本项目的 Python 工具…\n[AegisBank] 安装本项目的 uv…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：/tmp/aegisbank-one-command-q4wqysob/demo.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：/tmp/aegisbank-one-command-q4wqysob/demo.db\n日志：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/launcher-logs/20261031-195538-5637\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n",
+      "argv": [
+        "/usr/bin/python3",
+        "/tmp/aegisbank-one-command-q4wqysob/missing-managers.py",
+        "--no-browser",
+        "--database",
+        "/tmp/aegisbank-one-command-q4wqysob/demo.db"
+      ],
+      "prior_transfer_preserved": true,
+      "services_stopped_and_ports_released": true,
+      "final_transfers": [
+        [
+          "ACC-1001",
+          -30000,
+          "posted"
+        ]
+      ]
+    }
+  ],
+  "default_development_databases_unchanged": true,
+  "status": "passed",
+  "default_command": {
+    "argv": [
+      "bash",
+      "start.sh"
+    ],
+    "database": "/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db",
+    "ready": true,
+    "frontend_http_200": true,
+    "proxy_ready": true,
+    "ctrl_c_exit_code": 0,
+    "ports_released": true,
+    "stdout": "[AegisBank] 组装当前源码…\n[AegisBank] 安装冻结的 Python 依赖…\n[AegisBank] 安装冻结的前端依赖…\n[AegisBank] 保留已有演示数据：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n[AegisBank] 启动后端与银行助手，检查服务就绪和审计链…\n[AegisBank] 已就绪，银行助手：http://127.0.0.1:5173/#/console\n[AegisBank] 当前为离线规则 Planner + Mock Bank Core，无需模型密钥。\n[AegisBank] 演示库：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/data/quickstart.db\n日志：/home/lqz5885/aegisbank/dev/aegisbank/.runtime/launcher-logs/20261031-195716-5960\n按 Ctrl+C 同时停止前后端，演示数据会保留。\n[AegisBank] 已停止本次启动的服务，演示数据已保留。\n"
+  },
+  "launcher_source_sha256": {
+    "start.sh": "6b6fd8910f88ee91eb8997f4eeea72406edbf5c91a376f0baf7b5bf170cb55f7",
+    "scripts/start.py": "5ebf4d4df7a0c7bb5da30294f4893a100ed9a940ad2665647b798aa509a6fde0"
+  }
+}
