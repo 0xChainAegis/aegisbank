@@ -4,6 +4,30 @@
 
 三个入口使用同一套前置要求：Python 3.11+（含 venv/pip）和受支持的 Node.js（含 npm）；入口不要求先全局安装 uv/pnpm。
 
+## Windows 命令修复与复验（2026-10-31）
+
+用户反馈：复制 `powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1` 后未能启动服务。该相对路径依赖当前目录含当前版本脚本；作者的 Windows 历史副本实际没有 `start.ps1/start.cmd`，另一旧 Linux 检出也没有这两个文件，因此只提供相对命令不能定位开发主线。本轮没有获得用户原始错误全文，不将路径问题认定为唯一根因。
+
+本轮检查还发现测试进程的 `PATHEXT` 只有 `.CPL`（机器级配置仍含 `.EXE`），PowerShell 的 `& wsl.exe` 会按文件关联启动，提前返回且可能不设置退出码。旧实现因此存在将“发出了调用”误当作“同步执行完成”的问题。本轮没有修改进程、用户或机器的环境配置；产品通过显式进程创建避免文件关联。
+
+README 首选入口改为从任意 Windows 当前目录启动指定发行版、指定 Linux 仓库的 WSL：PowerShell 使用 `Start-Process ... -NoNewWindow -Wait`，CMD 直接调用 `wsl.exe`；作者本机路径与其他电脑的克隆流程分别说明。无需先进入 Windows 仓库，也不依赖默认发行版。Python/Node 的现有要求保持不变，明确要求其安装在所选 WSL 内。
+
+`start.cmd` 改为委托 `start.ps1`，关闭延迟展开，保留 `!` 字符；PowerShell 增加 `-Repo / -Distro`、发行版冲突及 `start.sh` 存在性检查，通过 `ProcessStartInfo` 直接创建 WSL 进程、等待并传递退出码。Windows argv 按需引用，支持中文、空格、`!`、`&` 和含空格的数据库参数。错误不会伪装成成功。不修改金融工具执行、数据库种子、权限或审计逻辑。
+
+本轮实际检查：
+
+| 检查 | 实际结果 |
+|---|---|
+| README PowerShell 原样一行 | 从 `C:\Windows` 启动真实前后端；Windows 侧确认 8000 ready、5173 代理 ready、页面 HTTP 200、审计 valid |
+| README CMD 原样一行 | 从 `C:\Windows` 启动真实前后端；同上四项 Windows HTTP 检查通过 |
+| PowerShell / CMD UNC 脚本 | 两项均实际启动服务并通过上述 Windows HTTP 检查；宿主持续等待服务 |
+| 退出与隔离 | 四轮分别向本轮 Linux launcher 发送 SIGINT；宿主退出 0，8000/5173 释放；没有终止无关服务 |
+| Windows 盘符特殊路径 | 临时目录含中文、空格、`!`、`&`，实际通过 WSL 路径转换并执行标记脚本；含空格的数据库参数完整保留 |
+| 显式 Linux 仓库 | 从其他 Windows 当前目录通过 `-Repo` 成功读取启动帮助 |
+| 错误仓库 / 发行版 / UNC 冲突 | 均返回非零退出码并打印诊断信息 |
+
+服务实测原始输出与脚本 SHA-256 见[四入口证据](fixtures/windows-start-repair-2026-10-31.json)，路径与失败检查见[路径证据](fixtures/windows-start-paths-2026-10-31.json)。这些是自动启动和 Windows HTTP 验证，不是用户物理键盘的人工体验验收；退出检查使用 SIGINT，不声称已自动验证 Windows 键盘 Ctrl+C 事件。本轮完整门禁状态以修复提交的尾注为准。
+
 ## 行为与边界
 
 1. 检查 Node 版本、同仓库启动锁及8000/5173端口，未知服务或重复启动直接拒绝。
@@ -16,7 +40,7 @@
 
 开发热重载或可选模型配置继续使用 CONTRIBUTING 中的手动流程。此入口不是生产部署、银行认证或自动授权路径，所有金融操作仍走原有网关、确认/MFA、执行守卫和审计。
 
-## 已实际验证
+## 首轮自动验证（历史记录）
 
 | 检查 | 实际结果 |
 |---|---|

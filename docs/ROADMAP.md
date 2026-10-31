@@ -1,5 +1,7 @@
 # AegisBank 产品路线图
 
+> 2026-10-31 Windows 启动纠正：README 首选命令改为从任意 PowerShell/CMD 目录指定 WSL 发行版与 Linux 主线路径，PowerShell 使用 `Start-Process ... -NoNewWindow -Wait`、CMD 直接调用 `wsl.exe`，明确发行版与 Linux 主线；其他电脑提供 WSL 主目录克隆/启动流程。Windows 脚本合并到一份 PowerShell 实现，支持显式 `-Repo / -Distro` 与仓库文件预检。环境要求不变；旧 Windows 历史副本保持冻结。验证范围见[启动记录](ONE-COMMAND-START-2026-10-31.md)。
+
 > 2026-10-31 人工体验修复：补齐场景五「查看我的订阅」的完整句校验语法，订阅列表按绿色只读路径执行；加入 API 与六场景页面原文回归，未知尾任务仍要求澄清。详见[修复记录](SUBSCRIPTION-QUERY-FIX-2026-10-31.md)，其他人工体验待办继续保留。
 
 > 2026-10-31 本地运行入口简化：`bash start.sh` 替代首次试用的手动组装/安装/启动步骤；已有库保留，异常不伪装就绪，不关闭其他服务。实现、启动及进程生命周期验证见[一键启动记录](ONE-COMMAND-START-2026-10-31.md)，原有人工验收和生产化待办不因此完成。

@@ -1,0 +1,27 @@
+[
+  {
+    "case": "drive path with Chinese spaces bang ampersand",
+    "exit_code": 0,
+    "stdout": "[AegisBank] WSL distro: Ubuntu-24.04\n[AegisBank] Repository: /mnt/c/Users/LQZ-K/AppData/Local/Temp/AegisBank 启动 ! & check\nPATH_OK:/mnt/c/Users/LQZ-K/AppData/Local/Temp/AegisBank 启动 ! & check\nARG:--no-browser\nARG:--database\nARG:/tmp/演示 ! & bank.db\n"
+  },
+  {
+    "case": "explicit Linux repo from other cwd",
+    "exit_code": 0,
+    "stdout": "[AegisBank] WSL distro: Ubuntu-24.04\n[AegisBank] Repository: /home/lqz5885/aegisbank/dev/aegisbank\nusage: start.py [-h] [--no-browser] [--database DATABASE]\n                [--startup-timeout STARTUP_TIMEOUT]\n\nAegisBank 一键启动：组装、安装、保留数据并启动服务\n\noptions:\n  -h, --help            show this help message and exit\n  --no-browser          仅输出地址，不自动打开浏览器\n  --database DATABASE   使用指定的模拟数据库；不会重置已有数据\n  --startup-timeout STARTUP_TIMEOUT\n                        服务就绪超时秒数，默认90\n"
+  },
+  {
+    "case": "missing repo",
+    "exit_code": 1,
+    "stdout": "[AegisBank] WSL distro: Ubuntu-24.04\n[AegisBank] Repository: /tmp/aegisbank-nonexistent-checkout\n[AegisBank] 所选发行版无法读取 /tmp/aegisbank-nonexistent-checkout/start.sh；请核对发行版与 Linux 主线路径，不要使用冻结的 Windows 历史副本。\r\n"
+  },
+  {
+    "case": "UNC distro mismatch",
+    "exit_code": 1,
+    "stdout": "[AegisBank] -Distro NoSuchDistro 与仓库 UNC 路径中的 Ubuntu-24.04 不一致。\r\n"
+  },
+  {
+    "case": "missing distro",
+    "exit_code": 1,
+    "stdout": "[AegisBank] WSL distro: NoSuchDistro\n[AegisBank] Repository: /home/lqz5885/aegisbank/dev/aegisbank\n\rNX[(WwQ\tg@b�c�O\rT�y�v\u0006R�S\u00020\r\u0000\n\u0000\u0019���N\u0001x:\u0000 \u0000W\u0000s\u0000l\u0000/\u0000S\u0000e\u0000r\u0000v\u0000i\u0000c\u0000e\u0000/\u0000W\u0000S\u0000L\u0000_\u0000E\u0000_\u0000D\u0000I\u0000S\u0000T\u0000R\u0000O\u0000_\u0000N\u0000O\u0000T\u0000_\u0000F\u0000O\u0000U\u0000N\u0000D\u0000\r\u0000\n\u0000[AegisBank] 所选发行版无法读取 /home/lqz5885/aegisbank/dev/aegisbank/start.sh；请核对发行版与 Linux 主线路径，不要使用冻结的 Windows 历史副本。\r\n"
+  }
+]
