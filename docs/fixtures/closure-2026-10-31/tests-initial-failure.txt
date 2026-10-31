@@ -1,0 +1,219 @@
+Assembled 190 files into /home/lqz5885/aegisbank/dev/aegisbank/.runtime (0 written, 0 removed).
+test_archive_rejects_linked_source_directories (test_assemble.AssembleTests.test_archive_rejects_linked_source_directories) ... ok
+test_assembles_source_archive_without_git_metadata (test_assemble.AssembleTests.test_assembles_source_archive_without_git_metadata) ... ok
+test_cli_rejects_custom_output_paths (test_assemble.AssembleTests.test_cli_rejects_custom_output_paths) ... ok
+test_conflicting_duplicates_fail_before_any_runtime_change (test_assemble.AssembleTests.test_conflicting_duplicates_fail_before_any_runtime_change) ... ok
+test_excludes_metadata_secrets_dependencies_and_runtime_data (test_assemble.AssembleTests.test_excludes_metadata_secrets_dependencies_and_runtime_data) ... ok
+test_git_checkout_errors_do_not_fall_back_to_archive_scanning (test_assemble.AssembleTests.test_git_checkout_errors_do_not_fall_back_to_archive_scanning) ... ok
+test_identical_duplicate_paths_are_allowed (test_assemble.AssembleTests.test_identical_duplicate_paths_are_allowed) ... ok
+test_includes_unstaged_source_and_respects_git_ignores (test_assemble.AssembleTests.test_includes_unstaged_source_and_respects_git_ignores) ... ok
+test_merges_allowed_roots_and_env_example_without_modifying_modules (test_assemble.AssembleTests.test_merges_allowed_roots_and_env_example_without_modifying_modules) ... ok
+test_refuses_overwriting_an_unmanaged_source_target (test_assemble.AssembleTests.test_refuses_overwriting_an_unmanaged_source_target) ... ok
+test_refuses_overwriting_or_deleting_a_modified_generated_file (test_assemble.AssembleTests.test_refuses_overwriting_or_deleting_a_modified_generated_file) ... ok
+test_rejects_case_only_collisions (test_assemble.AssembleTests.test_rejects_case_only_collisions) ... ok
+test_rejects_output_file_directory_collision (test_assemble.AssembleTests.test_rejects_output_file_directory_collision) ... ok
+test_rejects_output_symlinks_and_invalid_output_file (test_assemble.AssembleTests.test_rejects_output_symlinks_and_invalid_output_file) ... ok
+test_rejects_runtime_parent_symlinks (test_assemble.AssembleTests.test_rejects_runtime_parent_symlinks) ... ok
+test_rejects_source_symlinks (test_assemble.AssembleTests.test_rejects_source_symlinks) ... ok
+test_rejects_traversal_and_runtime_directories_in_manifest (test_assemble.AssembleTests.test_rejects_traversal_and_runtime_directories_in_manifest) ... ok
+test_repeat_assembly_updates_and_deletes_only_owned_sources (test_assemble.AssembleTests.test_repeat_assembly_updates_and_deletes_only_owned_sources) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.468s
+
+OK
+[test] backend · pytest
+........................................................................ [ 11%]
+........................................................................ [ 22%]
+........................................................................ [ 33%]
+........................................................................ [ 44%]
+........................................................................ [ 55%]
+..............................F......................................... [ 66%]
+........................................................................ [ 77%]
+........................................................................ [ 88%]
+........................................................................ [ 99%]
+....                                                                     [100%]
+=================================== FAILURES ===================================
+_________ test_semantic_reference_date_and_birthday_today_use_shanghai _________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7921801c4710>
+tmp_path = PosixPath('/tmp/pytest-of-lqz5885/pytest-0/test_semantic_reference_date_a0')
+
+    def test_semantic_reference_date_and_birthday_today_use_shanghai(monkeypatch, tmp_path):
+        real_datetime = datetime
+    
+        class FixedDatetime(real_datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = real_datetime(2026, 10, 29, 16, 30, tzinfo=UTC)
+                return base.astimezone(tz) if tz is not None else base.replace(tzinfo=None)
+    
+        with make_client(tmp_path) as client:
+            services = client.app.state.services
+            rule = RuleBasedPlanner(services.registry, services.repository)
+            request = PlanningRequest(instruction="明天给张三转500")
+            monkeypatch.setattr(semantic_module, "datetime", FixedDatetime)
+>           plan = verify_frame(analyze_rules(request.instruction), request, rule)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_second_retest_nlp.py:226: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+frame = SemanticFrame(schema_version='SemanticFrame/v1', intents=[SemanticIntent(id='i1', kind='scheduled_transfer', span=Text...t='500')})], conditions=[], ordering=[], uncovered=[], missing_slots=[], needs_clarification=False, clarification=None)
+request = PlanningRequest(user_id='demo-user', instruction='明天给张三转500', tool_name=None, arguments={})
+rule = <aegisbank_api.planning.rule.RuleBasedPlanner object at 0x79217333b9b0>
+specs = {'balance': SemanticSpec(kind='balance', patterns=('(?:查(?:询|看|一下)?|查查|看看|看下|查看一下)(?:我的?(?:账户)?|账户)?余额', '(?:我的?)?(?:账...chedule_transfer',), bindings={'date': (0, 'run_at'), 'contact': (0, 'to_account'), 'amount': (0, 'amount_cny')}), ...}
+today = datetime.date(2026, 10, 30)
+
+    def verify_frame(frame, request, rule, specs=None, today=None):
+        """Returns a deterministic plan; model values/tools/permissions are never used."""
+        specs = specs or collect_semantic_specs()
+        today = today or datetime.now(SHANGHAI_TZ).date()
+        item = _candidate_shape(frame, request.instruction, specs)
+        spec = specs[item.kind]
+        resolved, evidence = {}, []
+        for key, kind in spec.slot_types.items():
+            mention = item.slots.get(key)
+            raw = mention.text.strip() if mention else None
+            source, method = "user_text", "literal"
+            if raw is None:
+                if key == "account":
+                    raw = "ACC-1001"
+                    source, method = "demo_policy", "explicit_demo_default"
+                elif key == "period":
+                    raw = "本月"
+                    source, method = "demo_policy", "current_month_default"
+                else:
+                    frame.missing_slots.append(f"{item.id}.{key}")
+                    raise SemanticError(f"请补充{_slot_label(key)}，系统不会猜测关键参数")
+            try:
+                if kind == "money":
+                    value, method = str(parse_amount(raw)), "decimal_whole_token"
+                elif kind in (
+                    "account",
+                    "card",
+                    "subscription",
+                    "contact",
+                    "contact_name",
+                    "contact_account",
+                    "product",
+                ):
+                    rows = collect_entity_facts(
+                        rule.repository, request.user_id, "contact" if kind == "contact_name" else kind
+                    )
+                    def name_matches(
+                        name: str, *, kind: str = kind, raw: str = raw
+                    ) -> bool:
+                        if kind == "account":
+                            return _account_key(raw) == _account_key(name)
+                        if kind == "subscription":
+                            return _subscription_key(raw) == _subscription_key(name)
+                        return (
+                            raw.replace(" ", "").casefold()
+                            == name.replace(" ", "").casefold()
+                        )
+    
+                    hits = [
+                        (value, names)
+                        for value, names in rows
+                        if any(name_matches(name) for name in names)
+                    ]
+                    if len(hits) != 1:
+                        options = hits or (rows if kind == "card" else [])
+                        if kind == "card":
+                            choices = [
+                                identity
+                                + "（"
+                                + next(
+                                    (name for name in names if name.startswith("尾号")), "未提供尾号"
+                                )
+                                + "）"
+                                for identity, names in options
+                            ][:8]
+                        else:
+                            choices = [
+                                names[0] + "（尾号" + value[-4:] + "）" for value, names in options
+                            ][:8]
+                        unresolved = SlotEvidence(
+                            intent_id=item.id,
+                            slot=key,
+                            span=mention,
+                            value=raw,
+                            source="mock_entity_catalog",
+                            verified=False,
+                            verification_kind="ambiguous_or_missing",
+                            candidates=choices,
+                        )
+                        raise SemanticError(
+                            f"未找到唯一的{_slot_label(key)}「{raw}」；"
+                            + (
+                                ("匹配到多个对象，请选择：" if hits else "请选择有效卡片：")
+                                + "、".join(choices)
+                                if choices
+                                else "请明确有效对象"
+                            ),
+                            [*evidence, unresolved],
+                        )
+                    value = hits[0][1][0] if kind == "contact_name" else hits[0][0]
+                    if source != "demo_policy":
+                        source = "mock_entity_catalog"
+                    method = "user_scoped_exact_entity"
+                elif kind == "day":
+                    day = parse_amount(raw)
+                    if day != day.to_integral_value() or not 1 <= day <= 28:
+                        raise SemanticError("还款日必须为 1–28 日")
+                    value = str(int(day))
+                    method = "repayment_day_range"
+                elif kind == "date":
+                    value, source, method = (
+                        _resolve_date(raw, today),
+                        "calendar",
+                        "shanghai_future_calendar_date",
+                    )
+                elif kind == "month":
+                    month = today.replace(day=1)
+                    if raw in ("上月", "上个月"):
+                        month = month - timedelta(days=1)
+                    value, source, method = (
+                        month.strftime("%Y-%m"),
+                        source if source == "demo_policy" else "calendar",
+                        "shanghai_month_normalization",
+                    )
+                elif kind == "risk_level":
+                    value = raw.upper()
+                    if not re.fullmatch(r"R[1-5]", value):
+                        raise SemanticError("风险等级必须为 R1–R5")
+                    method = "bounded_wealth_risk_level"
+                else:
+                    raise SemanticError("未知槽位类型")
+            except (ValueError, AmountError) as exc:
+                if isinstance(exc, SemanticError):
+                    raise
+                raise SemanticError(f"{_slot_label(key)}无法验证：{exc}") from exc
+            resolved[key] = value
+            evidence.append(
+                SlotEvidence(
+                    intent_id=item.id,
+                    slot=key,
+                    span=mention,
+                    value=value,
+                    source=source,
+                    verification_kind=method,
+                )
+            )
+        canonical = spec.template.format(**resolved)
+        # No tool is invoked here: templates target the existing declarative planner.
+        plan = rule.plan(request.model_copy(update={"instruction": canonical}))
+        if plan.needs_clarification:
+>           raise SemanticError(plan.clarification, evidence)
+E           aegisbank_api.planning.semantic.SemanticError: 执行时间必须晚于当前时间，请调整时间。
+
+aegisbank_api/planning/semantic.py:400: SemanticError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_second_retest_nlp.py::test_semantic_reference_date_and_birthday_today_use_shanghai
