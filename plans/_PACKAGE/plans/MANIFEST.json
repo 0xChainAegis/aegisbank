@@ -45,15 +45,15 @@
       "group": "plans",
       "path": "docs/MASTER-PLAN.md",
       "runtime_path": "docs/MASTER-PLAN.md",
-      "bytes": 74318,
-      "sha256": "177903e3493456d0775e9119378d7b696bf29e8530379a3a38b8e2998b0b1fe6"
+      "bytes": 74314,
+      "sha256": "6d566e4d36691d9c92bff0d865a97480ef6b1ead9d98eadd28a273340f3a62b7"
     },
     {
       "group": "plans",
       "path": "docs/ROADMAP.md",
       "runtime_path": "docs/ROADMAP.md",
-      "bytes": 15836,
-      "sha256": "d70fb63d68c1f08e877eb6d48ad7b542bcac62068d08a4421c87cdb291ac7b50"
+      "bytes": 15847,
+      "sha256": "f4753b49c2622428922f9f3e22baae8099e881ac1e06ec95b3e22e446af4c91c"
     },
     {
       "group": "plans",

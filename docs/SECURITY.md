@@ -8,7 +8,7 @@
 
 > 2026-10-23 安全复审后更新；本轮修复、反例与验收见 [安全修复记录](REMEDIATION-PLAN-2026-10-23.md)。
 > 最近更新：2026-10-24（后端补偿与权限审计补强，详见本轮记录）。
-> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 17 个测试文件（252 条）。
+> 实现依据：`backend/aegisbank_api/trust/`、`executor.py`、`compensation.py`、`extensions/`、`channels/im.py`、`gateway.py`、`scheduler.py`、`audit.py`、`main.py`、`db.py`、`planning/llm.py`、`scenarios/`；测试依据：`backend/tests/` 36 个测试文件（671 条）。
 
 ## 1. 信任层实现（阶段 1）
 
@@ -233,7 +233,7 @@ rule / llm / auto 与显式工具入口共用 `planning/safety.py`；预览、�
 
 ## 3. 工具权限与风险基线
 
-工具必须继承 `BaseTool` 并声明 `risk_level` 与 `permission`；动态风险只能保持或上调。当前工具目录共 **50** 个（核心 10 + 场景 26 + 2A 扩展 14），其中 15 个声明 `compensable=true`。
+工具必须继承 `BaseTool` 并声明 `risk_level` 与 `permission`；动态风险只能保持或上调。当前工具目录共 **51** 个（核心 10 + 场景 27 + 扩展 14），其中 15 个声明 `compensable=true`。
 
 ### 3.1 核心工具（`backend/aegisbank_api/tools/finance.py`）
 

@@ -1,16 +1,15 @@
-# 当前参赛候选材料（2026-10-31）
+# 参赛材料成品（2026-10-31 版本）
 
-已按本轮源码、自动验收与已知边界更新，不再使用10月25日二进制快照。实测记录见[收尾报告](../../docs/CLOSURE-2026-10-31.md)，[人工事项](../../docs/CLOSURE-MANUAL-2026-10-31.md)尚未关闭，候选包不等于正式提交。
+本目录文件由仓库源码与同源 Markdown 生成，不单独维护第二份内容。技术文档正文来自 `../02-技术文档.md`，安全自评正文来自 `../05-安全自评报告.md`，答辩 PPT 由 `../../scripts/export-deliverables.py` 生成。
 
-| 材料 | 文件 | 自动检查与剩余 |
+| 材料 | 文件 | 说明 |
 |---|---|---|
-| 技术文档 | [Word](02-AegisBank-技术文档.docx) / [PDF](02-AegisBank-技术文档.pdf) | 同源Markdown；PDF渲染检查，Word实际分页待人工 |
-| 安全自评 | [Word](04-AegisBank-安全自评报告.docx) / [PDF](04-AegisBank-安全自评报告.pdf) | 含权限分级与风险清单；同上 |
-| 答辩 | [12页PPT](03-AegisBank-答辩材料.pptx) / [预览PDF](03-AegisBank-答辩材料.pdf) | PowerPoint渲染检查；实际汇报≤10分钟待彩排 |
-| 作品简介 | [报名正文](../01-作品简介.md) | 184字符（含空格），≤200字；上传前人工审阅 |
-| 视频 | [4分40秒分镜](../04-演示视频脚本.md) | 尚无成片，须人工录制并核对≤5分钟 |
-| 源码及复现 | [部署](../06-部署说明.md) / [测试](../07-测试与复现.md) | 独立库及干净源码复现证据见收尾报告；源码zip在本机交付目录 |
+| 技术文档 | [Word](02-AegisBank-技术文档.docx) / [PDF](02-AegisBank-技术文档.pdf) | 架构图、核心机制与验证边界；PDF 由同源 Markdown 经 ReportLab 导出 |
+| 安全自评 | [Word](04-AegisBank-安全自评报告.docx) / [PDF](04-AegisBank-安全自评报告.pdf) | 权限分级、安全控制与已知风险清单 |
+| 答辩 | [12 页 PPT](03-AegisBank-答辩材料.pptx) / [预览 PDF](03-AegisBank-答辩材料.pdf) | PPT 由脚本生成，PDF 由本机 PowerPoint 导出 |
+| 架构图 | [architecture.png](architecture.png) | 技术文档与 PPT 共用 |
+| 作品简介 | [报名正文](../01-作品简介.md) | 184 字符（含空格），≤200 字 |
+| 视频 | [分镜脚本](../04-演示视频脚本.md) | 成片按大赛要求控制在 5 分钟以内 |
+| 复现 | [部署说明](../06-部署说明.md) / [测试与复现](../07-测试与复现.md) | 一键启动与全量验证命令 |
 
-技术/安全Word由python-docx生成；对应PDF因本机Word导出无响应，使用ReportLab从同一Markdown生成，不声称是Word版式渲染。PPT由python-pptx生成并经本机PowerPoint导出PDF/图片。见[文档缩略图](../../docs/fixtures/closure-2026-10-31/documents-contact-sheet.jpg)和[PPT缩略图](../../docs/fixtures/closure-2026-10-31/ppt-contact-sheet.jpg)。
-
-真实模型对照按用户选择暂缓，人工金标仍pending；所有金融结果来自Mock Bank Core，固定MFA、角色请求头和进程内沙箱仅用于演示。生产身份、真实MFA/IM、OS隔离、U3/U5均不因此完成。
+所有账户、卡片、交易、账单、订阅、理财与转账结果均为模拟数据；演示 OTP、模拟生物识别与角色请求头仅用于本地演示。

@@ -408,7 +408,7 @@ X-Aegis-Role: auditor / operator               → 只读 / 不可执行；opera
 |---|---|---|
 | 作品简介 | ≤200 字，含创作理念与所用 AI 技术 | ✅ `deliverables/01-作品简介.md`（199 字符/190 字） |
 | 技术文档 | 系统架构图、核心算法说明、安全设计文档 | ✅ `deliverables/02-技术文档.md`（含 Mermaid 架构图） |
-| 答辩 PPT | 汇报 ≤10 分钟 | ✅ `deliverables/03-AegisBank-答辩PPT.pptx`（14 页，含演讲备注与时间控制） |
+| 答辩 PPT | 汇报 ≤10 分钟 | ✅ `deliverables/current/03-AegisBank-答辩材料.pptx`（12 页，含演讲备注） |
 | 演示视频 | ≤5 分钟 | ⏳ 分镜与口播稿已完成（`deliverables/04-演示视频脚本.md`）；**视频待人工录制** |
 | 作品信息 | 源码、README、GitHub 地址、部署说明、测试用例 | ✅ `deliverables/06/07` + 仓库 README |
 | 安全自评报告 | 权限分级实现说明 + 已知风险清单 | ✅ `deliverables/05-安全自评报告.md` |

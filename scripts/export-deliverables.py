@@ -83,9 +83,9 @@ def export_word(source: Path, output: Path, image_path: Path) -> None:
     document.styles["Normal"].font.size = Pt(10.5)
     document.styles["Normal"].paragraph_format.space_after = Pt(6)
     document.styles["Normal"].paragraph_format.line_spacing = 1.15
-    section.header.paragraphs[0].text = "AegisBank  |  2026-10-31 自动收尾候选版"
+    section.header.paragraphs[0].text = "AegisBank  |  参赛材料"
     footer = section.footer.paragraphs[0]
-    footer.text = "模拟银行原型 · 人工验收与正式提交另行确认  |  "
+    footer.text = "模拟银行原型 · 所有金融数据均为模拟  |  "
     field = OxmlElement("w:fldSimple")
     field.set(qn("w:instr"), "PAGE")
     footer._p.append(field)
@@ -186,7 +186,7 @@ def export_pdf(source: Path, output: Path, image_path: Path) -> None:
     def footer(canvas, document):
         canvas.setFont("AegisCJK", 8)
         canvas.setFillColor(colors.HexColor("#526579"))
-        canvas.drawString(45, 24, f"AegisBank · 2026-10-31 候选版 · 同源 PDF / ReportLab  |  {document.page}")
+        canvas.drawString(45, 24, f"AegisBank · 参赛材料 · 同源 PDF / ReportLab  |  {document.page}")
 
     document = SimpleDocTemplate(str(output), pagesize=A4, leftMargin=45, rightMargin=45,
                                  topMargin=40, bottomMargin=42)
@@ -217,28 +217,28 @@ def export_ppt(output: Path, image_path: Path) -> None:
         ("AegisBank", "用自然语言办理模拟银行业务\n计划可核对 · 授权不继承 · 结果有证据", "可信银行 AI 智能体原型；所有金融数据与资金变动均为模拟。"),
         ("比赛目标与交付范围", "六类代表场景：转账 / 账单 / 理财 / 卡片 / 订阅 / 跨场景\n绿黄红分级、审计、熔断、沙箱、有序 DAG 与人工接管\n自然语言能力有界；歧义时澄清，禁止猜测执行", "先演示三个核心场景，其余复用六场景自动检查证据。"),
         ("一条受控执行链", "architecture", "Planner 只生成候选；编译、授权、风险、执行与证据由确定性代码控制。"),
-        ("绿 / 黄 / 红：风险只升不降", "绿色：余额、账单等查询自动执行\n黄色：小额转账（日累计含本次≤1000元）明确确认\n红色：累计>1000元、挂失、理财申购等确认＋演示MFA\n模型不能降低工具基线风险", "演示 OTP 和模拟生物识别仅证明流程，不能视为生产强认证。"),
-        ("补槽与金额修订：确认只属于当前草稿", "给妈妈转钱 → 五百 → 改成三百\n新计划 / 新 nonce / 重新评级 / 重新确认\n旧确认409；最终只有一笔300元模拟转账\n最近金额与收款人从本人已完成流水回读", "展示真实自动联调截图，并说明 CDP 自动交互不是独立人工验收。"),
+        ("绿 / 黄 / 红：风险只升不降", "绿色：余额、账单等查询自动执行\n黄色：小额转账（日累计含本次≤1000元）明确确认\n红色：单笔>5000元或日累计>1000元、挂失、理财申购等确认＋演示MFA\n模型不能降低工具基线风险", "演示 OTP 和模拟生物识别仅证明流程，不能视为生产强认证。"),
+        ("补槽与金额修订：确认只属于当前草稿", "给妈妈转钱 → 五百 → 改成三百\n新计划 / 新 nonce / 重新评级 / 重新确认\n旧确认409；最终只有一笔300元模拟转账\n最近金额与收款人从本人已完成流水回读", "展示真实浏览器联调截图；自动检查不等同人工验收。"),
         ("执行前复核与重试安全", "ActionEnvelope：计划、参数、风险、权限、nonce、有效期\nIdempotency-Key：重试返回首次结果，避免重复扣款\n版本冲突、过期、撤权阻断；服务未ready时禁止写入\n结果UNKNOWN先核对，不盲目重试", "同一会话仅有一个活动草稿；历史查询按演示用户隔离。"),
         ("DAG、中断、补偿与人工接管", "账单分析 → 引用异常订阅 → 取消订阅\n步骤间暂停 / 恢复，已完成节点不重复执行\n可补偿失败逆序回退，再做风险与权限复核\n不可逆或结果未知：人工处理，并写入审计", "预置有界 DAG 不是自由组合；不可逆操作不能承诺自动回滚。"),
         ("安全机制与可追溯证据", "注入整条拒绝；真实结果只来自 Mock Bank Core\n按用户熔断，operator 解锁并审计\nToolExecutor + SandboxGuard：网络、超时、体积、白名单\nSHA-256 审计链与来源分层；不是独立存证", "沙箱是进程内逻辑约束；线程超时不等于 OS 强制终止。"),
-        ("离线评测：公开失败与适用边界", "复用冻结语料与表达家族隔离，保留全部失败样本\n开发集与已查看的保留集分别报告，不混为未见成绩\n安全反例检查业务库变化；规则与模型成绩分开\n人工金标复核pending；真实模型按用户决定暂缓", "具体本轮数字见收尾报告及JSON原始证据；95%不作为已取得成绩。"),
-        ("自动验收与复现", "后端 / 前端 / 组装器 / 六场景 / API契约 / lint / build\n真实桌面与390px视口：Chromium → Vite → FastAPI → 新SQLite\n独立库种子重置、readiness与审计检查\n干净源码归档复现，记录版本与SHA-256", "自动化通过只覆盖已知用例，不能替代人工手机、键盘和读屏验收。"),
-        ("当前边界与人工剩余", "全部数据模拟；无生产身份、真实MFA、真实IM、OS隔离\nU3个性化 / U5通用组合与条件规划未实施\n人工：金标裁决、独立体验、录屏及正式提交\n答辩≤10分钟、视频≤5分钟须实际计时", "明确哪些已自动验证、哪些仍需人工签署，不将候选包描述为已提交。"),
+        ("有界语义：能力范围与评测边界", "语义层规范化金额、联系人、账户、卡片与日期\n歧义、条件或组合超出范围时转为澄清\n默认离线规则 Planner；模型只生成候选计划\n离线评测不等同真实模型准确率", "评测口径与边界见仓库《测试与复现》；不宣称通用自然语言准确率。"),
+        ("自动验收与复现", "后端 671 项 pytest / 前端 144 项 Vitest 通过\n组装器 28 项、六场景端到端 31/31 通过\n工具 51 个、HTTP /api 路径 49 个\n真实桌面与 390px 视口：Chromium → Vite → FastAPI → 新 SQLite", "自动化通过只覆盖已知用例；命令与边界见仓库《测试与复现》。"),
+        ("当前边界与适用范围", "全部数据模拟；无生产身份、真实 MFA、真实 IM、OS 隔离\n不支持任意自然语言、通用跨轮记忆或自由条件组合\n沙箱为进程内执行守卫，不是容器或 OS 资源隔离\n答辩 ≤10 分钟、视频 ≤5 分钟按大赛要求计时", "明确演示边界，不把原型描述为生产银行系统。"),
         ("演示与交付入口", "账单绿色查询 → 转账补槽与修订 → 卡片红色演示MFA\n再展开DAG、注入拒绝与审计证据\nREADME / 部署 / 测试 / 技术文档 / 安全自评\ngithub.com/0xChainAegis/aegisbank", "感谢评委；演示失败按部署说明恢复独立模拟库，UNKNOWN不自动重试。"),
     ]
     for index, (title, body, notes) in enumerate(slides, 1):
         slide = presentation.slides.add_slide(presentation.slide_layouts[6])
         slide.background.fill.solid()
         slide.background.fill.fore_color.rgb = PptColor.from_string("F5F8FB")
-        textbox(slide, 0.65, 0.35, 11.9, 0.45, "AEGISBANK  /  2026-10-31  /  模拟银行原型", 14, TEAL, True)
+        textbox(slide, 0.65, 0.35, 11.9, 0.45, "AEGISBANK  /  银行 AI 智能体  /  模拟银行原型", 14, TEAL, True)
         textbox(slide, 0.65, 1.0, 12, 1.0, title, 32, NAVY, True)
         if body == "architecture":
             slide.shapes.add_picture(str(image_path), PptInches(0.65), PptInches(2.1), width=PptInches(12.0))
         else:
             textbox(slide, 0.8, 2.3, 11.75, 4.1, body, 23)
-        textbox(slide, 0.7, 7.0, 11.8, 0.3, f"0xChainAegis  ·  候选材料，人工验收另列  |  {index:02d} / {len(slides):02d}", 11, "526579")
-        slide.notes_slide.notes_text_frame.text = f"建议讲解40秒（需人工实际计时）。{notes}"
+        textbox(slide, 0.7, 7.0, 11.8, 0.3, f"0xChainAegis  ·  2026 深圳国际金融科技大赛  |  {index:02d} / {len(slides):02d}", 11, "526579")
+        slide.notes_slide.notes_text_frame.text = f"建议讲解 40 秒。{notes}"
     presentation.save(output)
 
 
