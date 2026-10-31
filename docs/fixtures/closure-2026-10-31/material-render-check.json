@@ -1,0 +1,100 @@
+[
+  {
+    "file": "deliverables/current/03-AegisBank-答辩材料.pdf",
+    "sha256": "e7266bdc6b8af0ec583d0af3b37f6f6d393e38ea8700fa2cb4bb41e55224dd22",
+    "pages": [
+      {
+        "page": 1,
+        "text_chars": 119,
+        "out_of_bounds": []
+      },
+      {
+        "page": 2,
+        "text_chars": 165,
+        "out_of_bounds": []
+      },
+      {
+        "page": 3,
+        "text_chars": 83,
+        "out_of_bounds": []
+      },
+      {
+        "page": 4,
+        "text_chars": 174,
+        "out_of_bounds": []
+      },
+      {
+        "page": 5,
+        "text_chars": 175,
+        "out_of_bounds": []
+      },
+      {
+        "page": 6,
+        "text_chars": 201,
+        "out_of_bounds": []
+      },
+      {
+        "page": 7,
+        "text_chars": 170,
+        "out_of_bounds": []
+      },
+      {
+        "page": 8,
+        "text_chars": 201,
+        "out_of_bounds": []
+      },
+      {
+        "page": 9,
+        "text_chars": 185,
+        "out_of_bounds": []
+      },
+      {
+        "page": 10,
+        "text_chars": 215,
+        "out_of_bounds": []
+      },
+      {
+        "page": 11,
+        "text_chars": 177,
+        "out_of_bounds": []
+      },
+      {
+        "page": 12,
+        "text_chars": 189,
+        "out_of_bounds": []
+      }
+    ]
+  },
+  {
+    "file": "deliverables/current/04-AegisBank-安全自评报告.pdf",
+    "sha256": "502c3a8757d78d2bfb56af7cd9766d76d821c48a87b883cd574bcae376d446f5",
+    "pages": [
+      {
+        "page": 1,
+        "text_chars": 1214,
+        "out_of_bounds": []
+      },
+      {
+        "page": 2,
+        "text_chars": 513,
+        "out_of_bounds": []
+      }
+    ]
+  },
+  {
+    "file": "deliverables/current/02-AegisBank-技术文档.pdf",
+    "sha256": "0e1628455f7a3f6d74f541fb891e9631dc699e14c50996204d23a2a328d7de00",
+    "pages": [
+      {
+        "page": 1,
+        "text_chars": 952,
+        "out_of_bounds": []
+      },
+      {
+        "page": 2,
+        "text_chars": 1345,
+        "out_of_bounds": []
+      }
+    ]
+  }
+]

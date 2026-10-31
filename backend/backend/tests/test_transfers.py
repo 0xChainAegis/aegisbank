@@ -52,6 +52,7 @@ def test_transfer_to_mother_by_alias_requires_confirmation_then_executes(tmp_pat
         assert step["tool_name"] == "transfer_to_contact"
         assert step["arguments"]["to_name"] == "妈妈"
         assert step["arguments"]["amount_cny"] == 500.0
+        assert step["arguments"]["from_account"] == "ACC-1001"
 
         confirmed = confirm(client, body["confirmation"]["id"])
         assert confirmed.status_code == 200, confirmed.text
@@ -65,6 +66,29 @@ def test_transfer_to_mother_by_alias_requires_confirmation_then_executes(tmp_pat
 
         overview = client.get("/api/banking/overview").json()
         assert overview["daily_transfer_total_cny"] == 500.0
+
+
+def test_contact_transfer_cannot_override_the_bound_demo_debit_account(tmp_path):
+    with make_client(tmp_path) as client:
+        db = client.app.state.services.db
+        with db.transaction() as conn:
+            before = conn.execute("SELECT COUNT(*) FROM bank_transactions").fetchone()[0]
+            pending_before = conn.execute("SELECT COUNT(*) FROM pending_actions").fetchone()[0]
+        response = client.post(
+            "/api/agent/run",
+            json={
+                "instruction": "给妈妈转500",
+                "tool_name": "transfer_to_contact",
+                "arguments": {
+                    "from_account": "ACC-3003", "to_name": "妈妈", "amount_cny": 500,
+                },
+            },
+        )
+        assert response.status_code == 400
+        with db.transaction() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM bank_transactions").fetchone()[0] == before
+            pending_after = conn.execute("SELECT COUNT(*) FROM pending_actions").fetchone()[0]
+            assert pending_after == pending_before
 
 
 def test_transfer_by_name_and_phone_resolves_contact(tmp_path):

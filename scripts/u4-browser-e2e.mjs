@@ -14,6 +14,8 @@
  *   U4_DB_PATH     database path (default: a fresh /tmp/u4-browser-e2e-*.db)
  *   U4_BASE_URL    frontend URL (default: http://127.0.0.1:5173)
  *   U4_CDP_PORT    fixed DevTools port (default: an ephemeral free port)
+ *   U4_EVIDENCE_LABEL  output suffix (default: 2026-10-30; use a new label for new runs)
+ *   U4_VIEWPORT_WIDTH / U4_VIEWPORT_HEIGHT  CSS viewport (default: 1440 / 1200)
  */
 
 import { spawn, execFileSync } from 'node:child_process';
@@ -36,9 +38,16 @@ const baseUrl = (process.env.U4_BASE_URL || 'http://127.0.0.1:5173').replace(/\/
 const backendHealthUrl = 'http://127.0.0.1:8000/api/health/ready';
 const backendLog = `/tmp/u4-browser-e2e-backend-${stamp}-${process.pid}.log`;
 const frontendLog = `/tmp/u4-browser-e2e-frontend-${stamp}-${process.pid}.log`;
-const evidencePath = path.join(fixtureDir, 'u4-real-integration-2026-10-30.json');
-const amendedScreenshotName = 'u4-real-integration-2026-10-30-amended-confirmation.png';
-const historyScreenshotName = 'u4-real-integration-2026-10-30-final-history.png';
+const evidenceLabel = process.env.U4_EVIDENCE_LABEL || '2026-10-30';
+if (!/^[a-zA-Z0-9-]+$/.test(evidenceLabel)) throw new Error('Invalid U4_EVIDENCE_LABEL');
+const viewportWidth = Number(process.env.U4_VIEWPORT_WIDTH || 1440);
+const viewportHeight = Number(process.env.U4_VIEWPORT_HEIGHT || 1200);
+if (![viewportWidth, viewportHeight].every((value) => Number.isInteger(value) && value >= 320 && value <= 4096)) {
+  throw new Error('Viewport dimensions must be integers between 320 and 4096');
+}
+const evidencePath = path.join(fixtureDir, `u4-real-integration-${evidenceLabel}.json`);
+const amendedScreenshotName = `u4-real-integration-${evidenceLabel}-amended-confirmation.png`;
+const historyScreenshotName = `u4-real-integration-${evidenceLabel}-final-history.png`;
 
 const actionLog = [];
 const domAssertions = [];
@@ -668,8 +677,8 @@ try {
   }
 
   // A fresh database is mandatory for the "exactly one -30000 cent transfer" assertion.
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { execFileSync('rm', ['-f', `${dbPath}${suffix}`]); } catch { /* ignore */ }
+  if (['', '-wal', '-shm'].some((suffix) => existsSync(`${dbPath}${suffix}`))) {
+    throw new Error(`Refusing to overwrite an existing database: ${dbPath}`);
   }
 
   const backendCwd = path.join(repoRoot, '.runtime', 'backend');
@@ -691,6 +700,8 @@ try {
       ...process.env,
       PATH: pathWithUv,
       AEGIS_DATABASE_PATH: dbPath,
+      AEGIS_PLANNER_MODE: 'rule',
+      AEGIS_AUTOMATION_ENABLED: 'false',
     },
     backendLog,
   );
@@ -775,8 +786,8 @@ try {
   await cdp.send('Network.enable');
   await cdp.send('Log.enable');
   await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: 1440,
-    height: 1200,
+    width: viewportWidth,
+    height: viewportHeight,
     deviceScaleFactor: 1,
     mobile: false,
   });
@@ -899,6 +910,7 @@ try {
   assert(filledApi.request.body.draft_version === initialResult.draft.version, 'Follow-up did not send the real draft version');
   await assertDomIncludes('500 CNY confirmation modal visible', '[role="dialog"]', ['确认', '转账', '修改金额', '尚未执行']);
   await assertDomIncludes('500 CNY amount is in the confirmation modal', '.confirm-summary', ['500.00']);
+  await assertDomIncludes('debit account is shown from the compiled plan', '.confirm-summary', ['ACC-1001']);
 
   // 3. Use the product UI amount amendment path.
   await clickByText('打开修改金额面板', '修改金额', { contains: false });
@@ -1143,6 +1155,7 @@ try {
       database: 'fresh SQLite file created for this run',
     },
     environment: {
+      viewport: { width: viewportWidth, height: viewportHeight, mobile_emulation: false },
       node_version: process.version,
       node_platform: process.platform,
       linux_release: os.release(),
@@ -1256,7 +1269,7 @@ try {
       const html = await bodyExcerpt(6000);
       console.error(`[u4-e2e] DOM at failure:\n${html}`);
       try {
-        const shot = await captureScreenshot('u4-real-integration-2026-10-30-failure.png');
+        const shot = await captureScreenshot(`u4-real-integration-${evidenceLabel}-failure.png`);
         console.error(`[u4-e2e] failure screenshot: ${JSON.stringify(shot)}`);
       } catch {
         // Screenshot is best-effort on failure.

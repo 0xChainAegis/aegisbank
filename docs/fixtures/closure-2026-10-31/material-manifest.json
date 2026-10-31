@@ -1,0 +1,41 @@
+{
+  "word_pdf_renderer": "ReportLab 5.1.0 from same Markdown; not Word pagination",
+  "ppt_renderer": "Microsoft PowerPoint COM PDF/PNG",
+  "materials": [
+    {
+      "path": "deliverables/current/02-AegisBank-技术文档.docx",
+      "bytes": 142363,
+      "sha256": "0622480eb6a9bcf99d08358f5416c4a2fd1a0f4e15fc638ec1d9d60dd440961a"
+    },
+    {
+      "path": "deliverables/current/02-AegisBank-技术文档.pdf",
+      "bytes": 321101,
+      "sha256": "0e1628455f7a3f6d74f541fb891e9631dc699e14c50996204d23a2a328d7de00"
+    },
+    {
+      "path": "deliverables/current/03-AegisBank-答辩材料.pdf",
+      "bytes": 302203,
+      "sha256": "e7266bdc6b8af0ec583d0af3b37f6f6d393e38ea8700fa2cb4bb41e55224dd22"
+    },
+    {
+      "path": "deliverables/current/03-AegisBank-答辩材料.pptx",
+      "bytes": 163714,
+      "sha256": "0d3382c1f3cc9ac5da02fe7ad90002d0f79972b586fadc4bac5f92d4b9b1c47b"
+    },
+    {
+      "path": "deliverables/current/04-AegisBank-安全自评报告.docx",
+      "bytes": 40510,
+      "sha256": "21c6a2ffb49354b51d7e36101d37fa782ec6b69f5a2e983335e4d92b52a78a56"
+    },
+    {
+      "path": "deliverables/current/04-AegisBank-安全自评报告.pdf",
+      "bytes": 183100,
+      "sha256": "502c3a8757d78d2bfb56af7cd9766d76d821c48a87b883cd574bcae376d446f5"
+    },
+    {
+      "path": "deliverables/current/architecture.png",
+      "bytes": 107414,
+      "sha256": "2cb072ff348f88bfea1e36b9ca1f7b8d6a0b703c2f73c235f042f6432c296c37"
+    }
+  ]
+}
