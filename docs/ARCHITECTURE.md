@@ -1,5 +1,7 @@
 # 架构说明
 
+> 2026-10-31 Windows 入口纠正：从任意目录显式选择 WSL 发行版与 Linux 仓库；PowerShell 使用进程 API 同步等待，CMD 委托同一实现，避免文件关联和两份路径转换逻辑。README 提供直接 WSL 命令，脚本支持 `-Repo / -Distro` 与仓库预检；运行时和银行执行链不变。
+
 > 2026-10-31 运行编排：根 `start.sh`（Linux/WSL）以及 `start.ps1`/`start.cmd`（Windows 经 WSL）都调用 `scripts/start.py`，复用现有组装器、冻结锁文件和确定性演示种子；控制器只负责本地进程、ready/代理/审计检查与数据保留，不新增银行工具执行路径。默认独立库、固定离线模式和生命周期见[启动记录](ONE-COMMAND-START-2026-10-31.md)。
 
 > 2026-10-24 后端补强：补偿设置冲突保护、恢复额度风险复检、事务内 MFA 拒绝、权限与审计原子提交。见 [本轮记录](BACKEND-HARDENING-2026-10-24.md)。

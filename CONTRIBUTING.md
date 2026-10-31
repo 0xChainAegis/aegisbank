@@ -15,8 +15,8 @@ AegisBank 是面向「银行 AI 智能体」赛题的**可运行原型**。我�
 后端运行在 Linux/WSL，因为数据库锁依赖 fcntl；原生 Windows Python 不受支持。预装 Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）后，在仓库根目录选择对应入口：
 
 ```powershell
-# Windows PowerShell：自动转换路径并委托 WSL
-.\start.ps1
+# Windows PowerShell：在当前仓库根目录，显式选择已有发行版
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1 -Distro Ubuntu-24.04
 ```
 
 ```bat
@@ -28,6 +28,8 @@ start.cmd
 # Linux / WSL
 bash start.sh
 ```
+
+从任意 Windows 当前目录启动的明确命令、其他电脑的克隆流程和排错方法见[README 快速开始](README.md#快速开始)。不要在冻结的 Windows 历史副本中运行当前产品。
 
 三个入口都自动准备缺失的项目内 uv/pnpm、组装并安装冻结依赖，首次初始化独立模拟库；重复启动保留数据，Ctrl+C 关闭本次启动的前后端。该入口固定离线规则 Planner、关闭后台自动任务并开启沙箱。`--no-browser` 仅输出地址，`--database /绝对路径/demo.db` 选择已有或新的模拟库，不会重置。macOS 原生入口暂不在本轮验证范围。
 

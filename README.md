@@ -96,86 +96,122 @@ SHA-256 哈希链用于检测日志改动，不等同于数字签名或独立存
 
 ## 快速开始
 
-`start.sh` 会自动组装源码、安装冻结依赖，并在缺少 `uv/pnpm` 时将工具安装到本项目的 `.runtime/.launcher-tools/`，无需全局安装或管理员权限。首次运行需要联网下载依赖。
+后端仍在 **Linux / WSL** 中运行，环境要求不变：Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）必须安装在运行后端的 Linux / WSL 发行版中。只在 Windows 安装 Python/Node 不会满足 WSL 内的要求。首次运行需要联网；缺少 uv/pnpm 时会安装到项目的 `.runtime/.launcher-tools/`，无需全局安装或管理员权限。
 
-只需预装 **Python 3.11+（含 venv/pip）和 Node.js（含 npm，版本 `^22.22.2 || ^24.15.0 || >=26.0.0`）**。Windows PowerShell、CMD 与 Linux/WSL 入口使用同一套环境要求，不新增运行时依赖；Windows 两个入口支持仓库位于 Windows 盘符或 WSL 文件系统。macOS 原生入口暂不在本轮验证范围。
+### 作者本机：新开 PowerShell 或 CMD，直接复制这一行
 
-### Windows PowerShell
+**按当前终端选择下面一行；可从任意当前目录执行，无需先 `cd`。**
 
-Windows 后端仍在 WSL 中运行，但不需要手动打开 WSL 终端。`start.ps1` 会自动把当前仓库路径转换为 WSL 路径，再执行同一份 `bash start.sh`。
-
-```powershell
-git clone https://github.com/0xChainAegis/aegisbank.git
-cd aegisbank
-.\start.ps1
-```
-
-如果 PowerShell 执行策略阻止脚本，可改用：
+PowerShell（显式启动 WSL 进程并在当前窗口等待）：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
+Start-Process -FilePath wsl.exe -ArgumentList '-d Ubuntu-24.04 --cd /home/lqz5885/aegisbank/dev/aegisbank --exec bash ./start.sh' -NoNewWindow -Wait
 ```
 
-### Windows CMD
-
-在 CMD 中同样不需要进入 WSL 终端。`start.cmd` 会把当前仓库路径转换为 WSL 路径，并调用同一份 `bash start.sh`：
+CMD（直接调用 WSL）：
 
 ```bat
-git clone https://github.com/0xChainAegis/aegisbank.git
-cd aegisbank
-start.cmd
+wsl.exe -d Ubuntu-24.04 --cd /home/lqz5885/aegisbank/dev/aegisbank --exec bash ./start.sh
 ```
 
-不自动打开浏览器时：
+命令明确选择已有的 `Ubuntu-24.04` 及 Linux 开发主线。Windows 的 `D:\开发交流\mia03-ether\aegisbank智能体` 是冻结的历史副本，不能用它启动当前产品。上面这条绝对路径只适用于作者本机；其他电脑按下一节选择自己的发行版和仓库。
+
+启动会在**当前终端持续输出**组装、依赖安装和就绪检查进度。出现 `已就绪，银行助手：http://127.0.0.1:5173/#/console` 后访问[银行助手](http://127.0.0.1:5173/#/console)，[API 文档](http://127.0.0.1:8000/docs)在 8000 端口。保持终端打开，按 **Ctrl+C** 同时停止本次前后端。打开 PowerShell 窗口或切换目录本身不代表服务已启动。
+
+不自动打开浏览器时，PowerShell 使用：
+
+```powershell
+Start-Process -FilePath wsl.exe -ArgumentList '-d Ubuntu-24.04 --cd /home/lqz5885/aegisbank/dev/aegisbank --exec bash ./start.sh --no-browser' -NoNewWindow -Wait
+```
+
+CMD 使用：
 
 ```bat
-start.cmd --no-browser
+wsl.exe -d Ubuntu-24.04 --cd /home/lqz5885/aegisbank/dev/aegisbank --exec bash ./start.sh --no-browser
 ```
+
+### 其他 Windows 电脑：在已有 WSL 中首次克隆并启动
+
+先查看自己的发行版名称。PowerShell 使用：
+
+```powershell
+Start-Process -FilePath wsl.exe -ArgumentList '-l -v' -NoNewWindow -Wait
+```
+
+CMD 使用：
+
+```bat
+wsl.exe -l -v
+```
+
+下面以已有 `Ubuntu-24.04` 为例；发行版名称不同时，替换 `-d` 后的名字。Python/Node 仍须满足上面的版本要求。这会在 WSL 用户主目录克隆源码并直接启动。PowerShell 使用：
+
+```powershell
+Start-Process -FilePath wsl.exe -ArgumentList '-d Ubuntu-24.04 --cd ~ --exec bash -lc "git clone https://github.com/0xChainAegis/aegisbank.git aegisbank && exec bash aegisbank/start.sh"' -NoNewWindow -Wait
+```
+
+CMD 使用：
+
+```bat
+wsl.exe -d Ubuntu-24.04 --cd ~ --exec bash -lc "git clone https://github.com/0xChainAegis/aegisbank.git aegisbank && exec bash aegisbank/start.sh"
+```
+
+已经克隆到 WSL 主目录下的 `aegisbank` 时，不要重复克隆。PowerShell 使用：
+
+```powershell
+Start-Process -FilePath wsl.exe -ArgumentList '-d Ubuntu-24.04 --cd ~/aegisbank --exec bash ./start.sh' -NoNewWindow -Wait
+```
+
+CMD 使用：
+
+```bat
+wsl.exe -d Ubuntu-24.04 --cd ~/aegisbank --exec bash ./start.sh
+```
+
+仓库在其他位置时，将 `--cd` 后的路径改为自己的 **Linux 绝对路径**。上述命令不会修改 WSL 默认发行版、系统执行策略或 Python/Node 版本。
+
+### 已在当前仓库目录：可选脚本入口
+
+当前目录必须是包含 `start.ps1`、`start.cmd`、`start.sh` 的**当前版本仓库根目录**。PowerShell 使用：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1 -Distro Ubuntu-24.04
+```
+
+CMD 使用：
+
+```bat
+start.cmd -Distro Ubuntu-24.04
+```
+
+CMD 与 PowerShell 共用同一份 Windows 启动逻辑。支持用 `-Repo /Linux/绝对路径` 明确指定另一检出；WSL UNC 路径会解析路径内的发行版，并拒绝与 `-Distro` 冲突的选择。`-NoBrowser` 或 `--no-browser` 均可关闭自动打开浏览器。执行策略参数仅针对当前 PowerShell 子进程，不修改系统策略。
 
 ### Linux / WSL 终端
 
+在仓库根目录运行：
+
 ```bash
-git clone https://github.com/0xChainAegis/aegisbank.git
-cd aegisbank
 bash start.sh
 ```
 
-已经克隆过源码时，进入仓库目录后执行对应入口即可：
+默认使用离线规则 Planner 和独立模拟库 `.runtime/backend/data/quickstart.db`，**无需模型密钥，重复启动保留数据**。所有金融数据来自 Mock Bank Core；写操作仍经过风险分级、确认/MFA 与审计，演示 OTP 为 `246810`。macOS 原生入口暂不在本轮验证范围。
+
+### 没看到“已就绪”时
+
+- 找不到 `start.ps1` / `start.cmd`：当前目录不是最新仓库根目录。作者本机直接使用上面的 WSL 绝对路径命令。
+- 发行版不存在或找不到 `start.sh`：用 `wsl.exe -l -v` 核对发行版；核对 `--cd` 是否为该发行版内的 Linux 仓库路径。
+- Python/Node 缺失或版本不符：检查所选 WSL 内的安装，Windows 的安装不参与后端执行。
+- 端口占用或重复启动：先在原服务窗口按 Ctrl+C，再启动一次；入口不会终止或复用未知服务。
+- 依赖安装失败或就绪超时：终端会打印失败原因和本次日志目录 `.runtime/launcher-logs/…`；未显示“已就绪”不能视为启动成功。
+
+启动后可在另一个 PowerShell 或 CMD 中验证 Windows 能访问后端和前端：
 
 ```powershell
-# Windows PowerShell
-.\start.ps1
+curl.exe --fail http://127.0.0.1:8000/api/health/ready
+curl.exe --fail http://127.0.0.1:5173/api/health/ready
 ```
 
-```bat
-# Windows CMD
-start.cmd
-```
-
-```bash
-# Linux / WSL
-bash start.sh
-```
-
-启动脚本会在服务与审计检查通过后自动打开[银行助手](http://127.0.0.1:5173/#/console)。默认使用离线规则 Planner 和独立模拟库 `.runtime/backend/data/quickstart.db`，**无需模型密钥，重复启动保留数据**。按 **Ctrl+C** 同时停止前后端；端口占用、重复启动或未就绪会明确报错，不复用未知服务。演示 OTP 为 `246810`。
-
-不自动打开浏览器时，在对应命令末尾加 `--no-browser`：
-
-```powershell
-.\start.ps1 -NoBrowser
-```
-
-```bat
-start.cmd --no-browser
-```
-
-```bash
-bash start.sh --no-browser
-```
-
-启动失败可查看终端输出的日志目录；高级开发、模型配置和手动启动见[贡献指南](CONTRIBUTING.md)与 [API 交接文档](docs/API-HANDOFF.md)。[API 文档](http://127.0.0.1:8000/docs)和[就绪检查](http://127.0.0.1:8000/api/health/ready)在启动后可用。
-
-首次试用可先查询本月账单，再按页面提示转账或挂失卡片；所有写操作仍须经过风险分级、确认/MFA 与审计，金融结果均为模拟。此入口用于本机演示；Windows PowerShell 和 CMD 都通过 WSL 运行后端，原生 Windows Python 不能直接运行后端。
+两项都应返回 `"status":"ready"`。高级开发、模型配置和手动启动见[贡献指南](CONTRIBUTING.md)与 [API 交接文档](docs/API-HANDOFF.md)。
 
 ## 团队协作
 
