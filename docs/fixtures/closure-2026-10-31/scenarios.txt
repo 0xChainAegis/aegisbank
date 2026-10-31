@@ -1,0 +1,35 @@
+Assembled 190 files into /home/lqz5885/aegisbank/dev/aegisbank/.runtime (0 written, 0 removed).
+/home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS | 账单分析   | 自然语言查本月账单                    | total=5497.4
+PASS | 账单分析   | 月度账单报告                       | top=5 商户
+PASS | 账单分析   | 异常扣费检测                       | 异常 6 条
+PASS | 卡片管理   | 挂失卡片（红+MFA）                  | 
+PASS | 卡片管理   | 解挂卡片（红+MFA）                  | 
+PASS | 卡片管理   | 虚拟卡申请→审核发卡                   | 新卡 CARD-9002
+PASS | 卡片管理   | 重置卡片密码（红+MFA）                | 
+PASS | 智能转账   | 虚拟卡转出 500（黄）                 | 
+PASS | 智能转账   | 同日再转 600（累计>1000→红）          | 需 OTP
+PASS | 智能转账   | 虚拟卡余额正确                      | 余额 1900.0
+PASS | 智能转账   | 联系人转账（妈妈）                    | 风险 red
+PASS | 智能转账   | AA 拆分并行 DAG                  | 2 笔
+PASS | 订阅代扣   | 续费提醒                         | 3 条提醒
+PASS | 订阅代扣   | 扣费识别 + 未登记代扣                 | 5 个实体
+PASS | 订阅代扣   | 按商户名取消订阅                     | SUB-3003
+PASS | 跨场景联动  | 账单→取消异常订阅 DAG                | 2 步
+PASS | 跨场景联动  | 生日 4 步 DAG（锁预算+礼物）           | query_contact_birthday→lock_budget_funds→schedule_flower_order→schedule_cake_order
+PASS | 跨场景联动  | 预算锁定与礼物订单                    | goals=1 orders=2
+PASS | 定时/触发  | 自然语言创建定时转账                   | TASK-20777921
+PASS | 定时/触发  | 时间快进执行到期任务                   | HTTP=200 executed=3 failed=0 target_done=True balance_ok=True
+PASS | 订阅代扣   | 无可取消异常订阅时澄清                  | 未找到唯一的订阅「异常订阅」；请明确有效对象
+PASS | 理财操作   | 产品清单（R1–R5）                  | 5 只产品
+PASS | 理财操作   | 按产品名申购（红+MFA）                | intent=purchase_wealth
+PASS | 理财操作   | 持仓查询                         | 
+PASS | 理财操作   | 理财赎回（黄）                      | 
+PASS | 全局     | readiness 四组件就绪              | ready
+PASS | 全局     | 审计哈希链完整                      | checked=121
+PASS | 全局     | 虚拟卡仍在银行概览                    | 
+PASS | 全局     | 订阅状态已更新                      | {'SUB-3001': 'active', 'SUB-3002': 'cancelled', 'SUB-3003': 'cancelled'}
+PASS | 定时/安全  | 风险升级暂停且不扣款（非执行成功）            | target=TASK-13807291 pending_reauth=1
+
+总计 30 项，通过 30，失败 0

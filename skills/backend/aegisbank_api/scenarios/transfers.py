@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Query
@@ -516,6 +516,11 @@ class AddContactTool(BaseTool):
 
 
 class TransferToContactArgs(BaseModel):
+    # Expose the existing fixed demo policy in the compiled, hashed plan so
+    # confirmation can show the actual debit account without a frontend guess.
+    from_account: Literal["ACC-1001"] = Field(
+        default=SELF_ACCOUNT, description="本地联系人转账固定使用本人演示工资卡 ACC-1001"
+    )
     to_name: str | None = Field(default=None, max_length=32)
     to_phone: str | None = Field(default=None, max_length=11)
     amount_cny: float = Field(gt=0, le=50_000)
@@ -584,7 +589,7 @@ class TransferToContactTool(BaseTool):
         transfer = self.repository.transfer(
             context.user_id,
             {
-                "from_account": SELF_ACCOUNT,
+                "from_account": args.from_account,
                 "to_account": contact.account_id,
                 "amount_cny": args.amount_cny,
                 "note": args.note,

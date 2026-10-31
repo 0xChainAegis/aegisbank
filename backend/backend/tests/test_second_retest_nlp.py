@@ -218,15 +218,20 @@ def test_semantic_reference_date_and_birthday_today_use_shanghai(monkeypatch, tm
             base = real_datetime(2026, 10, 29, 16, 30, tzinfo=UTC)
             return base.astimezone(tz) if tz is not None else base.replace(tzinfo=None)
 
+    # Freeze both stages: the rule planner rechecks that the resolved scheduled
+    # time is in the future. A real clock here makes this test expire on Oct 31.
+    monkeypatch.setattr(semantic_module, "datetime", FixedDatetime)
+    monkeypatch.setattr(automation_module, "datetime", FixedDatetime)
     with make_client(tmp_path) as client:
         services = client.app.state.services
         rule = RuleBasedPlanner(services.registry, services.repository)
         request = PlanningRequest(instruction="明天给张三转500")
-        monkeypatch.setattr(semantic_module, "datetime", FixedDatetime)
         plan = verify_frame(analyze_rules(request.instruction), request, rule)
         assert plan.semantic.reference_date == "2026-10-30"
+        run_at = datetime.fromisoformat(plan.steps[0].arguments["run_at"])
+        assert run_at.astimezone(SHANGHAI).date() == date(2026, 10, 31)
+        assert run_at.astimezone(SHANGHAI).hour == 9
 
-    monkeypatch.setattr(automation_module, "datetime", FixedDatetime)
     assert automation_module._today() == date(2026, 10, 30)
 
 

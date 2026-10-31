@@ -1,0 +1,412 @@
+{
+  "generated_at": "2026-10-31T03:00:10.062876+00:00",
+  "root": "/tmp/aegisbank-closure-clean-yvlg1h1h/aegisbank",
+  "checks": {
+    "repeat_seed_same_accounts": true,
+    "offline_query_preserved_accounts": true,
+    "owned_service_stopped": true,
+    "development_databases_unchanged": true
+  },
+  "seed_accounts": [
+    [
+      "ACC-1001",
+      2865000,
+      2865000
+    ],
+    [
+      "ACC-2002",
+      1200000,
+      1200000
+    ],
+    [
+      "ACC-3003",
+      300000,
+      300000
+    ]
+  ],
+  "readiness": {
+    "status": "ready",
+    "components": {
+      "sqlite": {
+        "ok": true,
+        "detail": "SQLite 可读写"
+      },
+      "audit_chain": {
+        "ok": true,
+        "detail": "哈希链校验通过，共 0 条"
+      },
+      "mock_bank_seed": {
+        "ok": true,
+        "detail": "模拟银行种子就绪：3 个账户 / 3 张卡"
+      },
+      "planner": {
+        "ok": true,
+        "detail": "Planner 可用：rule"
+      }
+    }
+  },
+  "planner": {
+    "mode": "rule",
+    "contract": "ExecutionPlan/v1",
+    "semantic_contract": "SemanticFrame/v1",
+    "tools": [
+      "add_contact",
+      "adjust_card_limit",
+      "adjust_repayment_date",
+      "apply_virtual_card",
+      "assess_wealth_risk",
+      "bill_report",
+      "cancel_scheduled_task",
+      "cancel_subscription",
+      "cancel_virtual_card_application",
+      "demo_charge_fee",
+      "demo_fail_step",
+      "demo_irreversible_marker",
+      "demo_reserve_funds",
+      "detect_bill_anomalies",
+      "execute_gift_order",
+      "identify_subscription_charges",
+      "issue_virtual_card",
+      "list_contacts",
+      "list_renewal_reminders",
+      "list_scheduled_tasks",
+      "list_subscriptions",
+      "list_wealth_products",
+      "lock_budget_funds",
+      "purchase_wealth",
+      "query_balance",
+      "query_bill",
+      "query_contact_birthday",
+      "query_recent_transfer",
+      "query_wealth_holdings",
+      "reactivate_subscription",
+      "redeem_wealth",
+      "report_card_lost",
+      "reset_card_password",
+      "restore_card_limit",
+      "restore_repayment_date",
+      "restore_transaction_limit",
+      "restore_wealth_risk",
+      "reverse_demo_charge",
+      "reverse_demo_reserve",
+      "reverse_purchase_wealth",
+      "reverse_transfer",
+      "run_due_tasks",
+      "schedule_cake_order",
+      "schedule_flower_order",
+      "schedule_transfer",
+      "set_transaction_limit",
+      "transfer",
+      "transfer_to_contact",
+      "unlock_budget_funds",
+      "unlock_card",
+      "unlock_transaction_limit"
+    ],
+    "structured_output": "ExecutionPlan/v1"
+  },
+  "public_tools_count": 36,
+  "registered_tools_count": 51,
+  "api_paths_count": 49,
+  "query": {
+    "status": "completed",
+    "run_id": "bcd83bb0405f44d2b6aa3e7c46637809",
+    "risk_level": "green",
+    "risk": {
+      "level": "green",
+      "reasons": [
+        "只读查询操作，满足最小权限后自动执行。"
+      ],
+      "requires_reauth": false
+    },
+    "reason": "全部节点通过权限网关。",
+    "plan": {
+      "semantic": {
+        "schema_version": "SemanticAnalysis/v1",
+        "status": "legacy",
+        "instruction_hash": "691712905e609d865a7161198bad5c03d40cefbf08d5a80f86a5fd449e6a4b10",
+        "frame": {
+          "schema_version": "SemanticFrame/v1",
+          "intents": [],
+          "conditions": [],
+          "ordering": [],
+          "uncovered": [
+            {
+              "start": 0,
+              "end": 8,
+              "text": "分析我的本月账单"
+            }
+          ],
+          "missing_slots": [],
+          "needs_clarification": true,
+          "clarification": null
+        },
+        "slots": [],
+        "reason": "沿用 P0 规则路径，未迁移到语义编译",
+        "reference_date": null,
+        "timezone": "Asia/Shanghai"
+      },
+      "intent": "query_bill",
+      "planner": "rule",
+      "confidence": 0.93,
+      "assumptions": [
+        "未指定账户，默认查询演示账户 ACC-1001。"
+      ],
+      "plan_hash": "3bf0c384731e94337c0562c8720b53caf19b4eb68cc5fd424fee5f8029943679",
+      "dag_path": "step-1:query_bill",
+      "steps": [
+        {
+          "id": "step-1",
+          "tool_name": "query_bill",
+          "arguments": {
+            "account_id": "ACC-1001",
+            "period": "current_month"
+          },
+          "depends_on": [],
+          "title": "分析账单",
+          "risk_level": "green",
+          "permission": "billing:read",
+          "description": "查询并分析指定账户的本月账单。",
+          "risk_reasons": [
+            "只读查询操作，满足最小权限后自动执行。"
+          ],
+          "requires_reauth": false,
+          "risk_score": 10
+        }
+      ]
+    },
+    "results": [
+      {
+        "tool_name": "query_bill",
+        "message": "已完成账单分析（演示银行数据）。",
+        "data": {
+          "account_id": "ACC-1001",
+          "period": "current_month",
+          "month": "2026-10",
+          "total_spend_cny": 5497.4,
+          "categories": {
+            "food": 1865.0,
+            "transport": 108.0,
+            "shopping": 2752.4,
+            "subscription": 772.0
+          },
+          "anomalies": [
+            "AI 工具订阅（SUB-3002）存在订阅异常：本月扣费较上月上涨 120%",
+            "本月订阅类支出合计 772.00 元，请核对续费项目。"
+          ],
+          "suspicious_subscription_id": "SUB-3002",
+          "suspicious_subscription_name": "AI 工具订阅",
+          "transactions": [
+            {
+              "transaction_id": "TX-SEED-010",
+              "date": "2026-10-31",
+              "merchant": "早餐",
+              "category": "food",
+              "amount_cny": -23.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-018",
+              "date": "2026-10-31",
+              "merchant": "地铁出行",
+              "category": "transport",
+              "amount_cny": -54.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-019",
+              "date": "2026-10-30",
+              "merchant": "电商购物",
+              "category": "shopping",
+              "amount_cny": -158.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-009",
+              "date": "2026-10-30",
+              "merchant": "电商购物",
+              "category": "shopping",
+              "amount_cny": -128.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-008",
+              "date": "2026-10-30",
+              "merchant": "咖啡店",
+              "category": "food",
+              "amount_cny": -32.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-007",
+              "date": "2026-10-30",
+              "merchant": "午餐",
+              "category": "food",
+              "amount_cny": -68.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-015",
+              "date": "2026-10-29",
+              "merchant": "城市宴会厅",
+              "category": "food",
+              "amount_cny": -1600.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-006",
+              "date": "2026-10-29",
+              "merchant": "健身房月卡",
+              "category": "subscription",
+              "amount_cny": -299.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-005",
+              "date": "2026-10-29",
+              "merchant": "AI 工具订阅",
+              "category": "subscription",
+              "amount_cny": -199.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-011",
+              "date": "2026-10-28",
+              "merchant": "星云影音会员",
+              "category": "subscription",
+              "amount_cny": -199.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-004",
+              "date": "2026-10-28",
+              "merchant": "云端影音",
+              "category": "subscription",
+              "amount_cny": -45.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-003",
+              "date": "2026-10-27",
+              "merchant": "地铁出行",
+              "category": "transport",
+              "amount_cny": -54.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-014",
+              "date": "2026-10-27",
+              "merchant": "咖啡工坊",
+              "category": "food",
+              "amount_cny": -38.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-013",
+              "date": "2026-10-27",
+              "merchant": "咖啡工坊",
+              "category": "food",
+              "amount_cny": -38.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-002",
+              "date": "2026-10-26",
+              "merchant": "城市生活超市",
+              "category": "shopping",
+              "amount_cny": -286.4,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-012",
+              "date": "2026-10-26",
+              "merchant": "云存储空间",
+              "category": "subscription",
+              "amount_cny": -30.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-017",
+              "date": "2026-10-25",
+              "merchant": "夜间便利店",
+              "category": "food",
+              "amount_cny": -66.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-BILL-016",
+              "date": "2026-10-24",
+              "merchant": "品牌旗舰店",
+              "category": "shopping",
+              "amount_cny": -2180.0,
+              "status": "posted"
+            },
+            {
+              "transaction_id": "TX-SEED-001",
+              "date": "2026-10-19",
+              "merchant": "工资入账",
+              "category": "income",
+              "amount_cny": 18500.0,
+              "status": "posted"
+            }
+          ],
+          "simulated": true
+        },
+        "risk": {
+          "level": "green",
+          "score": 10,
+          "reasons": [
+            "只读查询操作，满足最小权限后自动执行。"
+          ],
+          "base_risk": "green",
+          "requires_reauth": false
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "source": "mock_bank",
+        "verified": true,
+        "verification_kind": "tool_result",
+        "detail": "Mock 银行工具返回模拟数据（simulated=True）"
+      },
+      {
+        "source": "policy_engine",
+        "verified": true,
+        "verification_kind": "policy_decision",
+        "detail": "请求已通过统一权限网关"
+      },
+      {
+        "source": "audit_chain",
+        "verified": true,
+        "verification_kind": "hash_chain",
+        "detail": "哈希链校验通过，共 1 条"
+      }
+    ],
+    "evidence_list": [
+      {
+        "source": "mock_bank",
+        "verified": true,
+        "verification_kind": "tool_result",
+        "detail": "Mock 银行工具返回模拟数据（simulated=True）"
+      },
+      {
+        "source": "policy_engine",
+        "verified": true,
+        "verification_kind": "policy_decision",
+        "detail": "请求已通过统一权限网关"
+      },
+      {
+        "source": "audit_chain",
+        "verified": true,
+        "verification_kind": "hash_chain",
+        "detail": "哈希链校验通过，共 1 条"
+      }
+    ],
+    "session_id": "sess_ad5866ea9c3d46208839af66a4a78049"
+  },
+  "audit": {
+    "valid": true,
+    "checked": 1
+  },
+  "status": "passed"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": "U1Evaluation/v1",
+  "dataset": "development",
+  "corpus": "NLP/backend/evals/nlp/u1-development.json",
+  "corpus_sha256": "23839257b34f801d8185feaf1eb4e65697ccc5db6bc543f4a84533ce673cf314",
+  "manifest_sha256": "3899bde9e1bd08afb656ec0584038137565c79b49c4673266fcad32643810ebc",
+  "base_commit": "b33ebe80e10fee4025a2260ac7f4eaa5a4b2fa86",
+  "implementation_sha256": "e1facfe1fc0d3b2813e5351184b475b294bca05116203a411152ca860a286aef",
+  "reference_date": "2026-10-31",
+  "timezone": "Asia/Shanghai",
+  "tool_catalog_sha256": null,
+  "mock_seed_sha256": "88a7f21df90e5db9016c016be4715af3a52844ddec59ddd883ff54c8c2f46da7",
+  "frozen_mock_seed_match": true,
+  "planner_config": {
+    "p0_rules": {
+      "planner_mode": "rule",
+      "semantic_enabled": false
+    },
+    "p1_semantics": {
+      "planner_mode": "rule",
+      "semantic_enabled": true
+    },
+    "existing_llm": {
+      "planner_mode": "llm",
+      "semantic_enabled": false
+    },
+    "semantic_llm": {
+      "planner_mode": "llm",
+      "semantic_enabled": true
+    },
+    "timezone": "Asia/Shanghai",
+    "real_model": "not configured in this checkout; never inferred from MockTransport"
+  },
+  "annotation": {
+    "method": "逐条静态金标，AI 辅助整理；不是模型自评",
+    "human_adjudication": "pending",
+    "note": "人工复核完成前不得称为正式人工标注集"
+  },
+  "real_model": true,
+  "real_model_calls": 0,
+  "metric_contract": {
+    "complete_plan": "tool behavior + every annotated step parameter + DAG dependencies; negative cases require clarification/block with no steps",
+    "key_parameters": "exact value match; calendar labels resolved in Asia/Shanghai",
+    "safety": "isolated Mock DB; all business/pending tables compared; only a fresh owner-bound, unexecutable missing-amount draft is separately reported as conversation state",
+    "multi_turn": "not applicable until U2; null is not zero",
+    "cost": "null unless explicit per-million-token prices are supplied"
+  },
+  "modes": {},
+  "status": "not_run",
+  "reason": "AEGIS_LLM_BASE_URL and AEGIS_LLM_MODEL are required; MockTransport is not a real-model result",
+  "model": {
+    "requested": null,
+    "credential_configured": false
+  }
+}

@@ -1,0 +1,52 @@
+Assembled 190 files into /home/lqz5885/aegisbank/dev/aegisbank/.runtime (0 written, 0 removed).
+test_archive_rejects_linked_source_directories (test_assemble.AssembleTests.test_archive_rejects_linked_source_directories) ... ok
+test_assembles_source_archive_without_git_metadata (test_assemble.AssembleTests.test_assembles_source_archive_without_git_metadata) ... ok
+test_cli_rejects_custom_output_paths (test_assemble.AssembleTests.test_cli_rejects_custom_output_paths) ... ok
+test_conflicting_duplicates_fail_before_any_runtime_change (test_assemble.AssembleTests.test_conflicting_duplicates_fail_before_any_runtime_change) ... ok
+test_excludes_metadata_secrets_dependencies_and_runtime_data (test_assemble.AssembleTests.test_excludes_metadata_secrets_dependencies_and_runtime_data) ... ok
+test_git_checkout_errors_do_not_fall_back_to_archive_scanning (test_assemble.AssembleTests.test_git_checkout_errors_do_not_fall_back_to_archive_scanning) ... ok
+test_identical_duplicate_paths_are_allowed (test_assemble.AssembleTests.test_identical_duplicate_paths_are_allowed) ... ok
+test_includes_unstaged_source_and_respects_git_ignores (test_assemble.AssembleTests.test_includes_unstaged_source_and_respects_git_ignores) ... ok
+test_merges_allowed_roots_and_env_example_without_modifying_modules (test_assemble.AssembleTests.test_merges_allowed_roots_and_env_example_without_modifying_modules) ... ok
+test_refuses_overwriting_an_unmanaged_source_target (test_assemble.AssembleTests.test_refuses_overwriting_an_unmanaged_source_target) ... ok
+test_refuses_overwriting_or_deleting_a_modified_generated_file (test_assemble.AssembleTests.test_refuses_overwriting_or_deleting_a_modified_generated_file) ... ok
+test_rejects_case_only_collisions (test_assemble.AssembleTests.test_rejects_case_only_collisions) ... ok
+test_rejects_output_file_directory_collision (test_assemble.AssembleTests.test_rejects_output_file_directory_collision) ... ok
+test_rejects_output_symlinks_and_invalid_output_file (test_assemble.AssembleTests.test_rejects_output_symlinks_and_invalid_output_file) ... ok
+test_rejects_runtime_parent_symlinks (test_assemble.AssembleTests.test_rejects_runtime_parent_symlinks) ... ok
+test_rejects_source_symlinks (test_assemble.AssembleTests.test_rejects_source_symlinks) ... ok
+test_rejects_traversal_and_runtime_directories_in_manifest (test_assemble.AssembleTests.test_rejects_traversal_and_runtime_directories_in_manifest) ... ok
+test_repeat_assembly_updates_and_deletes_only_owned_sources (test_assemble.AssembleTests.test_repeat_assembly_updates_and_deletes_only_owned_sources) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.424s
+
+OK
+[test] backend · pytest
+........................................................................ [ 10%]
+........................................................................ [ 21%]
+........................................................................ [ 32%]
+........................................................................ [ 43%]
+........................................................................ [ 54%]
+........................................................................ [ 65%]
+........................................................................ [ 76%]
+........................................................................ [ 87%]
+........................................................................ [ 98%]
+...........                                                              [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/lqz5885/aegisbank/dev/aegisbank/.runtime/backend/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+[test] frontend · vitest
+$ vitest run
+
+ RUN  v4.1.12 /home/lqz5885/aegisbank/dev/aegisbank/.runtime/frontend
+
+
+ Test Files  12 passed (12)
+      Tests  144 passed (144)
+   Start at  10:59:20
+   Duration  2.41s (transform 1.84s, setup 0ms, import 3.07s, tests 1.59s, environment 6.19s)
+
