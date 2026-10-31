@@ -318,8 +318,8 @@
       "group": "backend",
       "path": "backend/tests/test_subscription_cancel.py",
       "runtime_path": "backend/tests/test_subscription_cancel.py",
-      "bytes": 4835,
-      "sha256": "0bc911e1762b7dc398ef8e388c39031daca780182bfed689d4cb2e891ae4f3d3"
+      "bytes": 6437,
+      "sha256": "a3052fbfce2e500d110d24eb9db34fa411b06264d5464a98bf02bfb635556664"
     },
     {
       "group": "backend",
@@ -409,8 +409,8 @@
       "group": "backend",
       "path": "scripts/scenario-check.py",
       "runtime_path": "scripts/scenario-check.py",
-      "bytes": 19739,
-      "sha256": "d3e6c5da9c112887e4b4ec18e91a4d520375ae35a8828cbeb9e173c9a9a2fd3d"
+      "bytes": 20222,
+      "sha256": "65b4c8c9e67aa74a676175911e17f900e119402271361fb6cd8332849f89c8da"
     },
     {
       "group": "backend",
