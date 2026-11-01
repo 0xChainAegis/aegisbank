@@ -17,6 +17,7 @@ vi.mock('./api', async (importOriginal) => {
     fetchTools: vi.fn(async () => []),
     fetchPermissions: vi.fn(async () => [{ name: 'transfer', title: '转账', description: 'mock', permission: 'transfer:execute', risk_level: 'yellow', granted: true }]),
     fetchBankingOverview: vi.fn(async () => ({ accounts: [], cards: [], subscriptions: [], abnormalSubscriptions: [], monthSpendingCny: 0, todayTransferTotalCny: 0, asOf: '' })),
+    fetchContacts: vi.fn(async () => ({ contacts: [], count: 0 })),
     fetchAudit: vi.fn(async () => ({ entries: [] })),
     verifyAudit: vi.fn(async () => ({ valid: true, checked: 0 })),
     fetchReadiness: vi.fn(async () => ({ status: 'ready', components: {} })),
@@ -73,6 +74,17 @@ beforeEach(() => {
 afterEach(async () => { await unmount(); container.remove(); });
 
 describe('submission and confirmation security', () => {
+  it('changes care display and opens contacts without submitting a bank operation', async () => {
+    await mount();
+    await click('关怀模式');
+    expect(document.documentElement.getAttribute('data-care-mode')).toBe('true');
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(resolveConfirmation).not.toHaveBeenCalled();
+    await click('查看联系人');
+    expect(container.querySelector('#contact-book-title')?.textContent).toBe('联系人');
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(resolveConfirmation).not.toHaveBeenCalled();
+  });
   it('keeps primary examples as editable requests rather than executing them', async () => {
     await mount();
     const example = container.querySelectorAll<HTMLButtonElement>('.demo-path button')[1];

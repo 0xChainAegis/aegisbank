@@ -45,8 +45,8 @@
       "group": "fronted",
       "path": "frontend/src/App.tsx",
       "runtime_path": "frontend/src/App.tsx",
-      "bytes": 37422,
-      "sha256": "e1bfc7e3bf95ac06049e4557b663370c39a645826dc61ed6f86d6a4be36f6c68"
+      "bytes": 37577,
+      "sha256": "50c0356e2cc377e196ee5e33e5544a2b9c5ec4597547a6daf2e9137ac607ffa9"
     },
     {
       "group": "fronted",
@@ -73,8 +73,8 @@
       "group": "fronted",
       "path": "frontend/src/components/BankOverviewPage.tsx",
       "runtime_path": "frontend/src/components/BankOverviewPage.tsx",
-      "bytes": 11608,
-      "sha256": "17e0ab33409f51ef0ea65dfd9f93a99456740c6b914c916329150005ac1c1761"
+      "bytes": 11781,
+      "sha256": "a8960d872e9859d57e5368119d809ab7f58417c10e161b703129888d3669a104"
     },
     {
       "group": "fronted",
@@ -94,8 +94,8 @@
       "group": "fronted",
       "path": "frontend/src/components/BusinessReceipt.tsx",
       "runtime_path": "frontend/src/components/BusinessReceipt.tsx",
-      "bytes": 8085,
-      "sha256": "d5854341b84cce661420205266956354e3a68a60383a246838376af5ece26c41"
+      "bytes": 8110,
+      "sha256": "23ebdccd5267a584f2606ad34127369eaaff6cbf8684d70acd0193da4acbd7c8"
     },
     {
       "group": "fronted",
@@ -106,10 +106,38 @@
     },
     {
       "group": "fronted",
+      "path": "frontend/src/components/CareModeControls.test.tsx",
+      "runtime_path": "frontend/src/components/CareModeControls.test.tsx",
+      "bytes": 15974,
+      "sha256": "05d56159d16bc019e9b6fef350248f139fa27373119eeee4675ac55e3de36cfc"
+    },
+    {
+      "group": "fronted",
+      "path": "frontend/src/components/CareModeControls.tsx",
+      "runtime_path": "frontend/src/components/CareModeControls.tsx",
+      "bytes": 7074,
+      "sha256": "78ccd193f8268201701832ad3748bc22b407dc3538f5f3e451eb94613fbf28d9"
+    },
+    {
+      "group": "fronted",
       "path": "frontend/src/components/ConfirmationModal.tsx",
       "runtime_path": "frontend/src/components/ConfirmationModal.tsx",
-      "bytes": 19539,
-      "sha256": "ff49620e97f052dc9feaf7faea0e0e1e6254082ad6911ed2739edb99c0afd25f"
+      "bytes": 19977,
+      "sha256": "210dd44c31b35992a6b06be9b9fac50687e105d59ac20463945355579264d553"
+    },
+    {
+      "group": "fronted",
+      "path": "frontend/src/components/ContactBook.test.tsx",
+      "runtime_path": "frontend/src/components/ContactBook.test.tsx",
+      "bytes": 5596,
+      "sha256": "6212338df8df372684db41c8d0a83c0a9563d9ca413a1e74129355193f105105"
+    },
+    {
+      "group": "fronted",
+      "path": "frontend/src/components/ContactBook.tsx",
+      "runtime_path": "frontend/src/components/ContactBook.tsx",
+      "bytes": 2525,
+      "sha256": "e86346ba532627dcff0354786cb387d1ab66b4840c1627488f411f0441d237d1"
     },
     {
       "group": "fronted",
@@ -157,8 +185,8 @@
       "group": "fronted",
       "path": "frontend/src/components/TaskConsolePage.tsx",
       "runtime_path": "frontend/src/components/TaskConsolePage.tsx",
-      "bytes": 37314,
-      "sha256": "f399117369725b51e050bdab0d49ef4f98a9d40136758e77cc17ac24a0e3aecf"
+      "bytes": 38052,
+      "sha256": "89f77960c149d6534c9e237304e4cf406778d3bf550e1242e1c6da955d1ce43e"
     },
     {
       "group": "fronted",
@@ -173,6 +201,13 @@
       "runtime_path": "frontend/src/components/businessPages.test.tsx",
       "bytes": 18773,
       "sha256": "18fb41f3cb2bc0f1504565f09bdfd9f133404c4807f3859c01bbcf9fd3511888"
+    },
+    {
+      "group": "fronted",
+      "path": "frontend/src/components/careSpeech.ts",
+      "runtime_path": "frontend/src/components/careSpeech.ts",
+      "bytes": 2447,
+      "sha256": "d964230c69e0d71e5e089c9c6506e904a1b2361e11ad9fa9c55c5fbb04aeef64"
     },
     {
       "group": "fronted",
@@ -220,8 +255,8 @@
       "group": "fronted",
       "path": "frontend/src/main.tsx",
       "runtime_path": "frontend/src/main.tsx",
-      "bytes": 388,
-      "sha256": "c885d35a3a2d04b3b61e1650d604d2fe6b210c83aef9d569a166570997016258"
+      "bytes": 416,
+      "sha256": "ef900ecba299ce9b59d9c36c349900ef50683633688aa210361a1786dd588cee"
     },
     {
       "group": "fronted",
@@ -248,8 +283,8 @@
       "group": "fronted",
       "path": "frontend/src/security.test.tsx",
       "runtime_path": "frontend/src/security.test.tsx",
-      "bytes": 18760,
-      "sha256": "6b8c623c77353b67e6500558e20fc19cfd0c316608f0b596f99e0929c2f917d2"
+      "bytes": 19395,
+      "sha256": "743dc944038553fe3224d74bc7386d21354832800f245fd020ab3dc000dd3e4d"
     },
     {
       "group": "fronted",
@@ -267,10 +302,17 @@
     },
     {
       "group": "fronted",
+      "path": "frontend/src/styles-care.css",
+      "runtime_path": "frontend/src/styles-care.css",
+      "bytes": 14002,
+      "sha256": "c72317fdf1c22981060f0b5af76c912a7f7a6ef2989f1bfdd30b388d77123398"
+    },
+    {
+      "group": "fronted",
       "path": "frontend/src/styles-product.css",
       "runtime_path": "frontend/src/styles-product.css",
-      "bytes": 20148,
-      "sha256": "c27307532db69dc8cbed1c57267246872674c392ac0ead1cb4e6300dcb3e55ce"
+      "bytes": 20394,
+      "sha256": "33deb09ea8e6c2cb225ae9c0acc40292336e218c75bfe1506522c1a2a18df8f6"
     },
     {
       "group": "fronted",

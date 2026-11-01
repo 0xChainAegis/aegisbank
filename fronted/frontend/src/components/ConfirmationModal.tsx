@@ -18,6 +18,7 @@ import {
   sanitizeMfaToken,
 } from '../twoA';
 import { EvidenceBadges, ResourceState, RiskBadge } from './ui';
+import CareModeControls from './CareModeControls';
 
 const YELLOW_GATEWAY_REASON = '黄色操作涉及资金变动或账户设置，需要在 5 分钟内完成一次轻量确认。';
 const LEGACY_YELLOW_GATEWAY_REASON = '黄色操作会修改账户设置，需要在 5 分钟内完成一次轻量确认。';
@@ -230,15 +231,19 @@ export default function ConfirmationModal({
           </div>
         </div>
 
-        <h2 id="confirm-title" className="confirmation-product-title">
+        <h2 id="confirm-title" className="confirmation-product-title" data-care-reading="true">
           {steps.length === 1 ? `确认${steps[0].summary.headline}`
             : steps.length > 1 ? `确认这 ${steps.length} 项操作` : '确认操作'}
         </h2>
-        <p className="confirmation-status"><strong>待确认 · 尚未执行</strong></p>
+        <p className="confirmation-status" data-care-reading="true">
+          <strong>{expired ? '确认已过期 · 尚未执行' : '待确认 · 尚未执行'}</strong>
+        </p>
         <p className="modal-reason">{reason}</p>
 
+        <CareModeControls surface="dialog" />
+
         {steps.length > 0 && (
-          <div className="confirm-summary">
+          <div className="confirm-summary" data-care-reading="true">
             <span className="eyebrow">将要发生什么</span>
             <ul>
               {steps.map(({ step, summary, risk: stepRisk }) => (
@@ -255,7 +260,7 @@ export default function ConfirmationModal({
                   {summary.details.length > 0 && (
                     <ul className="confirm-summary-details">
                       {summary.details.map((detail) => (
-                        <li key={detail}>{detail}</li>
+                        <li key={detail} data-care-private={/^备注[：:]/.test(detail) ? 'true' : undefined}>{detail}</li>
                       ))}
                     </ul>
                   )}
@@ -266,7 +271,7 @@ export default function ConfirmationModal({
         )}
 
         {canAmend && (
-          <div className={'alert alert-info amend-panel'}>
+          <div className={'alert alert-info amend-panel'} data-care-private="true">
             <div className={'amend-panel-head'}>
               <div>
                 <span className={'eyebrow'}>修改金额</span>
@@ -321,7 +326,7 @@ export default function ConfirmationModal({
             )}
           </div>
         )}
-        <div className={`mfa-banner mfa-${risk}`}>
+        <div className={`mfa-banner mfa-${risk}`} data-care-reading="true">
           <strong>{needsOtp ? '需要二次身份验证' : '一次明确确认即可'}</strong>
           <span>
             {needsOtp
@@ -331,7 +336,7 @@ export default function ConfirmationModal({
         </div>
 
         {reasons.length > 0 && (
-          <div className="confirm-reasons">
+          <div className="confirm-reasons" data-care-reading="true">
             <span className="eyebrow">为什么需要确认</span>
             <ul>
               {reasons.map((reason) => <li key={reason}>{reason}</li>)}
@@ -340,7 +345,7 @@ export default function ConfirmationModal({
         )}
 
         {needsOtp && (
-          <div className="mfa-method">
+          <div className="mfa-method" data-care-private="true">
             <span className="eyebrow">选择验证方式</span>
             <ResourceState
               loading={mfaProvidersLoading}
@@ -416,7 +421,7 @@ export default function ConfirmationModal({
         )}
 
         {expired && (
-          <div className="alert alert-warn modal-alert" role="alert">
+          <div className="alert alert-warn modal-alert" role="alert" data-care-reading="true">
             这次确认已过期，不能继续执行。请关闭后重新发起任务。
           </div>
         )}

@@ -41,7 +41,7 @@ export default function BusinessReceipt({ run }: { run: RunResponse }) {
       'report_card_lost', 'unlock_card'].includes(item.tool_name));
   if (!results?.length) return null;
   return (
-    <div className={'business-receipts'}>
+    <div className={'business-receipts'} data-care-reading="true">
       {results.map((result, index) => {
         const data = result.data ?? {};
         if (result.tool_name === 'query_bill' || result.tool_name === 'bill_report') {

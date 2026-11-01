@@ -182,7 +182,7 @@ bash start.sh
 
 默认使用离线规则 Planner 和独立模拟库，无需模型密钥；演示 OTP 为 `246810`，模拟生物识别 token 为 `FACE-888888`。Windows 用户请在 WSL 中执行同一命令；仓库根目录的 `start.ps1` / `start.cmd` 会经 WSL 启动同一套流程。
 
-可选配置（复制 `.env.example` 为 `backend/.env`）：`AEGIS_PLANNER_MODE=rule|llm|auto`、`AEGIS_LLM_BASE_URL`、`AEGIS_LLM_API_KEY`、`AEGIS_DEMO_OTP`、`AEGIS_CONFIRMATION_TTL_SECONDS` 等。完整参数与手动启动方式见[部署说明](deliverables/06-部署说明.md)。
+可选模型配置使用手动开发流程：组装后将 `.runtime/backend/.env.example` 复制为 `.runtime/backend/.env`，在后端工作目录配置 `AEGIS_PLANNER_MODE=rule|llm|auto`、`AEGIS_LLM_BASE_URL`、`AEGIS_LLM_API_KEY` 等。一键启动器固定使用离线规则，不会仅因修改该文件就切换模型。密钥不提交仓库或打入源码包；完整参数与手动启动方式见[贡献指南](CONTRIBUTING.md)和[部署说明](deliverables/06-部署说明.md)。
 
 ## 验证
 
@@ -193,7 +193,7 @@ bash scripts/check.sh test        # 组装器 unittest + 后端 pytest + 前端 
 bash scripts/check.sh scenarios   # 六场景端到端检查
 ```
 
-当前结果：后端 **671 项** pytest（36 个测试文件）、前端 **144 项** Vitest（12 个测试文件）、组装器 **28 项** unittest 全部通过；六场景端到端 **31/31** 通过；工具目录 **51 个**，HTTP `/api` 路径 **49 个**。持续集成见 [GitHub Actions](https://github.com/0xChainAegis/aegisbank/actions)；详细测试范围与复现步骤见[测试与复现](deliverables/07-测试与复现.md)。
+当前结果：后端 **671 项** pytest（36 个测试文件）、前端 **168 项** Vitest（14 个测试文件）、组装器 **28 项** unittest 全部通过；六场景端到端 **31/31** 通过；工具目录 **51 个**，HTTP `/api` 路径 **49 个**。持续集成见 [GitHub Actions](https://github.com/0xChainAegis/aegisbank/actions)；详细测试范围与复现步骤见[测试与复现](deliverables/07-测试与复现.md)。
 
 ## 仓库结构
 

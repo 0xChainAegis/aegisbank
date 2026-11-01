@@ -23,6 +23,7 @@ import BankOverviewPage from './components/BankOverviewPage';
 import BreakerBanner from './components/BreakerBanner';
 import CapabilitiesPage from './components/CapabilitiesPage';
 import ConfirmationModal from './components/ConfirmationModal';
+import CareModeControls from './components/CareModeControls';
 import OpsPage from './components/OpsPage';
 import PermissionsPage from './components/PermissionsPage';
 import ReadinessBanner from './components/ReadinessBanner';
@@ -699,6 +700,7 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-tools">
+          <CareModeControls />
           <details className="role-menu">
           <summary>演示角色 · {ROLE_LABELS[role]}</summary>
           <div className="role-switch" role="group" aria-label="角色切换">
@@ -896,6 +898,7 @@ export default function App() {
                 setAuditFilter(lastActionId ?? lastRun?.run_id ?? '');
                 navigate('audit');
               }}
+              onNavigateContacts={() => navigate('overview')}
               onReconcile={(outcome) => void handleReconcile(outcome)}
               reconciling={reconciling}
             />

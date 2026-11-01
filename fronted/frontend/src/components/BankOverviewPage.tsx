@@ -2,6 +2,7 @@ import { formatCny } from '../risk';
 import type { BankingOverview } from '../types';
 import { formatDateTime } from '../viewModel';
 import { LoadingState, PageAlerts } from './ui';
+import ContactBook from './ContactBook';
 
 interface Props {
   overview: BankingOverview | null;
@@ -96,7 +97,7 @@ export default function BankOverviewPage({
         <div>
           <span className="eyebrow">BANKING SNAPSHOT · READ ONLY</span>
           <h1>我的账户</h1>
-          <p>账户、卡片与订阅的统一只读视图。今日累计转账会参与动态风险判定。</p>
+          <p>查看账户、联系人、卡片与订阅。转账时请明确转出与收款账户，并在确认页核对方向。</p>
           <small className="page-meta">
             快照时间：{overview.asOf ? formatDateTime(overview.asOf) : '本次加载'}
           </small>
@@ -126,7 +127,7 @@ export default function BankOverviewPage({
         </div>
       )}
 
-      <div className="summary-grid">
+      <div className="summary-grid" data-care-reading="true">
         <article className="card summary-card accent-teal">
           <span>账户总余额</span>
           <strong>{formatCny(totalBalance)}</strong>
@@ -153,6 +154,8 @@ export default function BankOverviewPage({
         </article>
       </div>
 
+      <ContactBook />
+
       <div className="overview-columns">
         <section className="card overview-panel">
           <div className="section-head compact-head">
@@ -171,6 +174,7 @@ export default function BankOverviewPage({
                     <small>
                       {accountTypeLabels[account.type] ?? account.type} · {account.maskedNumber}
                     </small>
+                    <small>账户编号：{account.id}</small>
                   </div>
                   <span className="currency-pill">{account.currency}</span>
                 </div>

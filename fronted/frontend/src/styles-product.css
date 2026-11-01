@@ -22,7 +22,7 @@ body {
 
 .product-shell {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.55;
 }
 
@@ -298,7 +298,7 @@ body {
   max-width: 680px;
   margin: 0;
   color: #617068;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.75;
 }
 
@@ -330,7 +330,7 @@ body {
   border-color: #cfdad3;
   border-radius: 10px;
   color: #1e3029;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.65;
   background: #ffffff;
 }
@@ -338,6 +338,19 @@ body {
 .product-shell .command-form textarea {
   min-height: 112px;
   padding: 14px 16px;
+}
+
+.product-shell .instruction-help {
+  margin: 12px 0 0;
+  color: #43584f;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.product-shell .instruction-help .text-button {
+  margin-left: 8px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .product-shell textarea:focus,

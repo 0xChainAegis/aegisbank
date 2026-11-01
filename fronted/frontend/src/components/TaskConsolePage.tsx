@@ -266,6 +266,7 @@ interface Props {
   onRefresh: () => void;
   onRecoveryChanged: (journal: ActionJournal, response: unknown) => void;
   onNavigateAudit: () => void;
+  onNavigateContacts?: () => void;
   onReconcile: (outcome: 'reconciled' | 'rolled_back') => void;
   reconciling: boolean;
 }
@@ -293,6 +294,7 @@ export default function TaskConsolePage({
   onRefresh,
   onRecoveryChanged,
   onNavigateAudit,
+  onNavigateContacts,
   onReconcile,
   reconciling,
 }: Props) {
@@ -448,6 +450,7 @@ export default function TaskConsolePage({
           </label>
           <textarea
             id="instruction"
+            aria-describedby="instruction-help"
             value={instruction}
             onChange={(event) => {
               setInstruction(event.target.value);
@@ -465,6 +468,11 @@ export default function TaskConsolePage({
             <span aria-hidden="true">↗</span>
           </button>
         </form>
+
+        <p id="instruction-help" className="instruction-help" data-care-reading="true">
+          可以用自己的话描述一件事。转账请写明金额和收款人，卡片操作请提供卡号或尾号；复杂条件和多项操作可能需要重新说明。
+          {onNavigateContacts && <button type="button" className="text-button" onClick={onNavigateContacts}>查看联系人</button>}
+        </p>
 
         {lastRun?.status === 'needs_clarification' && (
           <div className="alert alert-info" role="status">
@@ -506,12 +514,12 @@ export default function TaskConsolePage({
             </div>
           </div>
 
-          <div className="receipt-headline">
+          <div className="receipt-headline" data-care-reading="true">
             <strong>{receiptHeadline(lastRun)}</strong>
             <span className="muted">{lastRun.reason}</span>
           </div>
 
-          <div className="receipt-facts">
+          <div className="receipt-facts" data-care-reading="true">
             <div>
               <span>状态</span>
               <strong>{statusLabel(lastRun.status)}</strong>
@@ -597,7 +605,8 @@ export default function TaskConsolePage({
 
           {lastRun.status === 'needs_clarification' && (
             <div className={'clarification-panel'}>
-              <p>{lastRun.plan?.clarification || lastRun.reason || '请补充更多任务信息。'}</p>
+              <p data-care-reading="true">这次尚未办理银行业务。请查看需要补充的信息，补充或更正后再提交。</p>
+              <p data-care-reading="true">{lastRun.plan?.clarification || lastRun.reason || '请补充更多任务信息。'}</p>
               {lastRun.draft && (
                 <dl className={'clarification-draft-facts'}>
                   <div>

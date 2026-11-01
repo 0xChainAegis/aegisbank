@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import './styles.css';
 import './styles-ux.css';
 import './styles-product.css';
+import './styles-care.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
