@@ -185,8 +185,8 @@
       "group": "fronted",
       "path": "frontend/src/components/TaskConsolePage.tsx",
       "runtime_path": "frontend/src/components/TaskConsolePage.tsx",
-      "bytes": 38052,
-      "sha256": "89f77960c149d6534c9e237304e4cf406778d3bf550e1242e1c6da955d1ce43e"
+      "bytes": 38089,
+      "sha256": "6521da457d1eb72ee55015b84a5184e4f1b24eb0bad2e1e241be179f16ee3c79"
     },
     {
       "group": "fronted",
@@ -353,8 +353,8 @@
       "group": "fronted",
       "path": "frontend/src/u2Conversation.test.tsx",
       "runtime_path": "frontend/src/u2Conversation.test.tsx",
-      "bytes": 10468,
-      "sha256": "9cf292d2e4df23de720e99c75df583d3e9e8f4d9ef9ef0e704640da6fdf30c6c"
+      "bytes": 10522,
+      "sha256": "34102b7aa19cb30b8365b0ad8c89c9e36f38e9f45e6a7dfcaad317e87fea20a0"
     },
     {
       "group": "fronted",

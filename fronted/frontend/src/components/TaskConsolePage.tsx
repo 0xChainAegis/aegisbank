@@ -476,7 +476,7 @@ export default function TaskConsolePage({
 
         {lastRun?.status === 'needs_clarification' && (
           <div className="alert alert-info" role="status">
-            <span>{followUp ? '当前输入将补充上一条任务（10 分钟内有效，提交后重新核对全部风险）。' : '上一条任务需要补充信息。'}</span>
+            <span>{followUp ? '当前输入将补充上一条任务。请在草稿有效期内提交，并重新核对风险与操作内容。' : '上一条任务需要补充信息。'}</span>
             <button type="button" className="ghost-button small-button" disabled={busy || taskBlocked}
               onClick={() => { setFollowUp(!followUp); setInstruction(''); document.getElementById('instruction')?.focus(); }}>
               {followUp ? '改为新任务' : '补充上一条任务信息'}
@@ -651,7 +651,7 @@ export default function TaskConsolePage({
                 <span className="eyebrow">STRUCTURED EXECUTION PLAN</span>
                 <span className="plan-planner">{lastRun.plan.planner}</span>
                 <span className="plan-confidence">
-                  置信度 {Math.round(lastRun.plan.confidence * 100)}%
+                  规划器分值 {lastRun.plan.confidence.toFixed(2)}（不代表成功概率）
                 </span>
                 {lastRun.plan.plan_hash && (
                   <code className="plan-hash" title={lastRun.plan.plan_hash}>

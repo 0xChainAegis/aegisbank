@@ -28,6 +28,10 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function futureExpiry(): string {
+  return new Date(Date.now() + 300_000).toISOString();
+}
+
 const clarification: RunResponse = {
   status: 'needs_clarification',
   run_id: 'run-draft-1',
@@ -43,7 +47,7 @@ const clarification: RunResponse = {
     missing_slots: ['amount'],
     plan_hash: 'plan-hash',
     pending_action_id: 'pending-1',
-    expires_at: '2026-11-01T12:30:00+08:00',
+    expires_at: futureExpiry(),
     changed_fields: ['amount'],
   },
 };
@@ -182,7 +186,7 @@ describe('U2 amount amendment', () => {
         version: 2,
         status: 'awaiting_confirmation',
         pending_action_id: 'confirmation-1',
-        expires_at: '2026-11-01T12:30:00+08:00',
+        expires_at: futureExpiry(),
       },
       plan: {
         intent: 'transfer_to_contact',
@@ -199,7 +203,7 @@ describe('U2 amount amendment', () => {
       confirmation: {
         id: 'confirmation-1',
         requires_reauth: false,
-        expires_at: '2026-11-01T12:30:00+08:00',
+        expires_at: futureExpiry(),
       },
     };
     await act(async () => root.render(
