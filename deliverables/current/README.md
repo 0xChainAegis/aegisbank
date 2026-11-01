@@ -1,10 +1,11 @@
-# 参赛材料成品（2026-10-31 版本）
+# 参赛材料成品（2026-11-01 版本）
 
-本目录文件由仓库源码与同源 Markdown 生成，不单独维护第二份内容。技术文档正文来自 `../02-技术文档.md`，安全自评正文来自 `../05-安全自评报告.md`，答辩 PPT 由 `../../scripts/export-deliverables.py` 生成。
+本目录文件由仓库源码与同源 Markdown 生成，不单独维护第二份内容。技术文档正文来自 `../02-技术文档.md`，安全设计正文来自 `../08-安全设计文档.md`，安全自评正文来自 `../05-安全自评报告.md`，答辩 PPT 由 `../../scripts/export-deliverables.py` 生成。
 
 | 材料 | 文件 | 说明 |
 |---|---|---|
 | 技术文档 | [Word](02-AegisBank-技术文档.docx) / [PDF](02-AegisBank-技术文档.pdf) | 架构图、核心机制与验证边界；PDF 由同源 Markdown 经 ReportLab 导出 |
+| 安全设计 | [Word](08-AegisBank-安全设计文档.docx) / [PDF](08-AegisBank-安全设计文档.pdf) | 威胁模型、信任边界、控制设计与生产化差距；与安全自评互补 |
 | 安全自评 | [Word](04-AegisBank-安全自评报告.docx) / [PDF](04-AegisBank-安全自评报告.pdf) | 权限分级、安全控制与已知风险清单 |
 | 答辩 | [12 页 PPT](03-AegisBank-答辩材料.pptx) / [预览 PDF](03-AegisBank-答辩材料.pdf) | PPT 由脚本生成，PDF 由本机 PowerPoint 导出 |
 | 架构图 | [architecture.png](architecture.png) | 技术文档与 PPT 共用 |

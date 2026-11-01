@@ -252,6 +252,7 @@ def main() -> None:
     architecture(diagram)
     for source, name in [
         ("02-技术文档.md", "02-AegisBank-技术文档.docx"),
+        ("08-安全设计文档.md", "08-AegisBank-安全设计文档.docx"),
         ("05-安全自评报告.md", "04-AegisBank-安全自评报告.docx"),
     ]:
         export_word(ROOT / "deliverables" / source, args.output / name, diagram)
